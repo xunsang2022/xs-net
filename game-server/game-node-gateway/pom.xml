@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.xs</groupId>
+        <artifactId>game-server</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+    <artifactId>game-node-gateway</artifactId>
+    <name>game-gateway</name>
+    <description>Game Gateway Service</description>
+    <dependencies>
+        <dependency>
+            <groupId>com.xs</groupId>
+            <artifactId>game-comment</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
+
+        <!-- Spring Boot Web Starter - 提供Spring Boot Web应用支持，包括Tomcat、Spring MVC等 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        
+        <!-- Akka Cluster Dependencies -->
+        <!-- Classic Akka API -->
+        <!-- Akka Cluster - 提供Akka集群支持，用于节点管理和通信 -->
+        <dependency>
+            <groupId>com.typesafe.akka</groupId>
+            <artifactId>akka-cluster_2.13</artifactId>
+            <version>${akka.version}</version>
+        </dependency>
+        <!-- Akka Remote - 提供Akka远程通信支持，用于节点间消息传递 -->
+        <dependency>
+            <groupId>com.typesafe.akka</groupId>
+            <artifactId>akka-remote_2.13</artifactId>
+            <version>${akka.version}</version>
+        </dependency>
+        <!-- Akka SLF4J - 提供Akka日志与SLF4J的集成，用于日志记录 -->
+        <dependency>
+            <groupId>com.typesafe.akka</groupId>
+            <artifactId>akka-slf4j_2.13</artifactId>
+            <version>${akka.version}</version>
+        </dependency>
+        
+        <!-- Akka Serialization - 提供Akka序列化支持 -->
+        <dependency>
+            <groupId>com.typesafe.akka</groupId>
+            <artifactId>akka-serialization-jackson_2.13</artifactId>
+            <version>${akka.version}</version>
+        </dependency>
+        
+        <!-- Protobuf Dependencies - 用于Protocol Buffers序列化 -->
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>${protobuf-java.version}</version>
+        </dependency>
+        
+        <!-- Typed Akka API -->
+        <!-- Akka Actor Typed - 提供Akka类型化Actor支持，用于构建类型安全的Actor系统 -->
+        <dependency>
+            <groupId>com.typesafe.akka</groupId>
+            <artifactId>akka-actor-typed_2.13</artifactId>
+            <version>${akka.version}</version>
+        </dependency>
+        <!-- Akka Cluster Typed - 提供类型化Akka集群支持，用于构建类型安全的集群应用 -->
+        <dependency>
+            <groupId>com.typesafe.akka</groupId>
+            <artifactId>akka-cluster-typed_2.13</artifactId>
+            <version>${akka.version}</version>
+        </dependency>
+        <!-- Akka Cluster Sharding Typed - 提供类型化Akka集群分片支持，用于分布式实体管理 -->
+        <dependency>
+            <groupId>com.typesafe.akka</groupId>
+            <artifactId>akka-cluster-sharding-typed_2.13</artifactId>
+            <version>${akka.version}</version>
+        </dependency>
+        
+        <!-- Aeron媒体驱动 - 提供高性能UDP传输支持，用于Akka Artery的Aeron UDP模式 -->
+        <dependency>
+            <groupId>io.aeron</groupId>
+            <artifactId>aeron-driver</artifactId>
+        </dependency>
+        
+        <!-- Spring Boot Test - 提供Spring Boot测试支持，包括JUnit、Mockito等 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.game.gateway.GameGatewayApplication</mainClass>
+                    <jvmArguments>
+                    --add-opens java.base/sun.nio.ch=ALL-UNNAMED
+                    --add-opens java.base/java.nio=ALL-UNNAMED
+                </jvmArguments>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -1,0 +1,10 @@
+# 忽略文件
+*.class
+*.lst
+*.jar
+*.dumpstream
+
+classes/
+target/
+.tools/
+.log/

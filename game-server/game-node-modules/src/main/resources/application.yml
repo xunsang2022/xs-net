@@ -1,0 +1,24 @@
+# Spring Boot Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
+
+# Logging Configuration
+logging:
+  level:
+    com.game: INFO
+    akka: INFO
+
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/gamedb}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  profiles:
+    active: ${akka.cluster.roles[0]:modules}  # 跟随akk 的 配置

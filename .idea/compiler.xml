@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile name="Maven default annotation processors profile" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <module name="xs-net-all" />
+        <module name="tool-all" />
+        <module name="game-node-login" />
+        <module name="game-node-gateway" />
+        <module name="game-comment" />
+        <module name="tool-commons-lang4" />
+        <module name="xs-net-message" />
+        <module name="game-node-modules" />
+        <module name="xs-net-core" />
+        <module name="game-db" />
+        <module name="tool-luBan-cfg" />
+        <module name="tool-sbe" />
+        <module name="tool-proto" />
+        <module name="game-message-action" />
+      </profile>
+    </annotationProcessing>
+    <bytecodeTargetLevel>
+      <module name="xs-net-tools" target="21" />
+    </bytecodeTargetLevel>
+  </component>
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="game-comment" options="-parameters" />
+      <module name="game-db" options="-parameters" />
+      <module name="game-message-action" options="-parameters" />
+      <module name="game-node-gateway" options="-parameters" />
+      <module name="game-node-login" options="-parameters" />
+      <module name="game-node-modules" options="-parameters" />
+      <module name="game-server" options="-parameters" />
+    </option>
+  </component>
+</project>
