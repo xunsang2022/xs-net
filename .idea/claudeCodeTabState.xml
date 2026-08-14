@@ -6,8 +6,9 @@
         <entry key="0">
           <value>
             <TabSessionState>
-              <option name="provider" value="codex" />
-              <option name="model" value="deepseek-v4-flash" />
+              <option name="provider" value="claude" />
+              <option name="cwd" value="F:\project\xs-net" />
+              <option name="model" value="claude-opus-4-8[1m]" />
               <option name="permissionMode" value="bypassPermissions" />
             </TabSessionState>
           </value>

@@ -18,12 +18,11 @@
         <module name="game-db" />
         <module name="tool-luBan-cfg" />
         <module name="tool-sbe" />
-        <module name="tool-proto" />
         <module name="game-message-action" />
       </profile>
     </annotationProcessing>
     <bytecodeTargetLevel>
-      <module name="xs-net-tools" target="21" />
+      <module name="tool-proto" target="21" />
     </bytecodeTargetLevel>
   </component>
   <component name="JavacSettings">
