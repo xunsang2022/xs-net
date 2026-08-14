@@ -80,18 +80,24 @@ game-server/
   - 消息序列化/反序列化
   - Actor 消息处理
 
-## 消息协议示例
+## 消息协议登记
 
-| 消息类型 | 编号 | 说明 |
-|---------|------|------|
-| CS_LOGIN | - | 客户端登录请求 |
-| SC_LOGIN | - | 服务端登录响应 |
-| CS_Logout | - | 登出请求 |
-| SC_Logout | - | 登出响应 |
-| CS_BACKPACK_INFO | - | 背包信息请求 |
-| SC_BACKPACK_INFO | - | 背包信息响应 |
-| CS_USE_ITEM | - | 使用道具请求 |
-| SC_USE_ITEM | - | 使用道具响应 |
+| 消息类型 | 编号 | 说明 | 状态 |
+|---------|------|------|------|
+| CS_LOGIN | 1000 | 客户端登录请求 | 保留 |
+| CS_Logout | 1001 | 登出请求 | 保留 |
+| SC_LOGIN | 1002 | 服务端登录响应 DTO | 保留（不再作为 PlayerMessage） |
+| SC_Logout | 1003 | 登出响应 | 保留 |
+| CS_BACKPACK_INFO | 2000 | 背包信息请求 | 废弃，禁止复用 |
+| SC_BACKPACK_INFO | 2001 | 背包信息响应 | 废弃，禁止复用 |
+| CS_USE_ITEM | 2002 | 使用道具请求 | 废弃，禁止复用 |
+| SC_USE_ITEM | 2003 | 使用道具响应 | 废弃，禁止复用 |
+| BackpackInitMessage | 3000 | 背包初始化内部消息 | 废弃，禁止复用 |
+| BackpackInitAckMessage | 3001 | 背包初始化确认内部消息 | 废弃，禁止复用 |
+| BackpackCleanupMessage | 3002 | 背包清理内部消息 | 废弃，禁止复用 |
+| DbSyncCmd 系列 | 3100-3199 | db-sync 内部消息区间 | 新增 |
+
+`PlayerMessage` 已从 `com.game.message.actor.login` 迁移至 `com.game.message.actor.logic`，路由角色为 `logic`；`SC_LOGIN` 仅作为 HTTP 响应 DTO，不再实现 `PlayerMessage`。协议号 2000-2003、3000-3002 已废弃，禁止复用。
 
 ## 配置说明
 

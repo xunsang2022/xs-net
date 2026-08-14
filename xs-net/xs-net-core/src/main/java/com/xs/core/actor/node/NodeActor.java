@@ -39,6 +39,7 @@ public class NodeActor extends AbstractBehavior<Command> {
 
         ActorSystem<?> system = context.getSystem();
         ClusterSharding sharding = ClusterSharding.get(system);
+        AkkaKit.setClusterSharding(sharding);
         Set<String> roles = AkkaKit.getCurrentNodeRoles(system);
         roles.remove("dc-default");
         log.info("当前节点角色：{}", roles);

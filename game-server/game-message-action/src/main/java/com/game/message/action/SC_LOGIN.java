@@ -1,7 +1,6 @@
 package com.game.message.action;
 
 import com.baidu.bjf.remoting.protobuf.annotation.ProtobufClass;
-import com.game.message.actor.login.PlayerMessage;
 import com.xs.net.message.annotation.ActionMessage;
 import com.proto.generator.annotation.ProtoFileMerge;
 import lombok.*;
@@ -19,7 +18,7 @@ import lombok.experimental.FieldDefaults;
 @ProtobufClass
 @ProtoFileMerge(fileName = "SC_LOGIN", filePackage = "pb.user")
 @FieldDefaults(level = AccessLevel.PRIVATE)
-public class SC_LOGIN implements PlayerMessage {
+public class SC_LOGIN {
     /**
      * 登录结果：0-成功，1-失败
      */

@@ -1,24 +1,11 @@
-# Spring Boot Actuator Configuration
-management:
-  endpoints:
-    web:
-      exposure:
-        include: "*"
-  endpoint:
-    health:
-      show-details: always
-
-# Logging Configuration
-logging:
-  level:
-    com.game: INFO
-    akka: INFO
-
-spring:
-  datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/gamedb}
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD}
-    driver-class-name: org.postgresql.Driver
-  profiles:
-    active: ${akka.cluster.roles[0]:modules}  # 跟随akk 的 配置
+# Plain configuration keys for the non-Boot startup flow.
+# GameLogicApplication reads these as system properties, with REDIS_* and
+# SYNC_INTERVAL_MS environment variables as fallbacks.
+game:
+  redis:
+    host: localhost
+    port: 6379
+    password: ""
+    database: 0
+  storage:
+    sync-interval-ms: 1000

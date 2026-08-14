@@ -4,7 +4,6 @@ import akka.actor.typed.ActorSystem;
 import akka.actor.typed.Behavior;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.cluster.sharding.typed.javadsl.*;
-import com.xs.core.spring.SpringUtil;
 import com.xs.net.message.MessageAble;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +20,19 @@ import java.util.Set;
 @UtilityClass
 public class AkkaKit {
     public static final List<Class<?>> local = new ArrayList<>();
+    private static volatile ClusterSharding clusterSharding;
+
+    public static void setClusterSharding(ClusterSharding sharding) {
+        clusterSharding = sharding;
+    }
+
+    public static ClusterSharding getClusterSharding() {
+        ClusterSharding sharding = clusterSharding;
+        if (sharding == null) {
+            throw new IllegalStateException("ClusterSharding has not been initialized");
+        }
+        return sharding;
+    }
 
 
     /**
@@ -39,7 +51,7 @@ public class AkkaKit {
             String entityId
     ) {
         EntityTypeKey<T> entityTypeKey = EntityTypeKey.create(actorCmdClass, actorCmdClass.getSimpleName());
-        EntityRef<T> entityRef = SpringUtil.getBean(ClusterSharding.class).entityRefFor(entityTypeKey, entityId);
+        EntityRef<T> entityRef = getClusterSharding().entityRefFor(entityTypeKey, entityId);
         Object sedMessage;
 
         try {
@@ -87,7 +99,7 @@ public class AkkaKit {
             } catch (NoSuchMethodException e) {
                 // 如果没有无参方法，再尝试有参方法
                 Method create = actorClass.getMethod("create", String.class);
-                return (Behavior<M>) create.invoke(context, context.getEntityId());
+                return (Behavior<M>) create.invoke(null, context.getEntityId());
             }
         } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
             throw new RuntimeException("创建 Actor 失败：" + actorClass.getSimpleName(), e);

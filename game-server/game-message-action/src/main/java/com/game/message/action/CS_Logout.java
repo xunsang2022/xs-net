@@ -1,7 +1,7 @@
 package com.game.message.action;
 
 import com.baidu.bjf.remoting.protobuf.annotation.ProtobufClass;
-import com.game.message.actor.login.PlayerMessage;
+import com.game.message.actor.logic.PlayerMessage;
 import com.xs.net.message.annotation.ActionMessage;
 import com.proto.generator.annotation.ProtoFileMerge;
 import lombok.AccessLevel;

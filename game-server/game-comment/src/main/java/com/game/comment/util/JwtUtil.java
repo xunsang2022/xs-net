@@ -42,6 +42,10 @@ public class JwtUtil {
                 .compact();
     }
 
+    public long getExpirationMillis() {
+        return expiration;
+    }
+
     /**
      * 验证并解析 token，失败返回 null
      */

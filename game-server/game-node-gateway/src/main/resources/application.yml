@@ -18,6 +18,13 @@ logging:
     com.game: INFO
     akka: INFO
 
+# Auth proxy configuration
+game:
+  auth:
+    login-base-url: ${LOGIN_BASE_URL:http://127.0.0.1:8081}
+    verify-mode: ${AUTH_VERIFY_MODE:local}
+    verify-timeout-ms: ${AUTH_VERIFY_TIMEOUT_MS:2000}
+
 # JWT Configuration
 jwt:
   secret: ${JWT_SECRET}
