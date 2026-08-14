@@ -1,56 +1,61 @@
 package com.xs.net.message;
 
-import com.baidu.bjf.remoting.protobuf.Codec;
-import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
-import com.xs.net.message.annotation.ActionMessage;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.MessageLite;
+import com.xs.net.message.pb.NetMessage;
 import lombok.experimental.UtilityClass;
 
-
-import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.concurrent.ConcurrentHashMap;
 
 @UtilityClass
 public class MessageAble {
-    /// 协议解析map
-    public static final ConcurrentHashMap<Integer, Class<?>> rpcMap = new ConcurrentHashMap<>();
+    private static volatile RpcMessageRegistry registry;
+    private static volatile RpcEnvelopeFactory envelopeFactory;
+
+    public static void initialize(RpcMessageRegistry messageRegistry, RpcEnvelopeFactory messageEnvelopeFactory) {
+        registry = messageRegistry;
+        envelopeFactory = messageEnvelopeFactory;
+    }
+
+    public static boolean isInitialized() {
+        return registry != null && envelopeFactory != null;
+    }
+
+    public static RpcMessageRegistry registry() {
+        return registry;
+    }
 
     /// net byte -> net dto
     ///  ----------------消息协议格式---------------------
     ///   packetLength | rpcNum | errorCode | body
     ///      int          int       int       byte[]
     /// --------------------------------------------------
-    public static NetMessage toNetMessage(byte[] bytes) throws IOException {
-        ByteBuffer bb = ByteBuffer.wrap(bytes);
-
-        int totalLength = bb.getInt();
-        bb.getInt();
-        bb.getInt();
-
-        byte[] data = new byte[totalLength - 12];
-        bb.get(data); // 修正：使用get方法填充data数组
-
-        Codec<NetMessage> codec = ProtobufProxy.create(NetMessage.class);
-        return codec.decode(data);
+    public static NetMessage toNetMessage(byte[] bytes) throws InvalidProtocolBufferException {
+        if (bytes == null || bytes.length < 12) {
+            throw new InvalidProtocolBufferException("Frame too short: " + (bytes == null ? 0 : bytes.length));
+        }
+        return NetMessage.parseFrom(ByteBuffer.wrap(bytes, 12, bytes.length - 12));
     }
 
     /// net dto -> action message dto
-    public static <T> T toActionMessage(NetMessage netMessage) throws IOException {
+    public static Object toActionMessage(NetMessage netMessage) throws InvalidProtocolBufferException {
         int rpcNum = netMessage.getRpcNum();
-        Class<?> clazz = rpcMap.get(rpcNum);
-        if (clazz == null) {
+        RpcMessageSpec<? extends MessageLite> spec = requireRegistry().find(rpcNum);
+        if (spec == null) {
             throw new IllegalArgumentException("Unknown rpc number: " + rpcNum);
         }
-        Codec<?> protobufProxy = ProtobufProxy.create(clazz);
-        return (T) protobufProxy.decode(netMessage.getData());
+        MessageLite payload = spec.parser().parseFrom(netMessage.getData());
+        return requireFactory().create(rpcNum, payload);
     }
 
     /// action message dto -> net message dto
-    public static <T> NetMessage toNetMessage(T message) throws IOException {
-        Class<T> aClass = (Class<T>) message.getClass();
-        Codec<T> codec = ProtobufProxy.create(aClass);
-        byte[] data = codec.encode(message);
-        return new NetMessage(aClass.getAnnotation(ActionMessage.class).value(), data);
+    public static NetMessage toNetMessage(RpcMessage message) {
+        byte[] data = message.payload().toByteArray();
+        return NetMessage.newBuilder()
+                .setRpcNum(message.rpcNum())
+                .setData(ByteString.copyFrom(data))
+                .build();
     }
 
     ///  net message dto -> net byte
@@ -58,10 +63,9 @@ public class MessageAble {
     ///   packetLength | rpcNum | errorCode | body
     ///      int          int       int       byte[]
     /// --------------------------------------------------
-    public static byte[] toNetByteMsg(NetMessage netMessage) throws IOException {
-        Codec<NetMessage> codec = ProtobufProxy.create(NetMessage.class);
-        int rpcNumber = netMessage.rpcNum;
-        byte[] data = codec.encode(netMessage);
+    public static byte[] toNetByteMsg(NetMessage netMessage) {
+        int rpcNumber = netMessage.getRpcNum();
+        byte[] data = netMessage.toByteArray();
 
         int errorCode = 0;
         int totalLength = data.length + 12;
@@ -74,5 +78,21 @@ public class MessageAble {
         bb.put(data);
 
         return bytes;
+    }
+
+    private static RpcMessageRegistry requireRegistry() {
+        RpcMessageRegistry value = registry;
+        if (value == null) {
+            throw new IllegalStateException("RpcMessageRegistry has not been initialized");
+        }
+        return value;
+    }
+
+    private static RpcEnvelopeFactory requireFactory() {
+        RpcEnvelopeFactory value = envelopeFactory;
+        if (value == null) {
+            throw new IllegalStateException("RpcEnvelopeFactory has not been initialized");
+        }
+        return value;
     }
 }

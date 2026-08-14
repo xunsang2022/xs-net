@@ -1,11 +1,13 @@
 package com.game.gateway.controller;
 
-import com.game.message.action.CS_Logout;
-import com.game.message.action.SC_LOGIN;
-import com.game.message.actor.logic.PlayerEnter;
 import com.game.message.actor.logic.PlayerMessage;
 import com.game.message.dto.LoginRequest;
+import com.game.message.dto.LoginResponse;
+import com.game.message.dto.LogoutRequest;
 import com.game.message.dto.TokenResponse;
+import com.game.message.rpc.GameRpcMessages;
+import com.game.protocol.pb.CS_Logout;
+import com.game.protocol.pb.PlayerEnter;
 import com.xs.core.akka.AkkaKit;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -57,18 +59,21 @@ public class PlayerController {
             return ResponseEntity.status(502).build();
         }
 
-        AkkaKit.tell(PlayerMessage.class,
-                new PlayerEnter(request.getPlayerId(), request.getPlayerName(), channelId),
-                String.valueOf(request.getPlayerId()));
+        PlayerEnter.Builder enter = PlayerEnter.newBuilder().setPlayerId(request.getPlayerId());
+        if (request.getPlayerName() != null) {
+            enter.setPlayerName(request.getPlayerName());
+        }
+        enter.setChannelId(channelId);
+        AkkaKit.tell(PlayerMessage.class, GameRpcMessages.wrap(enter.build()), String.valueOf(request.getPlayerId()));
 
-        SC_LOGIN response = new SC_LOGIN(
+        LoginResponse response = new LoginResponse(
                 0, String.valueOf(request.getPlayerId()), request.getPlayerName(), auth.getToken());
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout(
-            @RequestBody CS_Logout request,
+            @RequestBody LogoutRequest request,
             HttpServletRequest httpRequest
     ) {
         log.info("SC_Logout request: {}", request);
@@ -77,7 +82,14 @@ public class PlayerController {
         String playerId = (String) httpRequest.getAttribute("playerId");
         String channelId = (String) httpRequest.getAttribute("channelId");
         request.setSessionId(channelId);
-        AkkaKit.tell(PlayerMessage.class, request, playerId);
+        CS_Logout.Builder logout = CS_Logout.newBuilder();
+        if (request.getPlayerId() != null) {
+            logout.setPlayerId(request.getPlayerId());
+        }
+        if (request.getSessionId() != null) {
+            logout.setSessionId(request.getSessionId());
+        }
+        AkkaKit.tell(PlayerMessage.class, GameRpcMessages.wrap(logout.build()), playerId);
 
         return ResponseEntity.ok().build();
     }

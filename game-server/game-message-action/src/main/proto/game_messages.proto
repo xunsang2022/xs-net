@@ -6,8 +6,8 @@ option java_multiple_files = true;
 option java_package = "com.game.protocol.pb";
 
 message LogRecordMessage {
-  int32 level = 1;
-  int32 type = 2;
+  optional int32 level = 1;
+  optional int32 type = 2;
   optional string message = 3;
   optional int64 player_id = 4;
 }
@@ -24,7 +24,7 @@ message CS_Logout {
 }
 
 message SC_LOGIN {
-  int32 result = 1;
+  optional int32 result = 1;
   optional string player_id = 2;
   optional string player_name = 3;
   optional string token = 4;
@@ -37,14 +37,14 @@ message SC_Logout {
 
 message CS_LOG_REPORT {
   optional string session_id = 1;
-  int32 log_level = 2;
-  int32 log_type = 3;
+  optional int32 log_level = 2;
+  optional int32 log_type = 3;
   optional string content = 4;
 }
 
 message SC_LOG_REPORT {
   optional string session_id = 1;
-  int32 result = 2;
+  optional int32 result = 2;
   optional int64 log_id = 3;
 }
 
@@ -56,7 +56,7 @@ message PlayerEnter {
 
 message DbSyncMessage {
   optional int64 player_id = 1;
-  int32 op = 2;
+  optional int32 op = 2;
 }
 
 message DbSyncLoadMessage {
@@ -65,6 +65,6 @@ message DbSyncLoadMessage {
 
 message DbSyncLoadResultMessage {
   optional int64 player_id = 1;
-  bool success = 2;
+  optional bool success = 2;
   map<string, string> fields = 3;
 }

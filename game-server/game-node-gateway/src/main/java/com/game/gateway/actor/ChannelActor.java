@@ -5,8 +5,9 @@ import akka.actor.typed.javadsl.AbstractBehavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
-import com.game.message.action.SC_Logout;
 import com.game.message.actor.S2C;
+import com.game.message.rpc.GameRpcEnvelope;
+import com.game.protocol.pb.SC_Logout;
 import lombok.extern.slf4j.Slf4j;
 
 
@@ -28,11 +29,15 @@ public class ChannelActor extends AbstractBehavior<S2C> {
     @Override
     public Receive<S2C> createReceive() {
         return newReceiveBuilder()
-                .onMessage(SC_Logout.class, this::logOut)
+                .onMessage(GameRpcEnvelope.class, this::logOut)
                 .build();
     }
 
-    private Behavior<S2C> logOut(SC_Logout logout) {
+    private Behavior<S2C> logOut(GameRpcEnvelope envelope) {
+        if (!(envelope.payload() instanceof SC_Logout)) {
+            log.warn("Unhandled rpc payload: {}", envelope.payload().getClass().getName());
+            return this;
+        }
         log.info("ChannelActor logOut: {}", this.entityId);
         return this;
     }

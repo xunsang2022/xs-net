@@ -2,7 +2,7 @@ package com.xs.net.message.serializer;
 
 import akka.serialization.Serializer;
 import com.xs.net.message.MessageAble;
-import com.xs.net.message.NetMessage;
+import com.xs.net.message.pb.NetMessage;
 import lombok.SneakyThrows;
 import scala.Option;
 

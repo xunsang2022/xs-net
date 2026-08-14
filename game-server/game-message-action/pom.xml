@@ -19,14 +19,14 @@
 
     <dependencies>
         <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
             <version>3.25.5</version>
-        </dependency>
-        <dependency>
-            <groupId>com.xs</groupId>
-            <artifactId>tool-proto</artifactId>
-            <version>0.0.1</version>
         </dependency>
     </dependencies>
     <build>
@@ -36,7 +36,7 @@
                 <artifactId>protobuf-maven-plugin</artifactId>
                 <version>0.6.1</version>
                 <configuration>
-                    <protocArtifact>com.google.protobuf:protoc:3.25.5:windows-x86_64:exe</protocArtifact>
+                    <protocExecutable>C:/tools/protoc/bin/protoc.exe</protocExecutable>
                 </configuration>
                 <executions>
                     <execution>

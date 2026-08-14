@@ -13,16 +13,18 @@ import com.game.logic.log.LogLevel;
 import com.game.logic.log.LogType;
 import com.game.logic.player.PlayerState;
 import com.game.logic.redis.RedisStore;
-import com.game.message.action.CS_Logout;
-import com.game.message.action.SC_Logout;
-import com.game.message.actor.LogRecordMessage;
 import com.game.message.actor.S2C;
 import com.game.message.actor.XSSystem;
 import com.game.message.actor.db.DbSyncCmd;
-import com.game.message.actor.db.DbSyncLoadMessage;
-import com.game.message.actor.db.DbSyncLoadResultMessage;
-import com.game.message.actor.logic.PlayerEnter;
 import com.game.message.actor.logic.PlayerMessage;
+import com.game.message.rpc.GameRpcEnvelope;
+import com.game.message.rpc.GameRpcMessages;
+import com.game.protocol.pb.CS_Logout;
+import com.game.protocol.pb.DbSyncLoadMessage;
+import com.game.protocol.pb.DbSyncLoadResultMessage;
+import com.game.protocol.pb.LogRecordMessage;
+import com.game.protocol.pb.PlayerEnter;
+import com.game.protocol.pb.SC_Logout;
 import com.xs.core.akka.AkkaKit;
 import lombok.extern.slf4j.Slf4j;
 
@@ -75,19 +77,31 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
     @Override
     public Receive<PlayerMessage> createReceive() {
         return newReceiveBuilder()
-                .onMessage(PlayerEnter.class, this::onPlayerEnter)
-                .onMessage(CS_Logout.class, this::onLogout)
-                .onMessage(DbSyncLoadResultMessage.class, this::onLoadResult)
+                .onMessage(GameRpcEnvelope.class, this::onRpc)
                 .onMessage(FlushDirty.class, this::onFlushDirty)
                 .onMessage(LoadTimeout.class, this::onLoadTimeout)
-                .onSignal(PostStop.class, this::onPostStop)
+                .onSignal(PostStop.class, signal -> onPostStop())
                 .build();
     }
 
-    private Behavior<PlayerMessage> onPlayerEnter(PlayerEnter msg) {
+    private Behavior<PlayerMessage> onRpc(GameRpcEnvelope envelope) {
+        if (envelope.payload() instanceof PlayerEnter enter) {
+            return onPlayerEnter(envelope, enter);
+        }
+        if (envelope.payload() instanceof CS_Logout logout) {
+            return onLogout(logout);
+        }
+        if (envelope.payload() instanceof DbSyncLoadResultMessage result) {
+            return onLoadResult(result);
+        }
+        log.warn("Unhandled rpc payload: {}", envelope.payload().getClass().getName());
+        return this;
+    }
+
+    private Behavior<PlayerMessage> onPlayerEnter(GameRpcEnvelope envelope, PlayerEnter msg) {
         if (!loaded && !loadPending) {
             loadPending = true;
-            pendingPlayerName = msg.getPlayerName();
+            pendingPlayerName = msg.hasPlayerName() ? msg.getPlayerName() : null;
             state.setId(msg.getPlayerId());
             state.setName(msg.getPlayerName());
 
@@ -101,7 +115,11 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
             }
 
             timers.startSingleTimer(LOAD_TIMEOUT_KEY, new LoadTimeout(), Duration.ofMillis(LOAD_TIMEOUT_MS));
-            AkkaKit.tell(DbSyncCmd.class, new DbSyncLoadMessage(msg.getPlayerId()), entityId);
+            AkkaKit.tell(
+                    DbSyncCmd.class,
+                    GameRpcMessages.wrap(DbSyncLoadMessage.newBuilder().setPlayerId(msg.getPlayerId()).build()),
+                    entityId
+            );
             return this;
         }
 
@@ -110,13 +128,14 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
             return this;
         }
 
-        stash.stash(msg);
+        stash.stash(envelope);
         return this;
     }
 
     private void applyEnter(PlayerEnter msg) {
-        if (msg.getPlayerName() != null && !msg.getPlayerName().equals(state.getName())) {
-            state.setName(msg.getPlayerName());
+        String playerName = msg.hasPlayerName() ? msg.getPlayerName() : null;
+        if (playerName != null && !playerName.equals(state.getName())) {
+            state.setName(playerName);
             state.markDirty(PlayerState.FIELD_NAME);
         }
         long now = System.currentTimeMillis();
@@ -171,17 +190,17 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
     }
 
     private Behavior<PlayerMessage> onLoadResult(DbSyncLoadResultMessage msg) {
-        if (!loadPending || !String.valueOf(msg.getPlayerId()).equals(entityId)) {
+        if (!msg.hasPlayerId() || !loadPending || !String.valueOf(msg.getPlayerId()).equals(entityId)) {
             return this;
         }
-        if (!msg.isSuccess() || msg.getFields() == null || msg.getFields().isEmpty()) {
+        if (!msg.getSuccess() || msg.getFieldsMap() == null || msg.getFieldsMap().isEmpty()) {
             log.error("Player load failed: playerId={}", entityId);
             timers.cancel(LOAD_TIMEOUT_KEY);
             loadPending = false;
             stash.clear();
             return Behaviors.stopped();
         }
-        return finishLoad(msg.getPlayerId(), msg.getFields());
+        return finishLoad(msg.getPlayerId(), msg.getFieldsMap());
     }
 
     private Behavior<PlayerMessage> onLoadTimeout(LoadTimeout msg) {
@@ -211,7 +230,15 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
     }
 
     private Behavior<PlayerMessage> onLogout(CS_Logout msg) {
-        AkkaKit.tell(S2C.class, new SC_Logout(), msg.getSessionId());
+        SC_Logout.Builder logout = SC_Logout.newBuilder();
+        if (msg.hasPlayerId()) {
+            logout.setPlayerId(msg.getPlayerId());
+        }
+        String sessionId = msg.hasSessionId() ? msg.getSessionId() : "";
+        if (msg.hasSessionId()) {
+            logout.setSessionId(msg.getSessionId());
+        }
+        AkkaKit.tell(S2C.class, GameRpcMessages.wrap(logout.build()), sessionId);
         log.info("PlayerActor logout: playerId={}", entityId);
         if (loaded && !destroyed) {
             destroyState();
@@ -262,8 +289,14 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
 
     private void logToLogActor(LogLevel level, LogType type, String message, Long playerId) {
         try {
-            LogRecordMessage logMessage = new LogRecordMessage(level.ordinal(), type.ordinal(), message, playerId);
-            AkkaKit.tell(XSSystem.class, logMessage, "log-" + playerId);
+            LogRecordMessage.Builder logMessage = LogRecordMessage.newBuilder()
+                    .setLevel(level.ordinal())
+                    .setType(type.ordinal())
+                    .setMessage(message);
+            if (playerId != null) {
+                logMessage.setPlayerId(playerId);
+            }
+            AkkaKit.tell(XSSystem.class, GameRpcMessages.wrap(logMessage.build()), "log-" + playerId);
         } catch (Exception e) {
             log.error("Failed to send log to LogActor: playerId={}, message={}", playerId, message, e);
         }

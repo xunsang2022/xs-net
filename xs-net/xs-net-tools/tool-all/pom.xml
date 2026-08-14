@@ -33,12 +33,6 @@
 
         <dependency>
             <groupId>com.xs</groupId>
-            <artifactId>tool-proto</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.xs</groupId>
             <artifactId>tool-sbe</artifactId>
             <version>${project.version}</version>
         </dependency>

@@ -11,11 +11,13 @@ import com.game.logic.context.LogicContext;
 import com.game.logic.log.LogLevel;
 import com.game.logic.log.LogType;
 import com.game.logic.redis.RedisStore;
-import com.game.message.action.CS_LOG_REPORT;
-import com.game.message.action.SC_LOG_REPORT;
-import com.game.message.actor.LogRecordMessage;
 import com.game.message.actor.S2C;
 import com.game.message.actor.XSSystem;
+import com.game.message.rpc.GameRpcEnvelope;
+import com.game.message.rpc.GameRpcMessages;
+import com.game.protocol.pb.CS_LOG_REPORT;
+import com.game.protocol.pb.LogRecordMessage;
+import com.game.protocol.pb.SC_LOG_REPORT;
 import com.xs.core.akka.AkkaKit;
 import lombok.extern.slf4j.Slf4j;
 
@@ -43,23 +45,33 @@ public class LogActor extends AbstractBehavior<XSSystem> {
     @Override
     public Receive<XSSystem> createReceive() {
         return newReceiveBuilder()
-                .onMessage(CS_LOG_REPORT.class, this::handleClientLogReport)
-                .onMessage(LogRecordMessage.class, this::handleLogRecord)
+                .onMessage(GameRpcEnvelope.class, this::onRpc)
                 .onSignal(PostStop.class, signal -> onPostStop())
                 .build();
+    }
+
+    private Behavior<XSSystem> onRpc(GameRpcEnvelope envelope) {
+        if (envelope.payload() instanceof CS_LOG_REPORT report) {
+            return handleClientLogReport(report);
+        }
+        if (envelope.payload() instanceof LogRecordMessage record) {
+            return handleLogRecord(record);
+        }
+        log.warn("Unhandled rpc payload: {}", envelope.payload().getClass().getName());
+        return this;
     }
 
     private Behavior<XSSystem> handleClientLogReport(CS_LOG_REPORT msg) {
         try {
             if (msg.getLogLevel() < 0 || msg.getLogLevel() >= LogLevel.values().length) {
                 log.warn("Invalid log level: {}", msg.getLogLevel());
-                AkkaKit.tell(S2C.class, new SC_LOG_REPORT(msg.getSessionId(), 1, null), msg.getSessionId());
+                sendLogReport(msg.hasSessionId() ? msg.getSessionId() : "", 1, null);
                 return this;
             }
 
             if (msg.getLogType() < 0 || msg.getLogType() >= LogType.values().length) {
                 log.warn("Invalid log type: {}", msg.getLogType());
-                AkkaKit.tell(S2C.class, new SC_LOG_REPORT(msg.getSessionId(), 1, null), msg.getSessionId());
+                sendLogReport(msg.hasSessionId() ? msg.getSessionId() : "", 1, null);
                 return this;
             }
 
@@ -67,16 +79,27 @@ public class LogActor extends AbstractBehavior<XSSystem> {
             writeLog(
                     LogLevel.valueOf(msg.getLogLevel()),
                     LogType.valueOf(msg.getLogType()),
-                    msg.getContent(),
+                    msg.hasContent() ? msg.getContent() : null,
                     null,
                     logId
             );
-            AkkaKit.tell(S2C.class, new SC_LOG_REPORT(msg.getSessionId(), 0, logId), msg.getSessionId());
+            sendLogReport(msg.hasSessionId() ? msg.getSessionId() : "", 0, logId);
         } catch (Exception e) {
             log.error("Error processing log report", e);
-            AkkaKit.tell(S2C.class, new SC_LOG_REPORT(msg.getSessionId(), 1, null), msg.getSessionId());
+            sendLogReport(msg.hasSessionId() ? msg.getSessionId() : "", 1, null);
         }
         return this;
+    }
+
+    private void sendLogReport(String sessionId, int result, Long logId) {
+        SC_LOG_REPORT.Builder builder = SC_LOG_REPORT.newBuilder().setResult(result);
+        if (sessionId != null && !sessionId.isEmpty()) {
+            builder.setSessionId(sessionId);
+        }
+        if (logId != null) {
+            builder.setLogId(logId);
+        }
+        AkkaKit.tell(S2C.class, GameRpcMessages.wrap(builder.build()), sessionId);
     }
 
     private Behavior<XSSystem> handleLogRecord(LogRecordMessage msg) {
@@ -84,8 +107,8 @@ public class LogActor extends AbstractBehavior<XSSystem> {
             writeLog(
                     LogLevel.valueOf(msg.getLevel()),
                     LogType.valueOf(msg.getType()),
-                    toJson(msg.getMessage()),
-                    msg.getPlayerId(),
+                    toJson(msg.hasMessage() ? msg.getMessage() : null),
+                    msg.hasPlayerId() ? msg.getPlayerId() : null,
                     System.nanoTime()
             );
         } catch (Exception e) {

@@ -20,6 +20,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -55,7 +56,9 @@ class RedisStoreTest {
         verify(redis).execute(
                 any(RedisScript.class),
                 eq(List.of("player:42", "sync:dirty:player")),
-                argThat(args -> Arrays.equals((Object[]) args, new Object[]{"42", "name", "alice"}))
+                eq("42"),
+                eq("name"),
+                eq("alice")
         );
         verify(notifier).notify("42", RedisStore.OP_UPDATE);
     }
@@ -90,7 +93,7 @@ class RedisStoreTest {
         DbSyncNotifier notifier = mock(DbSyncNotifier.class);
         HashOperations<String, String, String> hashOps = mock(HashOperations.class);
         SetOperations<String, String> setOps = mock(SetOperations.class);
-        when(redis.opsForHash()).thenReturn(hashOps);
+        doReturn(hashOps).when(redis).opsForHash();
         when(redis.opsForSet()).thenReturn(setOps);
 
         RedisStore store = new RedisStore(redis, notifier);
@@ -130,7 +133,7 @@ class RedisStoreTest {
     void loadReadsHashEntries() {
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
         HashOperations<String, String, String> hashOps = mock(HashOperations.class);
-        when(redis.opsForHash()).thenReturn(hashOps);
+        doReturn(hashOps).when(redis).opsForHash();
         when(hashOps.entries("player:42")).thenReturn(Map.of("name", "alice", "online", "1"));
 
         RedisStore store = new RedisStore(redis, mock(DbSyncNotifier.class));
@@ -143,7 +146,7 @@ class RedisStoreTest {
     void writeLogAddsJsonPayloadToStream() {
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
         StreamOperations<String, String, String> streamOps = mock(StreamOperations.class);
-        when(redis.opsForStream()).thenReturn(streamOps);
+        doReturn(streamOps).when(redis).opsForStream();
 
         RedisStore store = new RedisStore(redis, mock(DbSyncNotifier.class));
         Map<String, String> event = new LinkedHashMap<>();

@@ -8,11 +8,13 @@ import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
 import akka.actor.typed.javadsl.TimerScheduler;
 import com.game.message.actor.db.DbSyncCmd;
-import com.game.message.actor.db.DbSyncLoadMessage;
-import com.game.message.actor.db.DbSyncLoadResultMessage;
-import com.game.message.actor.db.DbSyncMessage;
 import com.game.message.actor.db.DbSyncOp;
 import com.game.message.actor.logic.PlayerMessage;
+import com.game.message.rpc.GameRpcEnvelope;
+import com.game.message.rpc.GameRpcMessages;
+import com.game.protocol.pb.DbSyncLoadMessage;
+import com.game.protocol.pb.DbSyncLoadResultMessage;
+import com.game.protocol.pb.DbSyncMessage;
 import com.xs.core.akka.AkkaKit;
 import com.xs.core.spring.SpringUtil;
 import io.micrometer.core.instrument.Timer;
@@ -77,29 +79,44 @@ public class DbSyncActor extends AbstractBehavior<DbSyncCmd> {
     @Override
     public Receive<DbSyncCmd> createReceive() {
         return newReceiveBuilder()
-                .onMessage(DbSyncMessage.class, this::onDirty)
-                .onMessage(DbSyncLoadMessage.class, this::onLoad)
+                .onMessage(GameRpcEnvelope.class, this::onRpc)
                 .onMessage(FlushTick.class, this::onTick)
                 .onMessage(ShardResult.class, this::onShardResult)
                 .onSignal(PostStop.class, signal -> onPostStop())
                 .build();
     }
 
+    private Behavior<DbSyncCmd> onRpc(GameRpcEnvelope envelope) {
+        if (envelope.payload() instanceof DbSyncMessage message) {
+            return onDirty(message);
+        }
+        if (envelope.payload() instanceof DbSyncLoadMessage message) {
+            return onLoad(message);
+        }
+        log.warn("Unhandled rpc payload: {}", envelope.payload().getClass().getName());
+        return this;
+    }
+
     private Behavior<DbSyncCmd> onDirty(DbSyncMessage message) {
-        Long playerId = message.getPlayerId();
-        if (playerId == null) {
+        if (!message.hasPlayerId()) {
             log.warn("DbSyncMessage without playerId, op={}", message.getOp());
             return this;
         }
-        ledger.mark(playerId, message.getOp());
+        Long playerId = message.getPlayerId();
+        DbSyncOp op = toDbSyncOp(message.getOp());
+        ledger.mark(playerId, op);
         metrics.updateDirtyDepth(ledger.size());
-        if (message.getOp() == DbSyncOp.DESTROY) {
+        if (op == DbSyncOp.DESTROY) {
             flushSync(List.of(playerId));
         }
         return this;
     }
 
     private Behavior<DbSyncCmd> onLoad(DbSyncLoadMessage message) {
+        if (!message.hasPlayerId()) {
+            log.warn("DbSyncLoadMessage without playerId");
+            return this;
+        }
         Long playerId = message.getPlayerId();
         try {
             Map<String, String> fields = store.loadOrCreatePlayer(playerId);
@@ -114,10 +131,13 @@ public class DbSyncActor extends AbstractBehavior<DbSyncCmd> {
     }
 
     private void sendLoadResult(Long playerId, boolean success, Map<String, String> fields) {
-        DbSyncLoadResultMessage result = new DbSyncLoadResultMessage(playerId, success, fields);
+        DbSyncLoadResultMessage result = DbSyncLoadResultMessage.newBuilder()
+                .setPlayerId(playerId)
+                .setSuccess(success)
+                .putAllFields(fields)
+                .build();
         try {
-            // The shared contract is expected to make DbSyncLoadResultMessage a PlayerMessage subtype.
-            AkkaKit.tell(PlayerMessage.class, (PlayerMessage) result, String.valueOf(playerId));
+            AkkaKit.tell(PlayerMessage.class, GameRpcMessages.wrap(result), String.valueOf(playerId));
         } catch (Exception e) {
             log.error("Failed to send load result for player {}", playerId, e);
         }
@@ -231,6 +251,14 @@ public class DbSyncActor extends AbstractBehavior<DbSyncCmd> {
             }
         }
         return nonEmpty;
+    }
+
+    private static DbSyncOp toDbSyncOp(int op) {
+        DbSyncOp[] values = DbSyncOp.values();
+        if (op < 0 || op >= values.length) {
+            throw new IllegalArgumentException("Unknown DbSyncOp code: " + op);
+        }
+        return values[op];
     }
 
     private static final class FlushTick implements DbSyncCmd {

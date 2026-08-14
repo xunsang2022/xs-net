@@ -6,8 +6,11 @@ import akka.actor.typed.javadsl.Behaviors;
 import com.game.logic.context.LogicContext;
 import com.game.logic.redis.RedisDbSyncNotifier;
 import com.game.logic.redis.RedisStore;
+import com.game.message.rpc.GameRpcEnvelopeFactory;
+import com.game.message.rpc.GameRpcMessages;
 import com.xs.core.actor.node.NodeActor;
 import com.xs.core.config.GameFrameworkProperties;
+import com.xs.net.message.MessageAble;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -53,6 +56,7 @@ public final class GameLogicApplication {
         LogicContext.setDbSyncNotifier(notifier);
         LogicContext.setRedisStore(redisStore);
         LogicContext.setSyncIntervalMs(parseLong("game.storage.sync-interval-ms", "SYNC_INTERVAL_MS", DEFAULT_SYNC_INTERVAL_MS));
+        MessageAble.initialize(GameRpcMessages.INSTANCE, new GameRpcEnvelopeFactory());
 
         Behavior<Void> guardian = Behaviors.setup(context -> {
             context.spawn(NodeActor.create(properties), "node");
@@ -62,7 +66,7 @@ public final class GameLogicApplication {
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             system.terminate();
-            LogicContext.getConnectionFactory().destroy();
+            connectionFactory.destroy();
         }, "logic-shutdown"));
 
         system.getWhenTerminated().toCompletableFuture().join();

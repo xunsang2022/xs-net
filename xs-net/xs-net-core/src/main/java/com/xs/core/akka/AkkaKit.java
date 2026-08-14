@@ -5,21 +5,24 @@ import akka.actor.typed.Behavior;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.cluster.sharding.typed.javadsl.*;
 import com.xs.net.message.MessageAble;
+import com.xs.net.message.RpcMessage;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @UtilityClass
 public class AkkaKit {
     public static final List<Class<?>> local = new ArrayList<>();
+    private static final Map<Class<?>, EntityTypeKey<?>> ENTITY_TYPE_KEYS = new ConcurrentHashMap<>();
     private static volatile ClusterSharding clusterSharding;
 
     public static void setClusterSharding(ClusterSharding sharding) {
@@ -50,27 +53,23 @@ public class AkkaKit {
             T message,
             String entityId
     ) {
-        EntityTypeKey<T> entityTypeKey = EntityTypeKey.create(actorCmdClass, actorCmdClass.getSimpleName());
+        EntityTypeKey<T> entityTypeKey = entityTypeKey(actorCmdClass);
         EntityRef<T> entityRef = getClusterSharding().entityRefFor(entityTypeKey, entityId);
         Object sedMessage;
-
-        try {
-            // 因为序列化是使用 NetMessage 进行
-            if (local.contains(actorCmdClass)) {
-                sedMessage = message;
-            } else {
-                sedMessage = MessageAble.toNetMessage(message);
-            }
-
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        if (local.contains(actorCmdClass)) {
+            sedMessage = message;
+        } else if (message instanceof RpcMessage rpcMessage) {
+            sedMessage = MessageAble.toNetMessage(rpcMessage);
+        } else {
+            throw new IllegalArgumentException(
+                    "Remote messages must implement RpcMessage: " + message.getClass().getName());
         }
         entityRef.tell((T) sedMessage);
     }
 
     public <T> void entityRefForClusterSharding(ClusterSharding clusterSharding, String roles, Class<T> actorCmdClass) {
         clusterSharding.init(
-                Entity.of(EntityTypeKey.create(actorCmdClass, actorCmdClass.getSimpleName()),
+                Entity.of(entityTypeKey(actorCmdClass),
                         entityContext -> Behaviors.receive(actorCmdClass)
                                 .onAnyMessage(msg -> Behaviors.same())
                                 .build()
@@ -80,7 +79,7 @@ public class AkkaKit {
     }
 
     public static void initClusterSharding(ClusterSharding clusterSharding, Class<?> actorCmdClass, Class<?> actorClass, String roles) {
-        EntityTypeKey<?> typeKey = EntityTypeKey.create(actorCmdClass, actorCmdClass.getSimpleName());
+        EntityTypeKey<?> typeKey = entityTypeKey(actorCmdClass);
         clusterSharding.init(Entity.of(
                 typeKey,
                 entityContext -> createEntityContext(entityContext, actorClass)
@@ -127,5 +126,13 @@ public class AkkaKit {
             log.warn("获取节点角色失败，使用默认角色", e);
         }
         return roles;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> EntityTypeKey<T> entityTypeKey(Class<T> actorCmdClass) {
+        return (EntityTypeKey<T>) ENTITY_TYPE_KEYS.computeIfAbsent(
+                actorCmdClass,
+                key -> EntityTypeKey.create(key, key.getSimpleName())
+        );
     }
 }

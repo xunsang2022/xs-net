@@ -71,8 +71,9 @@ class JwtAuthFilterTest {
 
     @Test
     void remoteModeAcceptsVerifiedToken() throws Exception {
-        RestClient restClient = RestClient.builder().baseUrl("http://login.test").build();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(restClient).build();
+        RestClient.Builder restClientBuilder = RestClient.builder().baseUrl("http://login.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(restClientBuilder).build();
+        RestClient restClient = restClientBuilder.build();
         JwtAuthFilter filter = new JwtAuthFilter(jwtUtil, restClient, "remote");
 
         server.expect(requestTo("http://login.test/api/auth/verify"))
@@ -96,8 +97,9 @@ class JwtAuthFilterTest {
 
     @Test
     void remoteModeFailsClosedOnInvalidResponse() throws Exception {
-        RestClient restClient = RestClient.builder().baseUrl("http://login.test").build();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(restClient).build();
+        RestClient.Builder restClientBuilder = RestClient.builder().baseUrl("http://login.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(restClientBuilder).build();
+        RestClient restClient = restClientBuilder.build();
         JwtAuthFilter filter = new JwtAuthFilter(jwtUtil, restClient, "remote");
 
         server.expect(requestTo("http://login.test/api/auth/verify"))
@@ -116,8 +118,9 @@ class JwtAuthFilterTest {
 
     @Test
     void remoteModeFailsClosedOnAuthServiceError() throws Exception {
-        RestClient restClient = RestClient.builder().baseUrl("http://login.test").build();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(restClient).build();
+        RestClient.Builder restClientBuilder = RestClient.builder().baseUrl("http://login.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(restClientBuilder).build();
+        RestClient restClient = restClientBuilder.build();
         JwtAuthFilter filter = new JwtAuthFilter(jwtUtil, restClient, "remote");
 
         server.expect(requestTo("http://login.test/api/auth/verify"))

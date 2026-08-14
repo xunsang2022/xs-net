@@ -37,7 +37,6 @@
 
         <commons-lang3.version>3.18.0</commons-lang3.version>
 
-        <jprotobuf.version>2.4.23</jprotobuf.version>
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <commons-io.version>2.16.1</commons-io.version>
 
@@ -85,12 +84,6 @@
                 <artifactId>junit</artifactId>
                 <version>${junit.version}</version>
                 <scope>test</scope>
-            </dependency>
-
-            <dependency>
-                <groupId>com.baidu</groupId>
-                <artifactId>jprotobuf</artifactId>
-                <version>${jprotobuf.version}</version>
             </dependency>
 
             <dependency>
