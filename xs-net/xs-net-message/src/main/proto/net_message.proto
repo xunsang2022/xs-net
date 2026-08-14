@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package xs.net.message;
+
+option java_multiple_files = true;
+option java_package = "com.xs.net.message.pb";
+
+message NetMessage {
+  int32 rpc_num = 1;
+  bytes data = 2;
+  int32 error_code = 3;
+  int32 session_id = 4;
+  int32 user_id = 5;
+  string user_ip = 6;
+}

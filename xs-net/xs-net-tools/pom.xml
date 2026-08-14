@@ -12,7 +12,6 @@
     <modules>
         <module>tool-all</module>
         <module>tool-sbe</module>
-        <module>tool-proto</module>
         <module>tool-luBan-cfg</module>
         <module>tool-commons-lang4</module>
     </modules>

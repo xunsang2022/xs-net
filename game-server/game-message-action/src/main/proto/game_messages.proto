@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package game.message;
+
+option java_multiple_files = true;
+option java_package = "com.game.protocol.pb";
+
+message LogRecordMessage {
+  int32 level = 1;
+  int32 type = 2;
+  optional string message = 3;
+  optional int64 player_id = 4;
+}
+
+message CS_LOGIN {
+  optional string player_id = 1;
+  optional string player_name = 2;
+  optional string session_id = 3;
+}
+
+message CS_Logout {
+  optional string player_id = 1;
+  optional string session_id = 2;
+}
+
+message SC_LOGIN {
+  int32 result = 1;
+  optional string player_id = 2;
+  optional string player_name = 3;
+  optional string token = 4;
+}
+
+message SC_Logout {
+  optional string player_id = 1;
+  optional string session_id = 2;
+}
+
+message CS_LOG_REPORT {
+  optional string session_id = 1;
+  int32 log_level = 2;
+  int32 log_type = 3;
+  optional string content = 4;
+}
+
+message SC_LOG_REPORT {
+  optional string session_id = 1;
+  int32 result = 2;
+  optional int64 log_id = 3;
+}
+
+message PlayerEnter {
+  optional int64 player_id = 1;
+  optional string player_name = 2;
+  optional string channel_id = 3;
+}
+
+message DbSyncMessage {
+  optional int64 player_id = 1;
+  int32 op = 2;
+}
+
+message DbSyncLoadMessage {
+  optional int64 player_id = 1;
+}
+
+message DbSyncLoadResultMessage {
+  optional int64 player_id = 1;
+  bool success = 2;
+  map<string, string> fields = 3;
+}
