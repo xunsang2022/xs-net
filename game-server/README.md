@@ -9,6 +9,9 @@
 | Java | 21 | 开发语言 |
 | Spring Boot | 4.0.0 | Web 框架 |
 | Akka | 2.8.5 | 分布式 Actor 模型 |
+| Protobuf | 3.25.5 | 消息序列化与协议定义 |
+| Redis | - | logic 运行时存储、db-sync 中间层 |
+| PostgreSQL | - | 最终落库目标 |
 | SBE | 1.27.0 | 高性能二进制序列化 |
 | JWT | 0.12.6 | 身份认证 |
 | Lombok | 1.18.42 | 代码简化 |
@@ -17,32 +20,30 @@
 
 ```
 game-server/
-├── game-comment/          # 评论模块
-│   ├── config/           # 配置类
-│   └── util/             # 工具类（JWT 等）
-├── game-db/              # 数据库模块
+├── game-comment/          # 公共模块：JWT、通用工具
+├── game-db/              # db-sync 服务：Redis 脏数据回灌 PostgreSQL
+│   ├── dbsync/           # DbSyncActor、批量落库、日志消费、回灌工具
 │   ├── po/               # 持久化对象
-│   │   ├── player/       # 玩家数据（背包、用户）
-│   │   └── base/         # 基础 PO 类
-│   └── repository/       # 数据访问层
+│   └── DbSyncApplication.java
 ├── game-message-action/  # 消息定义模块
-│   ├── message/          # 消息协议定义
-│   │   ├── action/       # 具体消息类型
-│   │   └── actor/        # 消息处理 Actor
-│   └── App.java
+│   ├── message/          # 内部消息、路由接口与 RPC 注册表
+│   ├── dto/              # HTTP DTO
+│   ├── rpc/              # GameRpcEnvelope、GameRpcMessages
+│   └── proto/            # protobuf 协议源文件
 ├── game-node-gateway/    # 网关节点
 │   ├── gateway/          # 网关核心逻辑
 │   │   ├── actor/        # 通道 Actor
 │   │   ├── config/       # 网关配置
-│   │   ├── controller/   # 控制器（背包、玩家）
+│   │   ├── controller/   # 玩家接口
 │   │   ├── filter/       # 过滤器（JWT 认证）
-│   │   └── model/        # 数据模型
 │   └── GameGatewayApplication.java
-├── game-node-login/      # 登录节点
-│   ├── login/actor/      # 登录 Actor
+├── game-node-login/      # 认证服务
+│   ├── login/controller/ # 签发/校验 Token
 │   └── LoginApplication.java
 └── game-node-modules/    # 逻辑模块节点
-    ├── logic/actor/      # 背包逻辑 Actor
+    ├── logic/actor/      # PlayerActor、LogActor
+    ├── logic/redis/      # RedisStore、DbSyncNotifier
+    ├── logic/player/     # PlayerState
     └── GameLogicApplication.java
 ```
 
@@ -58,36 +59,39 @@ game-server/
 
 ### 2. game-node-login（登录服务）
 - **职责**:
-  - 玩家登录认证
-  - Token 生成与验证
-  - 会话管理
+  - 纯认证服务，只签发 JWT 与校验 JWT
+  - 不创建玩家、不读写游戏数据、不启动 Akka Actor
 
 ### 3. game-node-modules（逻辑服务）
 - **职责**:
   - 游戏核心逻辑处理
-  - 背包系统
-  - 道具使用
+  - PlayerActor 运行时状态
+  - Redis 脏数据写入与 db-sync 通知
+  - 日志事件写入 Redis
 
 ### 4. game-db（数据服务）
 - **职责**:
-  - 玩家数据持久化
-  - 背包数据管理
-  - 用户信息管理
+  - Redis 脏数据批量 UPSERT 到 PostgreSQL
+  - 玩家创建/加载回灌
+  - 日志事件消费与落库
+  - 对账与回灌工具
 
 ### 5. game-message-action（消息协议）
 - **职责**:
-  - 定义消息协议（CS/SC）
-  - 消息序列化/反序列化
-  - Actor 消息处理
+  - `.proto` 唯一协议源，protoc 生成 Java 类
+  - RPC 编号注册表与 `GameRpcEnvelope` 路由
 
 ## 消息协议登记
 
 | 消息类型 | 编号 | 说明 | 状态 |
 |---------|------|------|------|
+| LogRecordMessage | 999 | 内部日志记录 | 新增 |
 | CS_LOGIN | 1000 | 客户端登录请求 | 保留 |
 | CS_Logout | 1001 | 登出请求 | 保留 |
 | SC_LOGIN | 1002 | 服务端登录响应 DTO | 保留（不再作为 PlayerMessage） |
 | SC_Logout | 1003 | 登出响应 | 保留 |
+| CS_LOG_REPORT | 2100 | 客户端日志上报 | 新增 |
+| SC_LOG_REPORT | 2101 | 日志上报响应 | 新增 |
 | CS_BACKPACK_INFO | 2000 | 背包信息请求 | 废弃，禁止复用 |
 | SC_BACKPACK_INFO | 2001 | 背包信息响应 | 废弃，禁止复用 |
 | CS_USE_ITEM | 2002 | 使用道具请求 | 废弃，禁止复用 |
@@ -95,9 +99,12 @@ game-server/
 | BackpackInitMessage | 3000 | 背包初始化内部消息 | 废弃，禁止复用 |
 | BackpackInitAckMessage | 3001 | 背包初始化确认内部消息 | 废弃，禁止复用 |
 | BackpackCleanupMessage | 3002 | 背包清理内部消息 | 废弃，禁止复用 |
-| DbSyncCmd 系列 | 3100-3199 | db-sync 内部消息区间 | 新增 |
+| PlayerEnter | 3003 | 玩家进入 logic 内部消息 | 新增 |
+| DbSyncMessage | 3100 | db-sync 脏数据记账 | 新增 |
+| DbSyncLoadMessage | 3101 | logic 请求加载/创建玩家 | 新增 |
+| DbSyncLoadResultMessage | 3102 | db-sync 加载结果回执 | 新增 |
 
-`PlayerMessage` 已从 `com.game.message.actor.login` 迁移至 `com.game.message.actor.logic`，路由角色为 `logic`；`SC_LOGIN` 仅作为 HTTP 响应 DTO，不再实现 `PlayerMessage`。协议号 2000-2003、3000-3002 已废弃，禁止复用。
+`PlayerMessage` 已迁移至 `com.game.message.actor.logic`，路由角色为 `logic`；`SC_LOGIN` 仅作为 HTTP 响应 DTO。协议号 2000-2003、3000-3002 已废弃，禁止复用。
 
 ## 配置说明
 
@@ -119,6 +126,7 @@ jwt:
 ### 前置要求
 - JDK 21+
 - Maven 3.6+
+- protoc 3.25.5（默认读取 `C:/tools/protoc/bin/protoc.exe`，可通过 pom 的 `protocExecutable` 修改）
 
 ### 构建项目
 ```bash
@@ -127,9 +135,10 @@ mvn clean install
 
 ### 启动服务
 建议按以下顺序启动：
-1. game-node-login（登录服务）
-2. game-node-modules（逻辑服务）
-3. game-node-gateway（网关服务）
+1. game-db（db-sync 服务）
+2. game-node-login（认证服务）
+3. game-node-modules（logic 服务）
+4. game-node-gateway（网关服务）
 
 ## 依赖关系
 
