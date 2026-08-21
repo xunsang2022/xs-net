@@ -1,3 +1,7 @@
+spring:
+  autoconfigure:
+    exclude: com.xs.core.config.GameFrameworkAutoConfiguration
+
 server:
   port: 8081
 
