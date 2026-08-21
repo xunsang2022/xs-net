@@ -2,14 +2,10 @@ package com.game.message.rpc;
 
 import com.game.message.actor.S2C;
 import com.game.message.actor.XSSystem;
-import com.game.message.actor.db.DbSyncCmd;
 import com.game.message.actor.logic.PlayerMessage;
 import com.game.protocol.pb.CS_LOGIN;
 import com.game.protocol.pb.CS_LOG_REPORT;
 import com.game.protocol.pb.CS_Logout;
-import com.game.protocol.pb.DbSyncLoadMessage;
-import com.game.protocol.pb.DbSyncLoadResultMessage;
-import com.game.protocol.pb.DbSyncMessage;
 import com.game.protocol.pb.LogRecordMessage;
 import com.game.protocol.pb.PlayerEnter;
 import com.game.protocol.pb.SC_LOGIN;
@@ -49,13 +45,7 @@ public final class GameRpcMessages implements RpcMessageRegistry {
                 new RpcMessageSpec<>(2101, SC_LOG_REPORT.class,
                         SC_LOG_REPORT.getDefaultInstance().getParserForType(), S2C.class),
                 new RpcMessageSpec<>(3003, PlayerEnter.class,
-                        PlayerEnter.getDefaultInstance().getParserForType(), PlayerMessage.class),
-                new RpcMessageSpec<>(3100, DbSyncMessage.class,
-                        DbSyncMessage.getDefaultInstance().getParserForType(), DbSyncCmd.class),
-                new RpcMessageSpec<>(3101, DbSyncLoadMessage.class,
-                        DbSyncLoadMessage.getDefaultInstance().getParserForType(), DbSyncCmd.class),
-                new RpcMessageSpec<>(3102, DbSyncLoadResultMessage.class,
-                        DbSyncLoadResultMessage.getDefaultInstance().getParserForType(), PlayerMessage.class)
+                        PlayerEnter.getDefaultInstance().getParserForType(), PlayerMessage.class)
         );
         for (RpcMessageSpec<? extends MessageLite> spec : specs) {
             byRpcNum.put(spec.rpcNum(), spec);

@@ -1,44 +1,44 @@
-package com.game.dbsync;
+package com.game.logic.dbsync;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-import com.game.enums.LogLevel;
-import com.game.enums.LogType;
-import com.game.po.log.LogEntity;
-import org.springframework.stereotype.Component;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.game.logic.enums.LogLevel;
+import com.game.logic.enums.LogType;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-@Component
+/**
+ * 将 Redis Streams 中的日志事件解析为可落库的字段。
+ */
 public class LogEventCodec {
+
     private final ObjectMapper objectMapper;
 
     public LogEventCodec(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
-    public List<LogEntity> toEntities(List<LogStreamRecord> records) {
-        List<LogEntity> entities = new ArrayList<>(records.size());
+    public List<LogEvent> toEvents(List<LogStreamRecord> records) {
+        List<LogEvent> events = new ArrayList<>(records.size());
         for (LogStreamRecord record : records) {
-            entities.add(toEntity(record));
+            events.add(toEvent(record));
         }
-        return entities;
+        return events;
     }
 
-    public LogEntity toEntity(LogStreamRecord record) {
+    public LogEvent toEvent(LogStreamRecord record) {
         try {
             Map<String, String> fields = record.fields();
             JsonNode payload = objectMapper.readTree(fields.getOrDefault("payload", "{}"));
-            LogEntity entity = new LogEntity();
-            entity.setLogLevel(parseLevel(payload));
-            entity.setLogType(parseType(payload));
-            entity.setContent(asJson(payload.path("content").asText("")));
-            entity.setPlayerId(parsePlayerId(payload));
-            entity.setCreateTime(parseCreateTime(payload, fields));
-            return entity;
+            LogLevel level = parseLevel(payload);
+            LogType type = parseType(payload);
+            String content = asJson(payload.path("content").asText(""));
+            Long playerId = parsePlayerId(payload);
+            Timestamp createTime = parseCreateTime(payload, fields);
+            return new LogEvent(level, type, content, playerId, createTime);
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid log event: " + record.id(), e);
         }
@@ -104,5 +104,11 @@ public class LogEventCodec {
             }
         }
         return millis > 0L ? new Timestamp(millis) : new Timestamp(System.currentTimeMillis());
+    }
+
+    /**
+     * 解析后的日志事件（待落库）。
+     */
+    public record LogEvent(LogLevel level, LogType type, String content, Long playerId, Timestamp createTime) {
     }
 }

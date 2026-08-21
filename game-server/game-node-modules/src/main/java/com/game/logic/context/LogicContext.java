@@ -1,6 +1,7 @@
 package com.game.logic.context;
 
-import com.game.logic.redis.RedisDbSyncNotifier;
+import com.game.logic.dbsync.DBSyncEngine;
+import com.game.logic.dbsync.LogConsumer;
 import com.game.logic.redis.RedisStore;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -12,8 +13,9 @@ public final class LogicContext {
 
     private static volatile RedisConnectionFactory connectionFactory;
     private static volatile StringRedisTemplate redisTemplate;
-    private static volatile RedisDbSyncNotifier dbSyncNotifier;
     private static volatile RedisStore redisStore;
+    private static volatile DBSyncEngine dbSyncEngine;
+    private static volatile LogConsumer logConsumer;
     private static volatile long syncIntervalMs = 1000L;
 
     private LogicContext() {
@@ -43,16 +45,28 @@ public final class LogicContext {
         return template;
     }
 
-    public static void setDbSyncNotifier(RedisDbSyncNotifier notifier) {
-        dbSyncNotifier = notifier;
+    public static void setDbSyncEngine(DBSyncEngine engine) {
+        dbSyncEngine = engine;
     }
 
-    public static RedisDbSyncNotifier getDbSyncNotifier() {
-        RedisDbSyncNotifier notifier = dbSyncNotifier;
-        if (notifier == null) {
-            throw new IllegalStateException("RedisDbSyncNotifier has not been initialized");
+    public static DBSyncEngine getDbSyncEngine() {
+        DBSyncEngine engine = dbSyncEngine;
+        if (engine == null) {
+            throw new IllegalStateException("DBSyncEngine has not been initialized");
         }
-        return notifier;
+        return engine;
+    }
+
+    public static void setLogConsumer(LogConsumer consumer) {
+        logConsumer = consumer;
+    }
+
+    public static LogConsumer getLogConsumer() {
+        LogConsumer consumer = logConsumer;
+        if (consumer == null) {
+            throw new IllegalStateException("LogConsumer has not been initialized");
+        }
+        return consumer;
     }
 
     public static void setRedisStore(RedisStore store) {

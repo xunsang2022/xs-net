@@ -7,11 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class LogicClasspathBoundaryTest {
 
     @Test
-    void postgresDriverIsNotOnClasspath() {
-        assertThrows(ClassNotFoundException.class, () -> Class.forName("org.postgresql.Driver"));
-    }
-
-    @Test
     void jakartaPersistenceIsNotOnClasspath() {
         assertThrows(ClassNotFoundException.class, () -> Class.forName("jakarta.persistence.Entity"));
     }

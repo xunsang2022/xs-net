@@ -1,35 +1,48 @@
-package com.game.dbsync;
+package com.game.logic.dbsync;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 玩家 UPSERT SQL 常量与批量参数构造。
+ * 使用 PostgreSQL 的 ON CONFLICT (id) DO UPDATE，并通过 WHERE users.version = ? 实现乐观锁：
+ * 仅当数据库中的 version 与提交时的 version 一致时才更新，避免覆盖并发修改。
+ */
 public final class PlayerUpsertSql {
+
     public static final String SQL = "INSERT INTO users (id, name, email, online, last_login_at, updated_at, version) "
             + "VALUES (?, ?, ?, ?, ?, ?, ?) "
             + "ON CONFLICT (id) DO UPDATE SET "
-            + "name = COALESCE(EXCLUDED.name, users.name), "
-            + "email = COALESCE(EXCLUDED.email, users.email), "
-            + "online = COALESCE(EXCLUDED.online, users.online), "
-            + "last_login_at = COALESCE(EXCLUDED.last_login_at, users.last_login_at), "
-            + "updated_at = COALESCE(EXCLUDED.updated_at, users.updated_at), "
-            + "version = COALESCE(EXCLUDED.version, users.version)";
+            + "name = EXCLUDED.name, "
+            + "email = EXCLUDED.email, "
+            + "online = EXCLUDED.online, "
+            + "last_login_at = EXCLUDED.last_login_at, "
+            + "updated_at = EXCLUDED.updated_at, "
+            + "version = EXCLUDED.version "
+            + "WHERE users.version = ?";
 
     private PlayerUpsertSql() {
     }
 
-    public static Object[] params(Long playerId, Map<String, String> fields) {
-        if (playerId == null) {
+    /**
+     * 构造单条 UPSERT 参数。
+     * 参数顺序：7 个插入值（id, name, email, online, last_login_at, updated_at, version）+ 1 个乐观锁 version 条件。
+     */
+    public static Object[] params(DirtyRecord r) {
+        if (r == null || r.playerId() == null) {
             throw new IllegalArgumentException("playerId must not be null");
         }
-        String id = value(fields, "id", String.valueOf(playerId));
-        String name = value(fields, "name", "player-" + playerId);
+        Map<String, String> fields = r.fields();
+        String id = value(fields, "id", String.valueOf(r.playerId()));
+        String name = value(fields, "name", "player-" + r.playerId());
         String email = value(fields, "email", "");
         Integer online = intValue(fields, "online", 0);
         Timestamp lastLoginAt = timestampValue(fields.get("last_login_at"));
         Timestamp updatedAt = timestampValue(fields.get("updated_at"));
         Long version = longValue(fields.get("version"));
+        long resolvedVersion = version == null ? r.version() : version;
         return new Object[]{
                 Long.parseLong(id),
                 name,
@@ -37,15 +50,18 @@ public final class PlayerUpsertSql {
                 online,
                 lastLoginAt,
                 updatedAt,
-                version == null ? 1L : version
+                resolvedVersion,
+                resolvedVersion
         };
     }
 
-    public static List<Object[]> batchParams(List<Map<String, String>> records) {
+    /**
+     * 构造批量 UPSERT 参数。
+     */
+    public static List<Object[]> batchParams(List<DirtyRecord> records) {
         List<Object[]> batch = new ArrayList<>(records.size());
-        for (Map<String, String> record : records) {
-            Long playerId = Long.valueOf(value(record, "id", "0"));
-            batch.add(params(playerId, record));
+        for (DirtyRecord record : records) {
+            batch.add(params(record));
         }
         return batch;
     }

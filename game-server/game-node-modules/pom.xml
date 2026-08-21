@@ -33,6 +33,20 @@
             <artifactId>lettuce-core</artifactId>
         </dependency>
 
+        <!-- Non-Boot JDBC: manually wired DBSyncEngine batch writer to PostgreSQL -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+        </dependency>
+
         <!-- Akka Core Dependencies -->
         <!-- Akka Actor Typed - 提供Akka类型化Actor支持，用于构建类型安全的Actor系统 -->
         <dependency>

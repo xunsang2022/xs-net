@@ -9,16 +9,14 @@ import akka.actor.typed.javadsl.Receive;
 import akka.actor.typed.javadsl.StashBuffer;
 import akka.actor.typed.javadsl.TimerScheduler;
 import com.game.logic.context.LogicContext;
+import com.game.logic.dbsync.DBSyncEngine;
 import com.game.logic.player.PlayerState;
 import com.game.logic.redis.RedisStore;
 import com.game.message.actor.S2C;
-import com.game.message.actor.db.DbSyncCmd;
 import com.game.message.actor.logic.PlayerMessage;
 import com.game.message.rpc.GameRpcEnvelope;
 import com.game.message.rpc.GameRpcMessages;
 import com.game.protocol.pb.CS_Logout;
-import com.game.protocol.pb.DbSyncLoadMessage;
-import com.game.protocol.pb.DbSyncLoadResultMessage;
 import com.game.protocol.pb.PlayerEnter;
 import com.game.protocol.pb.SC_Logout;
 import com.xs.core.akka.AkkaKit;
@@ -26,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Cluster sharded player entity on the logic node. State lives in Redis and is
@@ -76,6 +75,7 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
                 .onMessage(GameRpcEnvelope.class, this::onRpc)
                 .onMessage(FlushDirty.class, this::onFlushDirty)
                 .onMessage(LoadTimeout.class, this::onLoadTimeout)
+                .onMessage(LoadResult.class, this::onLoadResult)
                 .onSignal(PostStop.class, signal -> onPostStop())
                 .build();
     }
@@ -86,9 +86,6 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
         }
         if (envelope.payload() instanceof CS_Logout logout) {
             return onLogout(logout);
-        }
-        if (envelope.payload() instanceof DbSyncLoadResultMessage result) {
-            return onLoadResult(result);
         }
         log.warn("Unhandled rpc payload: {}", envelope.payload().getClass().getName());
         return this;
@@ -107,15 +104,13 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
                     return finishLoad(msg.getPlayerId(), cached);
                 }
             } catch (Exception e) {
-                log.warn("Failed to read player cache, requesting db-sync load: playerId={}", entityId, e);
+                log.warn("Failed to read player cache, requesting db load: playerId={}", entityId, e);
             }
 
             timers.startSingleTimer(LOAD_TIMEOUT_KEY, new LoadTimeout(), Duration.ofMillis(LOAD_TIMEOUT_MS));
-            AkkaKit.tell(
-                    DbSyncCmd.class,
-                    GameRpcMessages.wrap(DbSyncLoadMessage.newBuilder().setPlayerId(msg.getPlayerId()).build()),
-                    entityId
-            );
+            CompletableFuture<Map<String, String>> future =
+                    CompletableFuture.supplyAsync(() -> dbsyncEngine().loadOrCreate(msg.getPlayerId()));
+            getContext().pipeToSelf(future, (fields, error) -> new LoadResult(fields, error));
             return this;
         }
 
@@ -184,18 +179,18 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
         return stash.unstashAll(this);
     }
 
-    private Behavior<PlayerMessage> onLoadResult(DbSyncLoadResultMessage msg) {
-        if (!msg.hasPlayerId() || !loadPending || !String.valueOf(msg.getPlayerId()).equals(entityId)) {
+    private Behavior<PlayerMessage> onLoadResult(LoadResult result) {
+        if (!loadPending) {
             return this;
         }
-        if (!msg.getSuccess() || msg.getFieldsMap() == null || msg.getFieldsMap().isEmpty()) {
-            log.error("Player load failed: playerId={}", entityId);
+        if (result.error != null || result.fields == null || result.fields.isEmpty()) {
+            log.error("Player load failed: playerId={}", entityId, result.error);
             timers.cancel(LOAD_TIMEOUT_KEY);
             loadPending = false;
             stash.clear();
             return Behaviors.stopped();
         }
-        return finishLoad(msg.getPlayerId(), msg.getFieldsMap());
+        return finishLoad(Long.parseLong(entityId), result.fields);
     }
 
     private Behavior<PlayerMessage> onLoadTimeout(LoadTimeout msg) {
@@ -214,6 +209,7 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
         }
         try {
             if (redisStore().flushDirty(entityId, state)) {
+                dbsyncEngine().submit(Long.parseLong(entityId), state.toHash(state.getDirtyFields()), state.getVersion());
                 state.clearDirty();
             } else {
                 log.warn("Dirty flush failed: playerId={}, fields={}", entityId, state.getDirtyFields());
@@ -249,6 +245,9 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
         state.markDirty(PlayerState.FIELD_UPDATED_AT);
         try {
             destroyed = redisStore().destroy(entityId, state);
+            if (destroyed) {
+                dbsyncEngine().submit(Long.parseLong(entityId), state.toHash(state.getDirtyFields()), state.getVersion());
+            }
         } catch (Exception e) {
             destroyed = false;
             log.error("Failed to destroy player state: playerId={}", entityId, e);
@@ -281,9 +280,23 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
         return redisStore;
     }
 
+    private DBSyncEngine dbsyncEngine() {
+        return LogicContext.getDbSyncEngine();
+    }
+
     private static final class FlushDirty implements PlayerMessage {
     }
 
     private static final class LoadTimeout implements PlayerMessage {
+    }
+
+    private static final class LoadResult implements PlayerMessage {
+        private final Map<String, String> fields;
+        private final Throwable error;
+
+        private LoadResult(Map<String, String> fields, Throwable error) {
+            this.fields = fields;
+            this.error = error;
+        }
     }
 }

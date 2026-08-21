@@ -6,19 +6,13 @@ import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.SetOperations;
 import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.RedisScript;
 
-import java.util.Arrays;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -34,69 +28,38 @@ class RedisStoreTest {
     }
 
     @Test
-    void scriptsCoverAtomicHashAndSetOperations() {
-        assertTrue(RedisStore.FLUSH_DIRTY_LUA.contains("HSET"));
-        assertTrue(RedisStore.FLUSH_DIRTY_LUA.contains("SADD"));
-        assertTrue(RedisStore.DESTROY_LUA.contains("HSET"));
-        assertTrue(RedisStore.DESTROY_LUA.contains("SREM"));
-    }
-
-    @Test
-    void flushDirtyExecutesScriptAndNotifiesUpdate() {
+    void flushDirtyWritesDirtyFieldsToHash() {
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
-        DbSyncNotifier notifier = mock(DbSyncNotifier.class);
-        when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class))).thenReturn(1L);
+        HashOperations<String, String, String> hashOps = mock(HashOperations.class);
+        doReturn(hashOps).when(redis).opsForHash();
 
-        RedisStore store = new RedisStore(redis, notifier);
+        RedisStore store = new RedisStore(redis);
         PlayerState state = new PlayerState();
         state.setName("alice");
         state.markDirty(PlayerState.FIELD_NAME);
 
         assertTrue(store.flushDirty("42", state));
-        verify(redis).execute(
-                any(RedisScript.class),
-                eq(List.of("player:42", "sync:dirty:player")),
-                eq("42"),
-                eq("name"),
-                eq("alice")
-        );
-        verify(notifier).notify("42", RedisStore.OP_UPDATE);
+        verify(hashOps).putAll("player:42", Map.of("name", "alice"));
     }
 
     @Test
     void flushDirtyWithoutDirtyFieldsDoesNothing() {
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
-        DbSyncNotifier notifier = mock(DbSyncNotifier.class);
-        RedisStore store = new RedisStore(redis, notifier);
+        RedisStore store = new RedisStore(redis);
 
         assertTrue(store.flushDirty("42", new PlayerState()));
-        verifyNoInteractions(redis, notifier);
-    }
-
-    @Test
-    void flushDirtyFailureDoesNotNotify() {
-        StringRedisTemplate redis = mock(StringRedisTemplate.class);
-        DbSyncNotifier notifier = mock(DbSyncNotifier.class);
-        when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class))).thenReturn(0L);
-
-        RedisStore store = new RedisStore(redis, notifier);
-        PlayerState state = new PlayerState();
-        state.markDirty(PlayerState.FIELD_NAME);
-
-        assertFalse(store.flushDirty("42", state));
-        verifyNoInteractions(notifier);
+        verifyNoInteractions(redis);
     }
 
     @Test
     void createWritesFullHashAndRegistersIndexes() {
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
-        DbSyncNotifier notifier = mock(DbSyncNotifier.class);
         HashOperations<String, String, String> hashOps = mock(HashOperations.class);
         SetOperations<String, String> setOps = mock(SetOperations.class);
         doReturn(hashOps).when(redis).opsForHash();
-        when(redis.opsForSet()).thenReturn(setOps);
+        doReturn(setOps).when(redis).opsForSet();
 
-        RedisStore store = new RedisStore(redis, notifier);
+        RedisStore store = new RedisStore(redis);
         PlayerState state = new PlayerState();
         state.setId(42L);
         state.setName("alice");
@@ -105,28 +68,25 @@ class RedisStoreTest {
         verify(hashOps).putAll("player:42", state.toHash());
         verify(setOps).add(RedisStore.PLAYER_IDX_KEY, "42");
         verify(setOps).add(RedisStore.PLAYER_ONLINE_KEY, "42");
-        verifyNoInteractions(notifier);
     }
 
     @Test
-    void destroyExecutesScriptAndNotifiesDestroy() {
+    void destroyWritesHashAndRemovesOnline() {
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
-        DbSyncNotifier notifier = mock(DbSyncNotifier.class);
-        when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class))).thenReturn(1L);
+        HashOperations<String, String, String> hashOps = mock(HashOperations.class);
+        SetOperations<String, String> setOps = mock(SetOperations.class);
+        doReturn(hashOps).when(redis).opsForHash();
+        doReturn(setOps).when(redis).opsForSet();
 
-        RedisStore store = new RedisStore(redis, notifier);
+        RedisStore store = new RedisStore(redis);
         PlayerState state = new PlayerState();
         state.setId(42L);
         state.setName("alice");
         state.setOnline(true);
 
         assertTrue(store.destroy("42", state));
-        verify(redis).execute(
-                any(RedisScript.class),
-                eq(List.of("player:42", "player:online", "sync:dirty:player")),
-                any(Object[].class)
-        );
-        verify(notifier).notify("42", RedisStore.OP_DESTROY);
+        verify(hashOps).putAll("player:42", state.toHash());
+        verify(setOps).remove(RedisStore.PLAYER_ONLINE_KEY, "42");
     }
 
     @Test
@@ -136,7 +96,7 @@ class RedisStoreTest {
         doReturn(hashOps).when(redis).opsForHash();
         when(hashOps.entries("player:42")).thenReturn(Map.of("name", "alice", "online", "1"));
 
-        RedisStore store = new RedisStore(redis, mock(DbSyncNotifier.class));
+        RedisStore store = new RedisStore(redis);
         Map<String, String> loaded = store.load("42");
         assertEquals("alice", loaded.get("name"));
         assertEquals("1", loaded.get("online"));
@@ -148,7 +108,7 @@ class RedisStoreTest {
         StreamOperations<String, String, String> streamOps = mock(StreamOperations.class);
         doReturn(streamOps).when(redis).opsForStream();
 
-        RedisStore store = new RedisStore(redis, mock(DbSyncNotifier.class));
+        RedisStore store = new RedisStore(redis);
         Map<String, String> event = new LinkedHashMap<>();
         event.put("level", "HIGH");
         event.put("content", "\"hello\"");

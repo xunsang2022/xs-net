@@ -52,7 +52,7 @@
                 <artifactId>protobuf-maven-plugin</artifactId>
                 <version>0.6.1</version>
                 <configuration>
-                    <protocExecutable>C:/tools/protoc/bin/protoc.exe</protocExecutable>
+                    <protocArtifact>com.google.protobuf:protoc:3.25.5:exe:windows-x86_64</protocArtifact>
                 </configuration>
                 <executions>
                     <execution>

@@ -1,4 +1,4 @@
-package com.game.enums;
+package com.game.logic.enums;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -13,20 +13,20 @@ public enum LogLevel {
      * 高级别 - 严重错误、系统故障、安全事件
      */
     HIGH(0, "高级别"),
-    
+
     /**
      * 中级别 - 重要业务操作、警告信息、异常处理
      */
     MEDIUM(1, "中级别"),
-    
+
     /**
      * 低级别 - 普通信息、调试数据、访问记录
      */
     LOW(2, "低级别");
-    
+
     private final int value;
     private final String description;
-    
+
     /**
      * 根据 value 获取 LogLevel
      */

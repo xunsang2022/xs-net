@@ -4,15 +4,11 @@ import com.game.message.rpc.GameRpcMessages;
 import com.game.protocol.pb.CS_LOGIN;
 import com.game.protocol.pb.CS_LOG_REPORT;
 import com.game.protocol.pb.CS_Logout;
-import com.game.protocol.pb.DbSyncLoadMessage;
-import com.game.protocol.pb.DbSyncLoadResultMessage;
-import com.game.protocol.pb.DbSyncMessage;
 import com.game.protocol.pb.LogRecordMessage;
 import com.game.protocol.pb.PlayerEnter;
 import com.game.protocol.pb.SC_LOGIN;
 import com.game.protocol.pb.SC_LOG_REPORT;
 import com.game.protocol.pb.SC_Logout;
-import com.google.protobuf.ByteString;
 import com.google.protobuf.MessageLite;
 import com.xs.net.message.RpcMessageSpec;
 import org.junit.Test;
@@ -22,7 +18,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -76,18 +71,6 @@ public class GameMessagesGoldenTest {
                 .setPlayerName("alice")
                 .setChannelId("ch-1")
                 .build());
-        assertGolden("DbSyncMessage", DbSyncMessage.newBuilder()
-                .setPlayerId(1001L)
-                .setOp(0)
-                .build());
-        assertGolden("DbSyncLoadMessage", DbSyncLoadMessage.newBuilder()
-                .setPlayerId(1001L)
-                .build());
-        assertGolden("DbSyncLoadResultMessage", DbSyncLoadResultMessage.newBuilder()
-                .setPlayerId(1001L)
-                .setSuccess(true)
-                .putAllFields(Map.of("name", "alice"))
-                .build());
     }
 
     @Test
@@ -98,7 +81,7 @@ public class GameMessagesGoldenTest {
             assertNotNull(spec.messageClass());
             assertNotNull(spec.parser());
         }
-        assertEquals(11, GameRpcMessages.INSTANCE.all().size());
+        assertEquals(8, GameRpcMessages.INSTANCE.all().size());
         assertNotNull(GameRpcMessages.INSTANCE.find(1000));
         assertEquals(1003, GameRpcMessages.INSTANCE.find(1003).rpcNum());
     }
@@ -112,15 +95,6 @@ public class GameMessagesGoldenTest {
         CS_LOGIN present = CS_LOGIN.newBuilder().setPlayerId("1").setPlayerName("alice").build();
         assertTrue(present.hasPlayerName());
         assertEquals("alice", present.getPlayerName());
-    }
-
-    @Test
-    public void mapFieldRoundTrip() throws Exception {
-        byte[] golden = readHex("DbSyncLoadResultMessage.hex");
-        DbSyncLoadResultMessage parsed = DbSyncLoadResultMessage.parseFrom(golden);
-        assertEquals(1001L, parsed.getPlayerId());
-        assertTrue(parsed.getSuccess());
-        assertEquals(Map.of("name", "alice"), parsed.getFieldsMap());
     }
 
     private static void assertGolden(String name, MessageLite message) throws Exception {
