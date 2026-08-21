@@ -30,11 +30,5 @@
             <artifactId>tool-luBan-cfg</artifactId>
             <version>${project.version}</version>
         </dependency>
-
-        <dependency>
-            <groupId>com.xs</groupId>
-            <artifactId>tool-sbe</artifactId>
-            <version>${project.version}</version>
-        </dependency>
     </dependencies>
 </project>

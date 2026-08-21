@@ -11,7 +11,6 @@
 
     <modules>
         <module>tool-all</module>
-        <module>tool-sbe</module>
         <module>tool-luBan-cfg</module>
         <module>tool-commons-lang4</module>
     </modules>
@@ -39,9 +38,6 @@
 
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <commons-io.version>2.16.1</commons-io.version>
-
-        <sbe.version>1.27.0</sbe.version>
-        <agrona.version>[1.17.1,2.0)</agrona.version>
     </properties>
 
     <dependencies>
@@ -97,19 +93,6 @@
                 <groupId>commons-io</groupId>
                 <artifactId>commons-io</artifactId>
                 <version>${commons-io.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>uk.co.real-logic</groupId>
-                <artifactId>sbe-all</artifactId>
-                <version>${sbe.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.agrona</groupId>
-                <artifactId>agrona</artifactId>
-                <version>${agrona.version}</version>
-                <scope>compile</scope>
             </dependency>
 
             <dependency>

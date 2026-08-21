@@ -31,13 +31,6 @@
         </dependency>
 
         <dependency>
-            <groupId>org.agrona</groupId>
-            <artifactId>agrona</artifactId>
-            <version>1.23.1</version>
-            <scope>compile</scope>
-        </dependency>
-
-        <dependency>
             <groupId>com.typesafe.akka</groupId>
             <artifactId>akka-actor_2.13</artifactId>
         </dependency>
