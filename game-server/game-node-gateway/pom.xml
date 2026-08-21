@@ -23,6 +23,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+
+        <!-- Spring Boot RestClient Starter - Spring Boot 4 中 RestClient.Builder 自动配置独立模块 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-restclient</artifactId>
+        </dependency>
         
         <!-- Akka Cluster Dependencies -->
         <!-- Classic Akka API -->
@@ -98,7 +104,7 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <mainClass>com.game.gateway.GameGatewayApplication</mainClass>
+                    <mainClass>com.game.GameGatewayApplication</mainClass>
                     <jvmArguments>
                     --add-opens java.base/sun.nio.ch=ALL-UNNAMED
                     --add-opens java.base/java.nio=ALL-UNNAMED
