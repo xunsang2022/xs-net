@@ -64,6 +64,13 @@
             <artifactId>protobuf-java</artifactId>
             <version>${protobuf-java.version}</version>
         </dependency>
+
+        <!-- Netty - 提供 TCP 长连接通信，承载客户端游戏消息与 S2C 下行 -->
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-all</artifactId>
+            <version>4.1.115.Final</version>
+        </dependency>
         
         <!-- Typed Akka API -->
         <!-- Akka Actor Typed - 提供Akka类型化Actor支持，用于构建类型安全的Actor系统 -->
