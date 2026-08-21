@@ -1,6 +1,6 @@
 package com.game.dbsync;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.game.enums.LogLevel;
 import com.game.enums.LogType;
 import com.game.po.log.LogEntity;
