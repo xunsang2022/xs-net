@@ -9,12 +9,9 @@ import akka.actor.typed.javadsl.Receive;
 import akka.actor.typed.javadsl.StashBuffer;
 import akka.actor.typed.javadsl.TimerScheduler;
 import com.game.logic.context.LogicContext;
-import com.game.logic.log.LogLevel;
-import com.game.logic.log.LogType;
 import com.game.logic.player.PlayerState;
 import com.game.logic.redis.RedisStore;
 import com.game.message.actor.S2C;
-import com.game.message.actor.XSSystem;
 import com.game.message.actor.db.DbSyncCmd;
 import com.game.message.actor.logic.PlayerMessage;
 import com.game.message.rpc.GameRpcEnvelope;
@@ -22,7 +19,6 @@ import com.game.message.rpc.GameRpcMessages;
 import com.game.protocol.pb.CS_Logout;
 import com.game.protocol.pb.DbSyncLoadMessage;
 import com.game.protocol.pb.DbSyncLoadResultMessage;
-import com.game.protocol.pb.LogRecordMessage;
 import com.game.protocol.pb.PlayerEnter;
 import com.game.protocol.pb.SC_Logout;
 import com.xs.core.akka.AkkaKit;
@@ -184,7 +180,6 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
 
         loaded = true;
         startFlushTimer();
-        logToLogActor(LogLevel.MEDIUM, LogType.LOGIN, "Player online", playerId);
         log.info("PlayerActor loaded: playerId={}", entityId);
         return stash.unstashAll(this);
     }
@@ -254,7 +249,6 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
         state.markDirty(PlayerState.FIELD_UPDATED_AT);
         try {
             destroyed = redisStore().destroy(entityId, state);
-            logToLogActor(LogLevel.MEDIUM, LogType.LOGIN, "Player offline", state.getId());
         } catch (Exception e) {
             destroyed = false;
             log.error("Failed to destroy player state: playerId={}", entityId, e);
@@ -285,21 +279,6 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
             redisStore = LogicContext.getRedisStore();
         }
         return redisStore;
-    }
-
-    private void logToLogActor(LogLevel level, LogType type, String message, Long playerId) {
-        try {
-            LogRecordMessage.Builder logMessage = LogRecordMessage.newBuilder()
-                    .setLevel(level.ordinal())
-                    .setType(type.ordinal())
-                    .setMessage(message);
-            if (playerId != null) {
-                logMessage.setPlayerId(playerId);
-            }
-            AkkaKit.tell(XSSystem.class, GameRpcMessages.wrap(logMessage.build()), "log-" + playerId);
-        } catch (Exception e) {
-            log.error("Failed to send log to LogActor: playerId={}, message={}", playerId, message, e);
-        }
     }
 
     private static final class FlushDirty implements PlayerMessage {
