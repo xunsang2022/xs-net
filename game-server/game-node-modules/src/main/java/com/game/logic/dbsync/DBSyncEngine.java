@@ -1,5 +1,7 @@
 package com.game.logic.dbsync;
 
+import com.game.logic.context.LogicContext;
+import com.game.logic.context.LogicMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -81,8 +83,14 @@ public class DBSyncEngine {
 
     /**
      * 提交脏字段：同 playerId 覆盖 fields、更新 version。
+     * 脏记录数达到 maxDirtyRecords 时拒绝新提交并返回 false，防止失败持续时内存无限增长。
      */
-    public void submit(Long playerId, Map<String, String> fields, long version) {
+    public boolean submit(Long playerId, Map<String, String> fields, long version) {
+        if (dirty.size() >= config.getMaxDirtyRecords()) {
+            log.error("DBSyncEngine dirty map full (maxDirtyRecords={}), reject submit playerId={}",
+                    config.getMaxDirtyRecords(), playerId);
+            return false;
+        }
         dirty.compute(playerId, (k, existing) -> {
             if (existing == null) {
                 return new DirtyRecord(playerId, new LinkedHashMap<>(fields), version);
@@ -91,12 +99,13 @@ public class DBSyncEngine {
             merged.putAll(fields);
             return new DirtyRecord(playerId, merged, version);
         });
+        return true;
     }
 
     /**
-     * 当前待同步的脏记录数（测试用）。
+     * 当前待同步的脏记录数（测试与指标用）。
      */
-    int dirtySize() {
+    public int dirtySize() {
         return dirty.size();
     }
 
@@ -130,6 +139,7 @@ public class DBSyncEngine {
         if (dirty.isEmpty()) {
             return;
         }
+        long startNanos = System.nanoTime();
         List<DirtyRecord> snapshot = new ArrayList<>(dirty.values());
         List<List<DirtyRecord>> shards = shard(snapshot, config.getFlushConcurrency());
         if (flushPool == null) {
@@ -138,6 +148,7 @@ public class DBSyncEngine {
                     flushShard(shard);
                 }
             }
+            reportFlush(startNanos);
             return;
         }
         List<Future<?>> futures = new ArrayList<>();
@@ -154,6 +165,14 @@ public class DBSyncEngine {
                 log.error("flush shard interrupted/failed", e);
             }
         }
+        reportFlush(startNanos);
+    }
+
+    private void reportFlush(long startNanos) {
+        LogicMetrics metrics = LogicContext.getLogicMetricsOrNull();
+        if (metrics != null) {
+            metrics.recordFlush(System.nanoTime() - startNanos);
+        }
     }
 
     private void flushShard(List<DirtyRecord> shard) {
@@ -168,6 +187,10 @@ public class DBSyncEngine {
             }
         } catch (Exception e) {
             log.error("flush shard failed, {} records retained for retry", shard.size(), e);
+            LogicMetrics metrics = LogicContext.getLogicMetricsOrNull();
+            if (metrics != null) {
+                metrics.recordFlushFailure();
+            }
         }
     }
 

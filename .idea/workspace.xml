@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="1cea0475-795d-47a1-bd54-d71617ea3871" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.codex/plans/.obsidian/app.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.codex/plans/.obsidian/appearance.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.codex/plans/.obsidian/core-plugins.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.codex/plans/.obsidian/workspace.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.codex/plans/2026-08-14-xs-net-actor-redis-refactor-plan.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.codex/plans/2026-08-14-xs-net-jprotobuf-native-proto-refactor-plan.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/claudeCodeTabState.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/compiler.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/compiler.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/encodings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/encodings.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/xs-net.iml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-comment/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-comment/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-comment/src/main/java/com/game/comment/util/JwtUtil.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-comment/src/main/java/com/game/comment/util/JwtUtil.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-message-action/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-message-action/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-message-action/src/main/java/com/game/message/rpc/GameRpcEnvelope.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-message-action/src/main/java/com/game/message/rpc/GameRpcEnvelope.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-message-action/src/main/java/com/game/message/rpc/GameRpcMessages.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-message-action/src/main/java/com/game/message/rpc/GameRpcMessages.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-message-action/src/main/proto/game_messages.proto" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-message-action/src/main/proto/game_messages.proto" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-message-action/src/test/java/com/game/message/GameMessagesGoldenTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-message-action/src/test/java/com/game/message/GameMessagesGoldenTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-message-action/src/test/java/com/game/message/RpcTransportTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-message-action/src/test/java/com/game/message/RpcTransportTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-gateway/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-gateway/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-gateway/src/main/java/com/game/gateway/filter/JwtAuthFilter.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-gateway/src/main/java/com/game/gateway/filter/JwtAuthFilter.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-gateway/src/main/resources/application.conf" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-gateway/src/main/resources/application.conf" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-gateway/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-gateway/src/main/resources/application.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-gateway/src/test/java/com/game/gateway/filter/JwtAuthFilterTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-gateway/src/test/java/com/game/gateway/filter/JwtAuthFilterTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-login/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-login/src/main/resources/application.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-modules/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-modules/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-modules/src/main/java/com/game/GameLogicApplication.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-modules/src/main/java/com/game/GameLogicApplication.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-modules/src/main/java/com/game/logic/actor/PlayerActor.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-modules/src/main/java/com/game/logic/actor/PlayerActor.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-modules/src/main/java/com/game/logic/context/LogicContext.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-modules/src/main/java/com/game/logic/context/LogicContext.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-modules/src/main/java/com/game/logic/dbsync/DBSyncConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-modules/src/main/java/com/game/logic/dbsync/DBSyncConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-modules/src/main/java/com/game/logic/dbsync/DBSyncEngine.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-modules/src/main/java/com/game/logic/dbsync/DBSyncEngine.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-modules/src/main/java/com/game/logic/dbsync/LogConsumer.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-modules/src/main/java/com/game/logic/dbsync/LogConsumer.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-modules/src/main/java/com/game/logic/dbsync/LogEventCodec.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-modules/src/main/java/com/game/logic/dbsync/LogEventCodec.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-modules/src/main/java/com/game/logic/redis/RedisStore.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-modules/src/main/java/com/game/logic/redis/RedisStore.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-modules/src/main/resources/application.conf" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-modules/src/main/resources/application.conf" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-modules/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-modules/src/main/resources/application.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-modules/src/test/java/com/game/logic/context/LogicClasspathBoundaryTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-modules/src/test/java/com/game/logic/context/LogicClasspathBoundaryTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-modules/src/test/java/com/game/logic/dbsync/DBSyncEngineTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-modules/src/test/java/com/game/logic/dbsync/DBSyncEngineTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/game-node-modules/src/test/java/com/game/logic/redis/RedisStoreTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/game-node-modules/src/test/java/com/game/logic/redis/RedisStoreTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/game-server/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/game-server/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/mvnw.ps1" beforeDir="false" afterPath="$PROJECT_DIR$/mvnw.ps1" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/xs-net/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/xs-net/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/xs-net/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/xs-net/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/xs-net/xs-net-core/src/main/java/com/xs/core/actor/node/NodeActor.java" beforeDir="false" afterPath="$PROJECT_DIR$/xs-net/xs-net-core/src/main/java/com/xs/core/actor/node/NodeActor.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/xs-net/xs-net-core/src/main/java/com/xs/core/akka/AkkaKit.java" beforeDir="false" afterPath="$PROJECT_DIR$/xs-net/xs-net-core/src/main/java/com/xs/core/akka/AkkaKit.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/xs-net/xs-net-core/src/main/java/com/xs/core/spring/ClassScanner.java" beforeDir="false" afterPath="$PROJECT_DIR$/xs-net/xs-net-core/src/main/java/com/xs/core/spring/ClassScanner.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/xs-net/xs-net-message/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/xs-net/xs-net-message/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/xs-net/xs-net-tools/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/xs-net/xs-net-tools/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/xs-net/xs-net-tools/tool-all/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/xs-net/xs-net-tools/tool-all/pom.xml" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="EmbeddingIndexingInfo">
+    <option name="cachedIndexableFilesCount" value="186" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="McpProjectServerCommands">
+    <commands />
+    <urls />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;customColor&quot;: &quot;&quot;,
+  &quot;associatedIndex&quot;: 1
+}</component>
+  <component name="ProjectId" id="3IEn97RUrpsgBEPuArSH9dlOR39" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Application.GameClientApplication.executor": "Debug",
+    "Application.GameGatewayApplication.executor": "Debug",
+    "Application.GameLogicApplication-1.executor": "Debug",
+    "Application.GameLogicApplication.executor": "Debug",
+    "Application.LoginApplication.executor": "Debug",
+    "Maven.xs-net-workspace [clean].executor": "Run",
+    "Maven.xs-net-workspace [compile].executor": "Run",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "codeWithMe.voiceChat.enabledByDefault": "false",
+    "git-widget-placeholder": "remove-spring-boot",
+    "kotlin-language-version-configured": "true",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "project.structure.last.edited": "Modules",
+    "project.structure.proportion": "0.0",
+    "project.structure.side.proportion": "0.0"
+  }
+}]]></component>
+  <component name="RunDashboard">
+    <option name="configurationTypes">
+      <set>
+        <option value="Application" />
+      </set>
+    </option>
+    <option name="configurationStatuses">
+      <map>
+        <entry key="Application">
+          <value>
+            <map>
+              <entry key="GameClientApplication" value="STOPPED" />
+              <entry key="GameGatewayApplication" value="STOPPED" />
+              <entry key="GameLogicApplication-1" value="STOPPED" />
+              <entry key="LoginApplication" value="STOPPED" />
+            </map>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="RunManager" selected="Application.GameClientApplication">
+    <configuration name="GameClientApplication" type="Application" factoryName="Application" temporary="true" nameIsGenerated="true">
+      <option name="MAIN_CLASS_NAME" value="com.game.client.GameClientApplication" />
+      <module name="game-client" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="com.game.client.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="GameGatewayApplication" type="Application" factoryName="Application">
+      <option name="MAIN_CLASS_NAME" value="com.game.GameGatewayApplication" />
+      <module name="game-node-gateway" />
+      <option name="VM_PARAMETERS" value="--add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/java.nio.channels.spi=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED --add-opens java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens java.base/jdk.internal.misc=ALL-UNNAMED --add-opens java.base/java.lang.reflect=ALL-UNNAMED --add-opens java.base/sun.security.provider=ALL-UNNAMED -Dakka.jvm-exit-on-fatal-error=false" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="com.game.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="GameLogicApplication-1" type="Application" factoryName="Application">
+      <option name="MAIN_CLASS_NAME" value="com.game.GameLogicApplication" />
+      <module name="game-node-modules" />
+      <option name="VM_PARAMETERS" value="--add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/java.nio.channels.spi=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED --add-opens java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens java.base/jdk.internal.misc=ALL-UNNAMED --add-opens java.base/java.lang.reflect=ALL-UNNAMED --add-opens java.base/sun.security.provider=ALL-UNNAMED -Dakka.jvm-exit-on-fatal-error=false" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="com.game.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="GameLogicApplication-2" type="Application" factoryName="Application">
+      <option name="MAIN_CLASS_NAME" value="com.game.GameLogicApplication" />
+      <module name="game-node-modules" />
+      <option name="VM_PARAMETERS" value="--add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/java.nio.channels.spi=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED --add-opens java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens java.base/jdk.internal.misc=ALL-UNNAMED --add-opens java.base/java.lang.reflect=ALL-UNNAMED --add-opens java.base/sun.security.provider=ALL-UNNAMED -Dakka.jvm-exit-on-fatal-error=false" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="com.game.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="LoginApplication" type="Application" factoryName="Application">
+      <option name="MAIN_CLASS_NAME" value="com.game.LoginApplication" />
+      <module name="game-node-login" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="com.game.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <list>
+      <item itemvalue="Application.LoginApplication" />
+      <item itemvalue="Application.GameLogicApplication-1" />
+      <item itemvalue="Application.GameLogicApplication-2" />
+      <item itemvalue="Application.GameGatewayApplication" />
+      <item itemvalue="Application.GameClientApplication" />
+    </list>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Application.GameClientApplication" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-jdk-30f59d01ecdd-37e91769500f-intellij.indexing.shared.core-IU-261.26222.65" />
+        <option value="bundled-js-predefined-d6986cc7102b-31caf2ab9e3c-JavaScript-IU-261.26222.65" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="1cea0475-795d-47a1-bd54-d71617ea3871" name="Changes" comment="" />
+      <created>1787338441803</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1787338441803</updated>
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+</project>

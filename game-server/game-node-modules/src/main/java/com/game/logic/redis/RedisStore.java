@@ -1,10 +1,12 @@
 package com.game.logic.redis;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.game.logic.enums.LogLevel;
+import com.game.logic.enums.LogType;
 import com.game.logic.player.PlayerState;
+import com.game.protocol.pb.LogRecordMessage;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -20,7 +22,6 @@ public class RedisStore {
     public static final String LOG_EVENTS_KEY = "log:events";
 
     private final StringRedisTemplate redis;
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public RedisStore(StringRedisTemplate redis) {
         this.redis = redis;
@@ -66,17 +67,47 @@ public class RedisStore {
     }
 
     public void writeLog(Map<String, String> event) {
+        LogRecordMessage.Builder builder = LogRecordMessage.newBuilder();
+        Integer level = parseEnumOrdinal(event.get("level"), LogLevel.values());
+        if (level != null) {
+            builder.setLevel(level);
+        }
+        Integer type = parseEnumOrdinal(event.get("type"), LogType.values());
+        if (type != null) {
+            builder.setType(type);
+        }
+        String content = event.get("content");
+        if (content != null) {
+            builder.setMessage(content);
+        }
+        String playerId = event.get("playerId");
+        if (playerId != null && !playerId.isBlank()) {
+            try {
+                builder.setPlayerId(Long.parseLong(playerId));
+            } catch (NumberFormatException ignored) {
+                // 非法 playerId 忽略
+            }
+        }
+
         Map<String, String> record = new LinkedHashMap<>();
-        record.put("payload", toJson(event));
+        record.put("payload", Base64.getEncoder().encodeToString(builder.build().toByteArray()));
         record.put("createTime", String.valueOf(System.currentTimeMillis()));
         redis.opsForStream().add(LOG_EVENTS_KEY, record);
     }
 
-    private String toJson(Map<String, String> event) {
+    private static Integer parseEnumOrdinal(String text, Enum<?>[] values) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        for (Enum<?> value : values) {
+            if (value.name().equals(text)) {
+                return value.ordinal();
+            }
+        }
         try {
-            return objectMapper.writeValueAsString(event);
-        } catch (JsonProcessingException e) {
-            return "{}";
+            return Integer.valueOf(text);
+        } catch (NumberFormatException e) {
+            return null;
         }
     }
 }

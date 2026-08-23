@@ -4,6 +4,7 @@ import akka.actor.typed.ActorSystem;
 import akka.actor.typed.Behavior;
 import akka.actor.typed.javadsl.Behaviors;
 import com.game.logic.context.LogicContext;
+import com.game.logic.context.LogicMetrics;
 import com.game.logic.dbsync.DBSyncConfig;
 import com.game.logic.dbsync.DBSyncEngine;
 import com.game.logic.dbsync.LogConsumer;
@@ -15,10 +16,20 @@ import com.xs.core.config.GameFrameworkProperties;
 import com.xs.net.message.MessageAble;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.lettuce.core.api.StatefulConnection;
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.connection.lettuce.LettucePoolingClientConfiguration;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.yaml.snakeyaml.Yaml;
+
+import java.io.InputStream;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Plain Java entry point for the logic node. Akka, Redis and the in-process
@@ -34,13 +45,28 @@ public final class GameLogicApplication {
     private static final String DEFAULT_DB_URL = "jdbc:postgresql://localhost:5432/gamedb";
     private static final String DEFAULT_DB_USERNAME = "root";
 
+    private static final Map<String, String> YML_CONFIG = new HashMap<>();
+
+    static {
+        try (InputStream in = GameLogicApplication.class.getClassLoader().getResourceAsStream("application.yml")) {
+            if (in != null) {
+                Yaml yaml = new Yaml();
+                Map<String, Object> root = yaml.load(in);
+                if (root != null) {
+                    flattenYaml("", root, YML_CONFIG);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
     private GameLogicApplication() {
     }
 
     public static void main(String[] args) {
         GameFrameworkProperties properties = new GameFrameworkProperties();
-        properties.setActorBasePackages(new String[]{"com.game", "com.game.logic", "com.game.message"});
-        properties.setMessageBasePackages(new String[]{"com.game", "com.game.logic", "com.game.message"});
+        properties.setActorBasePackages(new String[]{"com.game.logic.actor", "com.game.message.actor.logic", "com.game.message.actor"});
+        properties.setMessageBasePackages(new String[]{"com.game.message.actor.logic", "com.game.message.actor"});
 
         RedisStandaloneConfiguration redisConfig = new RedisStandaloneConfiguration();
         redisConfig.setHostName(config("game.redis.host", "REDIS_HOST", DEFAULT_HOST));
@@ -51,7 +77,14 @@ public final class GameLogicApplication {
             redisConfig.setPassword(password);
         }
 
-        LettuceConnectionFactory connectionFactory = new LettuceConnectionFactory(redisConfig);
+        GenericObjectPoolConfig<StatefulConnection<?, ?>> poolConfig = new GenericObjectPoolConfig<>();
+        poolConfig.setMaxTotal(8);
+        poolConfig.setMaxIdle(8);
+        poolConfig.setMinIdle(0);
+        LettuceClientConfiguration clientConfig = LettucePoolingClientConfiguration.builder()
+                .poolConfig(poolConfig)
+                .build();
+        LettuceConnectionFactory connectionFactory = new LettuceConnectionFactory(redisConfig, clientConfig);
         connectionFactory.afterPropertiesSet();
         StringRedisTemplate redisTemplate = new StringRedisTemplate(connectionFactory);
         redisTemplate.afterPropertiesSet();
@@ -67,6 +100,10 @@ public final class GameLogicApplication {
         hikariConfig.setUsername(config("game.db.username", "DB_USERNAME", DEFAULT_DB_USERNAME));
         hikariConfig.setPassword(config("game.db.password", "DB_PASSWORD", DEFAULT_PASSWORD));
         hikariConfig.setDriverClassName("org.postgresql.Driver");
+        hikariConfig.setConnectionTimeout(parseLong("game.db.connection-timeout-ms", "DB_CONNECTION_TIMEOUT_MS", "5000"));
+        hikariConfig.setInitializationFailTimeout(-1);
+        hikariConfig.setMaximumPoolSize(parseInt("game.db.max-pool-size", "DB_MAX_POOL_SIZE", "10"));
+        hikariConfig.setMinimumIdle(parseInt("game.db.min-idle", "DB_MIN_IDLE", "2"));
         HikariDataSource dataSource = new HikariDataSource(hikariConfig);
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
         DBSyncConfig dbSyncConfig = new DBSyncConfig();
@@ -76,6 +113,11 @@ public final class GameLogicApplication {
         DBSyncEngine dbSyncEngine = new DBSyncEngine(jdbcTemplate, dbSyncConfig);
         dbSyncEngine.start();
         LogicContext.setDbSyncEngine(dbSyncEngine);
+
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        LogicMetrics logicMetrics = new LogicMetrics(meterRegistry, dbSyncEngine);
+        LogicContext.setMeterRegistry(meterRegistry);
+        LogicContext.setLogicMetrics(logicMetrics);
 
         LogConsumer logConsumer = new LogConsumer(redisTemplate, jdbcTemplate, dbSyncConfig);
         logConsumer.start();
@@ -105,6 +147,9 @@ public final class GameLogicApplication {
         if (value == null || value.isBlank()) {
             value = System.getenv(envKey);
         }
+        if (value == null || value.isBlank()) {
+            value = YML_CONFIG.get(key);
+        }
         return value == null || value.isBlank() ? defaultValue : value;
     }
 
@@ -114,5 +159,18 @@ public final class GameLogicApplication {
 
     private static long parseLong(String key, String envKey, String defaultValue) {
         return Long.parseLong(config(key, envKey, defaultValue));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void flattenYaml(String prefix, Map<String, Object> map, Map<String, String> out) {
+        for (Map.Entry<String, Object> e : map.entrySet()) {
+            String key = prefix.isEmpty() ? e.getKey() : prefix + "." + e.getKey();
+            Object v = e.getValue();
+            if (v instanceof Map) {
+                flattenYaml(key, (Map<String, Object>) v, out);
+            } else if (v != null) {
+                out.put(key, v.toString());
+            }
+        }
     }
 }

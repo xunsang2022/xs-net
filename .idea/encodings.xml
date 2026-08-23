@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="Encoding">
-    <file url="file://$PROJECT_DIR$/../src/main/java" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/../src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/game-client/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/game-client/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/game-server/game-comment/src/main/java" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/game-server/game-db/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/game-server/game-message-action/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/game-server/game-node-gateway/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/game-server/game-node-login/src/main/java" charset="UTF-8" />
@@ -29,9 +28,5 @@
     <file url="file://$PROJECT_DIR$/xs-net/xs-net-tools/tool-commons-lang4/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/xs-net/xs-net-tools/tool-luBan-cfg/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/xs-net/xs-net-tools/tool-luBan-cfg/src/main/resources" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/xs-net/xs-net-tools/tool-proto/src/main/java" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/xs-net/xs-net-tools/tool-proto/src/main/resources" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/xs-net/xs-net-tools/tool-sbe/src/main/java" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/xs-net/xs-net-tools/tool-sbe/src/main/resources" charset="UTF-8" />
   </component>
 </project>

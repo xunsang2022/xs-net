@@ -29,6 +29,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-restclient</artifactId>
         </dependency>
+
+        <!-- Spring Boot Actuator Starter - 暴露健康检查、指标与端点（与 login 模块对齐） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
         
         <!-- Akka Cluster Dependencies -->
         <!-- Classic Akka API -->

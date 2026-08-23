@@ -36,7 +36,7 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
     private static final Object LOAD_TIMEOUT_KEY = new Object();
     private static final Object FLUSH_KEY = new Object();
     private static final long LOAD_TIMEOUT_MS = 3000L;
-    private static final int STASH_CAPACITY = 64;
+    private static final int STASH_CAPACITY = 512;
 
     private final String entityId;
     private final StashBuffer<PlayerMessage> stash;

@@ -4,9 +4,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.game.logic.enums.LogLevel;
 import com.game.logic.enums.LogType;
+import com.game.protocol.pb.LogRecordMessage;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -32,16 +34,35 @@ public class LogEventCodec {
     public LogEvent toEvent(LogStreamRecord record) {
         try {
             Map<String, String> fields = record.fields();
-            JsonNode payload = objectMapper.readTree(fields.getOrDefault("payload", "{}"));
-            LogLevel level = parseLevel(payload);
-            LogType type = parseType(payload);
-            String content = asJson(payload.path("content").asText(""));
-            Long playerId = parsePlayerId(payload);
-            Timestamp createTime = parseCreateTime(payload, fields);
-            return new LogEvent(level, type, content, playerId, createTime);
+            String payload = fields.getOrDefault("payload", "");
+            if (payload.startsWith("{")) {
+                // 旧格式：JSON payload（兼容存量数据）
+                return fromJson(payload, fields);
+            }
+            return fromProto(payload, fields);
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid log event: " + record.id(), e);
         }
+    }
+
+    private LogEvent fromProto(String payload, Map<String, String> fields) throws Exception {
+        LogRecordMessage msg = LogRecordMessage.parseFrom(Base64.getDecoder().decode(payload));
+        LogLevel level = msg.hasLevel() ? LogLevel.valueOf(msg.getLevel()) : LogLevel.MEDIUM;
+        LogType type = msg.hasType() ? LogType.valueOf(msg.getType()) : LogType.OTHER;
+        String content = asJson(msg.hasMessage() ? msg.getMessage() : "");
+        Long playerId = msg.hasPlayerId() ? msg.getPlayerId() : null;
+        Timestamp createTime = parseCreateTime(fields);
+        return new LogEvent(level, type, content, playerId, createTime);
+    }
+
+    private LogEvent fromJson(String payload, Map<String, String> fields) throws Exception {
+        JsonNode json = objectMapper.readTree(payload);
+        LogLevel level = parseLevel(json);
+        LogType type = parseType(json);
+        String content = asJson(json.path("content").asText(""));
+        Long playerId = parsePlayerId(json);
+        Timestamp createTime = parseCreateTime(json, fields);
+        return new LogEvent(level, type, content, playerId, createTime);
     }
 
     private LogLevel parseLevel(JsonNode payload) {
@@ -102,6 +123,16 @@ public class LogEventCodec {
             } catch (NumberFormatException ignored) {
                 millis = 0L;
             }
+        }
+        return millis > 0L ? new Timestamp(millis) : new Timestamp(System.currentTimeMillis());
+    }
+
+    private Timestamp parseCreateTime(Map<String, String> streamFields) {
+        long millis = 0L;
+        try {
+            millis = Long.parseLong(streamFields.getOrDefault("createTime", "0"));
+        } catch (NumberFormatException ignored) {
+            millis = 0L;
         }
         return millis > 0L ? new Timestamp(millis) : new Timestamp(System.currentTimeMillis());
     }

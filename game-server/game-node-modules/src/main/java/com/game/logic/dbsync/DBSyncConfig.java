@@ -13,6 +13,8 @@ public class DBSyncConfig {
     private int batchSize = 100;
     /** flush 并发分片数 */
     private int flushConcurrency = 4;
+    /** 脏记录 map 上限，超限拒绝新提交，防止失败持续时内存无限增长 */
+    private int maxDirtyRecords = 100000;
     /** 日志轮询间隔（毫秒） */
     private long logPollMs = 1000;
 }

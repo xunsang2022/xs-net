@@ -74,6 +74,9 @@ public class LogConsumer {
                 Thread.currentThread().interrupt();
                 break;
             } catch (Exception e) {
+                if (!running.get() || Thread.currentThread().isInterrupted()) {
+                    break;
+                }
                 log.error("Log consume round failed; will retry", e);
                 sleepQuietly(1000);
             }

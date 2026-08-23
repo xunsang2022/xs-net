@@ -15,7 +15,11 @@ Windows PowerShell 下执行：
 ./mvnw.ps1 -DskipTests package
 ```
 
-脚本会使用 JDK 21，并优先查找系统或 IntelliJ 自带的 Maven；找不到 Maven 时会下载到 `.tools/`。也可以直接使用 `./mvnw.cmd`。
+脚本自动探测 IntelliJ IDEA 自带 Maven 与 JDK 21（可通过环境变量 `IDEA_MAVEN_HOME` / `JAVA_HOME` 显式指定），并固定使用 `%USERPROFILE%\.m2\repository` 作为本地仓库。也可以直接使用 `./mvnw.cmd`。
+
+## 架构文档
+
+完整架构、数据流转与技术栈见 [ARCHITECTURE.md](./ARCHITECTURE.md)。
 
 ## 环境变量
 

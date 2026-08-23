@@ -1,6 +1,7 @@
 package com.game.comment.util;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +16,7 @@ public class JwtUtil {
     private static final String CLAIM_CHANNEL_ID = "cid";
 
     private final SecretKey signingKey;
+    private final JwtParser parser;
     private final long expiration;
 
     /**
@@ -23,6 +25,8 @@ public class JwtUtil {
      */
     public JwtUtil(String secret, long expiration) {
         this.signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        // JwtParser 是线程安全的，可复用，避免每次校验都重新构建
+        this.parser = Jwts.parser().verifyWith(signingKey).build();
         this.expiration = expiration;
     }
 
@@ -51,11 +55,7 @@ public class JwtUtil {
      */
     public Claims validateToken(String token) {
         try {
-            return Jwts.parser()
-                    .verifyWith(signingKey)
-                    .build()
-                    .parseSignedClaims(token)
-                    .getPayload();
+            return parser.parseSignedClaims(token).getPayload();
         } catch (Exception e) {
             log.warn("JWT validation failed: {}", e.getMessage());
             return null;

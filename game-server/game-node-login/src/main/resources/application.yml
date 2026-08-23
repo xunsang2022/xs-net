@@ -22,5 +22,5 @@ logging:
 
 # JWT Configuration
 jwt:
-  secret: ${JWT_SECRET}
-  expiration: ${JWT_EXPIRATION:86400000}
+  secret: xs-net-dev-jwt-secret-key-32bytes-minimum!!
+  expiration: 86400000

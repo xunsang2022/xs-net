@@ -1,18 +1,23 @@
 package com.game.logic.redis;
 
+import com.game.logic.enums.LogLevel;
+import com.game.logic.enums.LogType;
 import com.game.logic.player.PlayerState;
+import com.game.protocol.pb.LogRecordMessage;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.SetOperations;
 import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -103,7 +108,7 @@ class RedisStoreTest {
     }
 
     @Test
-    void writeLogAddsJsonPayloadToStream() {
+    void writeLogAddsProtoPayloadToStream() throws Exception {
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
         StreamOperations<String, String, String> streamOps = mock(StreamOperations.class);
         doReturn(streamOps).when(redis).opsForStream();
@@ -111,9 +116,19 @@ class RedisStoreTest {
         RedisStore store = new RedisStore(redis);
         Map<String, String> event = new LinkedHashMap<>();
         event.put("level", "HIGH");
-        event.put("content", "\"hello\"");
+        event.put("type", "LOGIN");
+        event.put("content", "hello");
+        event.put("playerId", "42");
         store.writeLog(event);
 
-        verify(streamOps).add(eq(RedisStore.LOG_EVENTS_KEY), any(Map.class));
+        ArgumentCaptor<Map<String, String>> captor = ArgumentCaptor.forClass(Map.class);
+        verify(streamOps).add(eq(RedisStore.LOG_EVENTS_KEY), captor.capture());
+        Map<String, String> record = captor.getValue();
+        assertNotNull(record.get("createTime"));
+        LogRecordMessage msg = LogRecordMessage.parseFrom(Base64.getDecoder().decode(record.get("payload")));
+        assertEquals(LogLevel.HIGH.ordinal(), msg.getLevel());
+        assertEquals(LogType.LOGIN.ordinal(), msg.getType());
+        assertEquals("hello", msg.getMessage());
+        assertEquals(42L, msg.getPlayerId());
     }
 }

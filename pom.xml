@@ -15,6 +15,7 @@
     <modules>
         <module>xs-net</module>
         <module>game-server</module>
+        <module>game-client</module>
     </modules>
 
     <properties>

@@ -1,19 +1,20 @@
 # Game Server (游戏服务器)
 
-基于 Spring Boot + Akka 的分布式游戏服务器架构。
+基于 Spring Boot + Akka + Netty 的分布式游戏服务器架构。
 
 ## 技术栈
 
 | 技术 | 版本 | 说明 |
 |------|------|------|
 | Java | 21 | 开发语言 |
-| Spring Boot | 4.0.0 | Web 框架 |
-| Akka | 2.8.5 | 分布式 Actor 模型 |
+| Spring Boot | 4.0.0 | Gateway / Login Web 框架 |
+| Akka | 2.8.5 | 分布式 Actor 模型（Cluster + Sharding，Artery/Aeron UDP） |
+| Netty | 4.1.115 | Gateway TCP 长连接（客户端游戏消息 + S2C 下行） |
 | Protobuf | 3.25.5 | 消息序列化与协议定义 |
-| Redis | - | logic 运行时存储、db-sync 中间层 |
-| PostgreSQL | - | 最终落库目标 |
-| SBE | 1.27.0 | 高性能二进制序列化 |
-| JWT | 0.12.6 | 身份认证 |
+| Redis | - | logic 运行时存储（Lettuce + commons-pool2 连接池） |
+| PostgreSQL | - | 最终落库目标（HikariCP + Spring JDBC） |
+| JWT | 0.12.6 | 身份认证（parser 缓存 + token 缓存） |
+| Micrometer | 1.16.0 | logic 指标（flush 延迟 / dirty 深度 / 失败计数） |
 | Lombok | 1.18.42 | 代码简化 |
 
 ## 项目结构
@@ -21,10 +22,6 @@
 ```
 game-server/
 ├── game-comment/          # 公共模块：JWT、通用工具
-├── game-db/              # db-sync 服务：Redis 脏数据回灌 PostgreSQL
-│   ├── dbsync/           # DbSyncActor、批量落库、日志消费、回灌工具
-│   ├── po/               # 持久化对象
-│   └── DbSyncApplication.java
 ├── game-message-action/  # 消息定义模块
 │   ├── message/          # 内部消息、路由接口与 RPC 注册表
 │   ├── dto/              # HTTP DTO
@@ -32,17 +29,20 @@ game-server/
 │   └── proto/            # protobuf 协议源文件
 ├── game-node-gateway/    # 网关节点
 │   ├── gateway/          # 网关核心逻辑
-│   │   ├── actor/        # 通道 Actor
+│   │   ├── actor/        # 通道 Actor（S2C 写回）
 │   │   ├── config/       # 网关配置
 │   │   ├── controller/   # 玩家接口
 │   │   ├── filter/       # 过滤器（JWT 认证）
+│   │   └── netty/        # NettyServer、ChannelRegistry、编解码
 │   └── GameGatewayApplication.java
 ├── game-node-login/      # 认证服务
 │   ├── login/controller/ # 签发/校验 Token
 │   └── LoginApplication.java
-└── game-node-modules/    # 逻辑模块节点
-    ├── logic/actor/      # PlayerActor、LogActor
-    ├── logic/redis/      # RedisStore、DbSyncNotifier
+└── game-node-modules/    # 逻辑模块节点（非 Spring Boot）
+    ├── logic/actor/      # PlayerActor（cluster sharded）
+    ├── logic/redis/      # RedisStore（Hash/Set/Streams）
+    ├── logic/dbsync/     # DBSyncEngine、LogConsumer（进程内批写）
+    ├── logic/enums/      # LogLevel、LogType
     ├── logic/player/     # PlayerState
     └── GameLogicApplication.java
 ```
@@ -50,12 +50,12 @@ game-server/
 ## 模块说明
 
 ### 1. game-node-gateway（网关服务）
-- **端口**: 8080
+- **端口**: HTTP 8080 / Netty TCP 8082
 - **职责**: 
-  - 玩家连接管理
-  - JWT 身份验证
-  - 消息路由转发
-  - 协议编解码
+  - Netty TCP 长连接（握手认证：首帧 JWT token 绑定 channelId）
+  - JWT 身份验证（parser 缓存 + remote 模式 token 缓存）
+  - 消息路由转发（上行经 Akka 到 Logic，下行 S2C 写回客户端）
+  - 协议编解码（4 字节长度前缀 + protobuf NetMessage）
 
 ### 2. game-node-login（登录服务）
 - **职责**:
@@ -65,21 +65,10 @@ game-server/
 ### 3. game-node-modules（逻辑服务）
 - **职责**:
   - 游戏核心逻辑处理
-  - PlayerActor 运行时状态
-  - Redis 脏数据写入与 db-sync 通知
-  - 日志事件写入 Redis
-
-### 4. game-db（数据服务）
-- **职责**:
-  - Redis 脏数据批量 UPSERT 到 PostgreSQL
-  - 玩家创建/加载回灌
-  - 日志事件消费与落库
-  - 对账与回灌工具
-
-### 5. game-message-action（消息协议）
-- **职责**:
-  - `.proto` 唯一协议源，protoc 生成 Java 类
-  - RPC 编号注册表与 `GameRpcEnvelope` 路由
+  - PlayerActor 运行时状态（stash 容量 512）
+  - Redis 脏数据即时写 + DBSyncEngine 进程内批量 UPSERT（version 乐观锁）
+  - 日志事件写 Redis Streams（protobuf），LogConsumer 阻塞消费落库
+  - Micrometer 指标上报
 
 ## 消息协议登记
 
@@ -100,11 +89,8 @@ game-server/
 | BackpackInitAckMessage | 3001 | 背包初始化确认内部消息 | 废弃，禁止复用 |
 | BackpackCleanupMessage | 3002 | 背包清理内部消息 | 废弃，禁止复用 |
 | PlayerEnter | 3003 | 玩家进入 logic 内部消息 | 新增 |
-| DbSyncMessage | 3100 | db-sync 脏数据记账 | 新增 |
-| DbSyncLoadMessage | 3101 | logic 请求加载/创建玩家 | 新增 |
-| DbSyncLoadResultMessage | 3102 | db-sync 加载结果回执 | 新增 |
 
-`PlayerMessage` 已迁移至 `com.game.message.actor.logic`，路由角色为 `logic`；`SC_LOGIN` 仅作为 HTTP 响应 DTO。协议号 2000-2003、3000-3002 已废弃，禁止复用。
+`PlayerMessage` 已迁移至 `com.game.message.actor.logic`，路由角色为 `logic`；`SC_LOGIN` 仅作为 HTTP 响应 DTO。协议号 2000-2003、3000-3002 已废弃，禁止复用。DbSync 协议（3100-3102）已随独立 db-sync 服务移除。
 
 ## 配置说明
 
@@ -116,17 +102,43 @@ server:
 jwt:
   secret: ${JWT_SECRET}
   expiration: 86400000  # 24 小时（毫秒）
+
+game:
+  netty:
+    port: ${NETTY_PORT:8082}  # Netty TCP 长连接端口
 ```
 
 ### Akka 配置 (application.conf)
-各个节点通过 Akka Remoting 进行分布式通信。
+各个节点通过 Akka Remoting 进行分布式通信。`canonical.hostname` / `canonical.port` 可通过环境变量 `AKKA_HOSTNAME` / `AKKA_PORT` 覆盖。
 
 ## 快速开始
 
 ### 前置要求
 - JDK 21+
-- Maven 3.6+
-- protoc 3.25.5（默认读取 `C:/tools/protoc/bin/protoc.exe`，可通过 pom 的 `protocExecutable` 修改）
+- Maven 3.6+（或使用 `mvnw.ps1` 自动探测 IDEA 自带 Maven）
+- protoc 由 Maven 插件自动下载（`protocArtifact`），无需本地安装
+- **基础设施**：PostgreSQL 17+、Redis 7+（本机没装的话直接用 WSL Docker Compose，见下节）
+
+### 启动基础设施（WSL Docker，推荐）
+
+三个应用的 `application.yml` 明文默认值与仓库根目录 `docker-compose.yml` 完全一致，一条命令起：
+
+```bash
+# 在 WSL 中执行（Docker Desktop 已打开 WSL2 集成）
+cd /mnt/e/project/xs-net
+docker compose up -d
+docker compose ps        # 期望两个容器 STATUS = Up (healthy)
+docker compose exec postgres psql -U root -d gamedb -c "\\dt"   # 期望看到 users / log_events 两张表
+```
+
+Windows 侧（IDEA 应用）通过 `127.0.0.1:5432`、`127.0.0.1:6379` 直连；Docker Desktop 的 WSL2 集成自动做端口转发，无需额外配置。
+
+```bash
+# 停止（保留数据卷）
+docker compose down
+# 停止 + 清空全部数据
+docker compose down -v
+```
 
 ### 构建项目
 ```bash
@@ -134,21 +146,23 @@ mvn clean install
 ```
 
 ### 启动服务
-建议按以下顺序启动：
-1. game-db（db-sync 服务）
-2. game-node-login（认证服务）
-3. game-node-modules（logic 服务）
-4. game-node-gateway（网关服务）
+建议按以下顺序启动（IDEA 右上角 Run Configuration 已预设 3 项）：
+1. game-node-login（认证服务，端口 8081）
+2. game-node-modules（logic 服务，Akka Cluster 端口 4001）
+3. game-node-gateway（网关服务，HTTP 8080 + Netty TCP 8082，Akka Cluster 端口 2001）
+
+日志输出到项目根目录 `.log/`：`login.log`、`logic.log`、`gateway.log`（7 天滚动）。
 
 ## 依赖关系
 
 本项目依赖 `xs-net` 框架提供核心支持：
 - `xs-net-all`: 核心框架打包
-- `tool-all`: 工具集（SBE、ProtoBuf 等）
+- `tool-all`: 工具集（ProtoBuf 等）
 
 ## 架构特点
 
 - **分布式架构**: 基于 Akka Actor 模型的微服务架构
-- **高性能**: 使用 SBE 二进制序列化协议
+- **长连接通信**: Netty TCP 长连接承载游戏消息，S2C 下行实时推送
+- **写合并落库**: DBSyncEngine 进程内批量 UPSERT，version 乐观锁防覆盖
 - **安全认证**: JWT Token 身份验证
 - **模块化设计**: 清晰的模块划分，便于扩展和维护

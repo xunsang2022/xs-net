@@ -170,8 +170,10 @@ public class ClassScanner {
                         if (filter == null || filter.test(clazz)) {
                             result.add(clazz);
                         }
-                    } catch (ClassNotFoundException | NoClassDefFoundError e) {
+                    } catch (ClassNotFoundException | LinkageError e) {
                         log.debug("无法加载类：{}", className);
+                    } catch (Throwable t) {
+                        log.warn("加载类 {} 时发生非致命异常，已跳过：{}", className, t.toString());
                     }
                 }
             }

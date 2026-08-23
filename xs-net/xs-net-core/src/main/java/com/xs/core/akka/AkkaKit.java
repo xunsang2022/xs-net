@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class AkkaKit {
     public static final List<Class<?>> local = new ArrayList<>();
     private static final Map<Class<?>, EntityTypeKey<?>> ENTITY_TYPE_KEYS = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, Method> CREATE_METHODS = new ConcurrentHashMap<>();
     private static volatile ClusterSharding clusterSharding;
 
     public static void setClusterSharding(ClusterSharding sharding) {
@@ -91,17 +92,26 @@ public class AkkaKit {
     @SuppressWarnings("unchecked")
     private static <M> Behavior<M> createEntityContext(EntityContext<M> context, Class<?> actorClass) {
         try {
-            // 优先尝试无参 create 方法
-            try {
-                Method create = actorClass.getMethod("create");
-                return (Behavior<M>) create.invoke(null);
-            } catch (NoSuchMethodException e) {
-                // 如果没有无参方法，再尝试有参方法
-                Method create = actorClass.getMethod("create", String.class);
-                return (Behavior<M>) create.invoke(null, context.getEntityId());
-            }
-        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+            Method create = CREATE_METHODS.computeIfAbsent(actorClass, AkkaKit::resolveCreateMethod);
+            Object arg = create.getParameterCount() == 1 ? context.getEntityId() : null;
+            return (Behavior<M>) create.invoke(null, arg);
+        } catch (IllegalAccessException | InvocationTargetException e) {
             throw new RuntimeException("创建 Actor 失败：" + actorClass.getSimpleName(), e);
+        }
+    }
+
+    /**
+     * 解析 Actor 的 create 方法（优先无参，其次 create(String)），结果缓存避免重复反射。
+     */
+    private static Method resolveCreateMethod(Class<?> actorClass) {
+        try {
+            return actorClass.getMethod("create");
+        } catch (NoSuchMethodException e) {
+            try {
+                return actorClass.getMethod("create", String.class);
+            } catch (NoSuchMethodException e2) {
+                throw new RuntimeException("创建 Actor 失败：" + actorClass.getSimpleName(), e2);
+            }
         }
     }
 

@@ -15,20 +15,15 @@
         <module name="xs-net-message" />
         <module name="game-node-modules" />
         <module name="xs-net-core" />
-        <module name="game-db" />
-        <module name="tool-luBan-cfg" />
-        <module name="tool-sbe" />
+        <module name="game-client" />
         <module name="game-message-action" />
+        <module name="tool-luBan-cfg" />
       </profile>
     </annotationProcessing>
-    <bytecodeTargetLevel>
-      <module name="tool-proto" target="21" />
-    </bytecodeTargetLevel>
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
       <module name="game-comment" options="-parameters" />
-      <module name="game-db" options="-parameters" />
       <module name="game-message-action" options="-parameters" />
       <module name="game-node-gateway" options="-parameters" />
       <module name="game-node-login" options="-parameters" />

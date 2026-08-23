@@ -8,8 +8,8 @@
 |------|------|------|
 | Java | 21 | 开发语言 |
 | Akka | 2.8.5 | 分布式 Actor 模型 |
-| Netty | - | 网络通信框架 |
-| SBE | 1.27.0 | 高性能二进制序列化 |
+| Netty | - | 网络通信框架（game-server 侧使用） |
+| Protobuf | 3.25.5 | 消息序列化 |
 | Spring | 7.0.1 | 轻量级容器 |
 | Lombok | 1.18.34 | 代码简化 |
 
@@ -84,7 +84,7 @@ xs-net/
 定义消息通信协议和序列化机制：
 
 - **注解驱动**: 通过 `@ActionController` 和 `@ActionMessage` 定义消息处理器
-- **序列化**: 支持多种序列化方式（SBE、ProtoBuf）
+- **序列化**: Protobuf 序列化
 - **消息路由**: 基于注解的自动路由分发
 
 #### 核心接口
@@ -99,7 +99,6 @@ xs-net/
 ### 3. xs-net-tools（工具集）
 集成各种工具库：
 
-- SBE 序列化工具
 - ProtoBuf 序列化工具
 - LuBan 配置生成工具
 
@@ -175,7 +174,6 @@ public class PlayerActor extends NodeActor {
 - 高性能消息路由
 
 ### 2. 序列化协议
-- **SBE**: Simple Binary Encoding，低延迟高吞吐
 - **ProtoBuf**: Protocol Buffers，跨语言支持
 - 可扩展的序列化器接口
 
@@ -234,7 +232,6 @@ public class PlayerActor extends NodeActor {
 
 - 确保各个节点的 Akka 配置正确（特别是远程通信端口）
 - 生产环境建议配置 JVM 参数优化性能
-- 使用 SBE 时需要预先生成消息代码
 
 ## 许可证
 

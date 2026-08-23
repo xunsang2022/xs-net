@@ -96,6 +96,39 @@ class JwtAuthFilterTest {
     }
 
     @Test
+    void remoteModeCachesVerifiedToken() throws Exception {
+        RestClient.Builder restClientBuilder = RestClient.builder().baseUrl("http://login.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(restClientBuilder).build();
+        RestClient restClient = restClientBuilder.build();
+        JwtAuthFilter filter = new JwtAuthFilter(jwtUtil, restClient, "remote");
+
+        // 只注册一次远程期望：第二次相同 token 应命中本地缓存，不再调用 login 服务
+        server.expect(requestTo("http://login.test/api/auth/verify"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(
+                        "{\"valid\":true,\"playerId\":42,\"channelId\":\"channel-1\"}",
+                        MediaType.APPLICATION_JSON));
+
+        String token = "remote-token";
+
+        MockHttpServletRequest firstRequest = requestWithToken(token);
+        MockHttpServletResponse firstResponse = new MockHttpServletResponse();
+        MockFilterChain firstChain = new MockFilterChain();
+        filter.doFilter(firstRequest, firstResponse, firstChain);
+        assertThat(firstResponse.getStatus()).isEqualTo(200);
+
+        MockHttpServletRequest secondRequest = requestWithToken(token);
+        MockHttpServletResponse secondResponse = new MockHttpServletResponse();
+        MockFilterChain secondChain = new MockFilterChain();
+        filter.doFilter(secondRequest, secondResponse, secondChain);
+
+        assertThat(secondResponse.getStatus()).isEqualTo(200);
+        assertThat(secondRequest.getAttribute("playerId")).isEqualTo("42");
+        assertThat(secondRequest.getAttribute("channelId")).isEqualTo("channel-1");
+        server.verify();
+    }
+
+    @Test
     void remoteModeFailsClosedOnInvalidResponse() throws Exception {
         RestClient.Builder restClientBuilder = RestClient.builder().baseUrl("http://login.test");
         MockRestServiceServer server = MockRestServiceServer.bindTo(restClientBuilder).build();

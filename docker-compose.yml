@@ -1,0 +1,50 @@
+# 基础设施：PostgreSQL + Redis（dev）
+# 使用：在 WSL 中进入 /mnt/e/project/xs-net，执行  docker compose up -d
+# Windows 侧 IDEA / 浏览器 可通过 127.0.0.1:5432 / 6379 直接连接（Docker Desktop WSL2 集成自动端口转发）
+# 与 game-server 三个模块 application.yml 的明文默认值完全一致：
+#   - PG:  jdbc:postgresql://localhost:5432/gamedb  user=root  password=(空)
+#   - Redis:  host=localhost  port=6379  password=(空)  db=0
+
+name: xs-net-infra
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: xs-net-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: ""
+      POSTGRES_DB: gamedb
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - xs-net-pgdata:/var/lib/postgresql/data
+      - ./deploy/pg-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d gamedb"]
+      interval: 3s
+      timeout: 2s
+      retries: 15
+    command: ["postgres", "-c", "listen_addresses=*"]
+
+  redis:
+    image: redis:7-alpine
+    container_name: xs-net-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - xs-net-redisdata:/data
+      - ./deploy/redis.conf:/etc/redis/redis.conf:ro
+    command: ["redis-server", "/etc/redis/redis.conf", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 1s
+      retries: 10
+
+volumes:
+  xs-net-pgdata:
+  xs-net-redisdata:

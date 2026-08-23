@@ -3,6 +3,7 @@ package com.game.logic.context;
 import com.game.logic.dbsync.DBSyncEngine;
 import com.game.logic.dbsync.LogConsumer;
 import com.game.logic.redis.RedisStore;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
@@ -16,6 +17,8 @@ public final class LogicContext {
     private static volatile RedisStore redisStore;
     private static volatile DBSyncEngine dbSyncEngine;
     private static volatile LogConsumer logConsumer;
+    private static volatile MeterRegistry meterRegistry;
+    private static volatile LogicMetrics logicMetrics;
     private static volatile long syncIntervalMs = 1000L;
 
     private LogicContext() {
@@ -87,5 +90,34 @@ public final class LogicContext {
 
     public static long getSyncIntervalMs() {
         return syncIntervalMs;
+    }
+
+    public static void setMeterRegistry(MeterRegistry registry) {
+        meterRegistry = registry;
+    }
+
+    public static MeterRegistry getMeterRegistry() {
+        MeterRegistry registry = meterRegistry;
+        if (registry == null) {
+            throw new IllegalStateException("MeterRegistry has not been initialized");
+        }
+        return registry;
+    }
+
+    public static void setLogicMetrics(LogicMetrics metrics) {
+        logicMetrics = metrics;
+    }
+
+    public static LogicMetrics getLogicMetrics() {
+        LogicMetrics metrics = logicMetrics;
+        if (metrics == null) {
+            throw new IllegalStateException("LogicMetrics has not been initialized");
+        }
+        return metrics;
+    }
+
+    /** 供 DBSyncEngine 等可选上报场景使用：未装配时返回 null。 */
+    public static LogicMetrics getLogicMetricsOrNull() {
+        return logicMetrics;
     }
 }

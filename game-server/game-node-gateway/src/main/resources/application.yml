@@ -20,14 +20,22 @@ logging:
 
 # Auth proxy configuration
 game:
+  framework:
+    actor-auto-register-enabled: true
+    message-auto-register-enabled: true
+    actor-base-packages:
+      - com.game.gateway.actor
+      - com.game.message.actor
+    message-base-packages:
+      - com.game.message.actor
   auth:
-    login-base-url: ${LOGIN_BASE_URL:http://127.0.0.1:8081}
-    verify-mode: ${AUTH_VERIFY_MODE:local}
-    verify-timeout-ms: ${AUTH_VERIFY_TIMEOUT_MS:2000}
+    login-base-url: http://127.0.0.1:8081
+    verify-mode: local
+    verify-timeout-ms: 2000
   netty:
-    port: ${NETTY_PORT:8082}
+    port: 8082
 
 # JWT Configuration
 jwt:
-  secret: ${JWT_SECRET}
-  expiration: ${JWT_EXPIRATION:86400000}
+  secret: xs-net-dev-jwt-secret-key-32bytes-minimum!!
+  expiration: 86400000

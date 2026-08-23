@@ -7,7 +7,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
@@ -79,5 +81,19 @@ class DBSyncEngineTest {
         engine.flush();
 
         assertEquals(1, engine.dirtySize());
+    }
+
+    @Test
+    void submitRejectsWhenDirtyMapFull() {
+        DBSyncConfig config = new DBSyncConfig();
+        config.setFlushConcurrency(1);
+        config.setMaxDirtyRecords(2);
+        DBSyncEngine engine = new DBSyncEngine(mock(JdbcTemplate.class), config);
+
+        assertTrue(engine.submit(1L, Map.of("name", "alice"), 1L));
+        assertTrue(engine.submit(2L, Map.of("name", "bob"), 1L));
+        // 超限：拒绝新提交，脏记录数保持在上限
+        assertFalse(engine.submit(3L, Map.of("name", "carol"), 1L));
+        assertEquals(2, engine.dirtySize());
     }
 }

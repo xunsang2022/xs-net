@@ -36,7 +36,9 @@ public class NodeActor extends AbstractBehavior<Command> {
 
     @SneakyThrows
     private void init(ActorContext<Command> context) {
-        String[] basePackages = properties.getMessageBasePackages();
+        // Actor 类扫描使用 actor-base-packages（如 logic 节点的 com.game.logic.actor），
+        // 消息注册表由 registeredAgentActor 基于已注册的 RpcMessageSpec 处理，不需要包扫描。
+        String[] basePackages = properties.getActorBasePackages();
 
         ActorSystem<?> system = context.getSystem();
         ClusterSharding sharding = ClusterSharding.get(system);
