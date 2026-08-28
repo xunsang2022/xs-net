@@ -9,7 +9,6 @@ import com.game.logic.dbsync.DBSyncConfig;
 import com.game.logic.dbsync.DBSyncEngine;
 import com.game.logic.dbsync.LogConsumer;
 import com.game.logic.redis.RedisStore;
-import com.game.message.rpc.GameRpcEnvelopeFactory;
 import com.game.message.rpc.GameRpcMessages;
 import com.xs.core.actor.node.NodeActor;
 import com.xs.core.config.GameFrameworkProperties;
@@ -78,9 +77,9 @@ public final class GameLogicApplication {
         }
 
         GenericObjectPoolConfig<StatefulConnection<?, ?>> poolConfig = new GenericObjectPoolConfig<>();
-        poolConfig.setMaxTotal(8);
-        poolConfig.setMaxIdle(8);
-        poolConfig.setMinIdle(0);
+        poolConfig.setMaxTotal(32);
+        poolConfig.setMaxIdle(32);
+        poolConfig.setMinIdle(4);
         LettuceClientConfiguration clientConfig = LettucePoolingClientConfiguration.builder()
                 .poolConfig(poolConfig)
                 .build();
@@ -123,7 +122,7 @@ public final class GameLogicApplication {
         logConsumer.start();
         LogicContext.setLogConsumer(logConsumer);
 
-        MessageAble.initialize(GameRpcMessages.INSTANCE, new GameRpcEnvelopeFactory());
+        MessageAble.initialize(GameRpcMessages.INSTANCE);
 
         Behavior<Void> guardian = Behaviors.setup(context -> {
             context.spawn(NodeActor.create(properties), "node");

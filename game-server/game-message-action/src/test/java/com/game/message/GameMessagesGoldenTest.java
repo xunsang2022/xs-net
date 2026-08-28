@@ -1,13 +1,14 @@
 package com.game.message;
 
 import com.game.message.rpc.GameRpcMessages;
-import com.game.protocol.pb.CS_LOGIN;
-import com.game.protocol.pb.CS_LOG_REPORT;
+import com.game.protocol.pb.CS_Login;
+import com.game.protocol.pb.CS_LogReport;
 import com.game.protocol.pb.CS_Logout;
-import com.game.protocol.pb.LogRecordMessage;
-import com.game.protocol.pb.PlayerEnter;
-import com.game.protocol.pb.SC_LOGIN;
-import com.game.protocol.pb.SC_LOG_REPORT;
+import com.game.protocol.pb.LogRecordCommand;
+import com.game.protocol.pb.PlayerEnterCommand;
+import com.game.protocol.pb.RpcRoute;
+import com.game.protocol.pb.SC_Login;
+import com.game.protocol.pb.SC_LogReport;
 import com.game.protocol.pb.SC_Logout;
 import com.google.protobuf.MessageLite;
 import com.xs.net.message.RpcMessageSpec;
@@ -30,13 +31,13 @@ public class GameMessagesGoldenTest {
 
     @Test
     public void goldenMessagesMatchNativeEncoding() throws Exception {
-        assertGolden("LogRecordMessage", LogRecordMessage.newBuilder()
+        assertGolden("LogRecordMessage", LogRecordCommand.newBuilder()
                 .setLevel(2)
                 .setType(3)
                 .setMessage("hello")
                 .setPlayerId(42L)
                 .build());
-        assertGolden("CS_LOGIN", CS_LOGIN.newBuilder()
+        assertGolden("CS_LOGIN", CS_Login.newBuilder()
                 .setPlayerId("1001")
                 .setPlayerName("alice")
                 .setSessionId("s-1")
@@ -45,7 +46,7 @@ public class GameMessagesGoldenTest {
                 .setPlayerId("1001")
                 .setSessionId("s-2")
                 .build());
-        assertGolden("SC_LOGIN", SC_LOGIN.newBuilder()
+        assertGolden("SC_LOGIN", SC_Login.newBuilder()
                 .setResult(0)
                 .setPlayerId("1001")
                 .setPlayerName("alice")
@@ -55,18 +56,18 @@ public class GameMessagesGoldenTest {
                 .setPlayerId("1001")
                 .setSessionId("s-3")
                 .build());
-        assertGolden("CS_LOG_REPORT", CS_LOG_REPORT.newBuilder()
+        assertGolden("CS_LOG_REPORT", CS_LogReport.newBuilder()
                 .setSessionId("s-4")
                 .setLogLevel(1)
                 .setLogType(2)
                 .setContent("{\"k\":\"v\"}")
                 .build());
-        assertGolden("SC_LOG_REPORT", SC_LOG_REPORT.newBuilder()
+        assertGolden("SC_LOG_REPORT", SC_LogReport.newBuilder()
                 .setSessionId("s-5")
                 .setResult(0)
                 .setLogId(77L)
                 .build());
-        assertGolden("PlayerEnter", PlayerEnter.newBuilder()
+        assertGolden("PlayerEnter", PlayerEnterCommand.newBuilder()
                 .setPlayerId(1001L)
                 .setPlayerName("alice")
                 .setChannelId("ch-1")
@@ -87,12 +88,22 @@ public class GameMessagesGoldenTest {
     }
 
     @Test
+    public void routerEnumRegistersGroupMessages() {
+        assertEquals(1001, RpcRoute.RPC_CS_LOGOUT.getNumber());
+        assertEquals(1003, RpcRoute.RPC_SC_LOGOUT.getNumber());
+        assertEquals(3003, RpcRoute.RPC_PLAYER_ENTER_COMMAND.getNumber());
+        assertEquals(RpcRoute.RPC_CS_LOGOUT, RpcRoute.forNumber(1001));
+        assertEquals(RpcRoute.RPC_SC_LOGOUT, RpcRoute.forNumber(1003));
+        assertEquals(RpcRoute.RPC_PLAYER_ENTER_COMMAND, RpcRoute.forNumber(3003));
+    }
+
+    @Test
     public void optionalPresenceIsPreserved() {
-        CS_LOGIN absent = CS_LOGIN.newBuilder().setPlayerId("1").build();
+        CS_Login absent = CS_Login.newBuilder().setPlayerId("1").build();
         assertFalse(absent.hasSessionId());
         assertFalse(absent.hasPlayerName());
 
-        CS_LOGIN present = CS_LOGIN.newBuilder().setPlayerId("1").setPlayerName("alice").build();
+        CS_Login present = CS_Login.newBuilder().setPlayerId("1").setPlayerName("alice").build();
         assertTrue(present.hasPlayerName());
         assertEquals("alice", present.getPlayerName());
     }

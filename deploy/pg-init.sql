@@ -1,15 +1,14 @@
 -- 初始化脚本：由 docker-entrypoint 自动执行（当 POSTGRES_DB=gamedb 为空库时）
--- 与 logic 模块 PlayerUpsertSql / LogConsumer 的表结构一致，确保首次 DBSyncEngine 写入即有表
+-- 与 logic 模块 PlayerUpsertSql / PlayerState 的表结构一致，确保首次 DBSyncEngine 写入即有表
 
 CREATE TABLE IF NOT EXISTS users (
-    id          BIGINT PRIMARY KEY,
-    nickname    VARCHAR(64)  NOT NULL DEFAULT '',
-    level       INT          NOT NULL DEFAULT 1,
-    exp         BIGINT       NOT NULL DEFAULT 0,
-    coin        BIGINT       NOT NULL DEFAULT 0,
-    diamond     BIGINT       NOT NULL DEFAULT 0,
-    last_login  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    version     INT          NOT NULL DEFAULT 0
+    id             BIGINT PRIMARY KEY,
+    name           VARCHAR(64)  NOT NULL DEFAULT '',
+    email          VARCHAR(128) NOT NULL DEFAULT '',
+    online         INT          NOT NULL DEFAULT 0,
+    last_login_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    version        INT          NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS log_events (

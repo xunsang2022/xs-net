@@ -18,24 +18,6 @@
             <version>0.0.1-SNAPSHOT</version>
         </dependency>
 
-        <!-- Spring Boot Web Starter - 提供Spring Boot Web应用支持，包括Tomcat、Spring MVC等 -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
-
-        <!-- Spring Boot RestClient Starter - Spring Boot 4 中 RestClient.Builder 自动配置独立模块 -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-restclient</artifactId>
-        </dependency>
-
-        <!-- Spring Boot Actuator Starter - 暴露健康检查、指标与端点（与 login 模块对齐） -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-        
         <!-- Akka Cluster Dependencies -->
         <!-- Classic Akka API -->
         <!-- Akka Cluster - 提供Akka集群支持，用于节点管理和通信 -->
@@ -98,12 +80,28 @@
             <version>${akka.version}</version>
         </dependency>
         
-        <!-- Aeron媒体驱动 - 提供高性能UDP传输支持，用于Akka Artery的Aeron UDP模式 -->
+        <!-- Aeromon媒体驱动 - 提供高性能UDP传输支持，用于Akka Artery的Aeron UDP模式 -->
         <dependency>
             <groupId>io.aeron</groupId>
             <artifactId>aeron-driver</artifactId>
         </dependency>
-        
+
+        <!-- Actuator - 提供健康检查 / 可观测性端点 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- WebMVC - 承载 Actuator 管理端点（/actuator/health 等） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+        </dependency>
+        <!-- Micrometer Prometheus registry - 暴露 /actuator/prometheus 指标 -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
         <!-- Spring Boot Test - 提供Spring Boot测试支持，包括JUnit、Mockito等 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

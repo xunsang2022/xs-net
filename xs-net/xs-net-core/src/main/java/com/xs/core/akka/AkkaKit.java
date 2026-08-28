@@ -2,18 +2,22 @@ package com.xs.core.akka;
 
 import akka.actor.typed.ActorSystem;
 import akka.actor.typed.Behavior;
+import akka.actor.typed.Props;
 import akka.actor.typed.javadsl.Behaviors;
-import akka.cluster.sharding.typed.javadsl.*;
+import akka.cluster.sharding.typed.javadsl.ClusterSharding;
+import akka.cluster.sharding.typed.javadsl.Entity;
+import akka.cluster.sharding.typed.javadsl.EntityContext;
+import akka.cluster.sharding.typed.javadsl.EntityRef;
+import akka.cluster.sharding.typed.javadsl.EntityTypeKey;
 import com.xs.net.message.MessageAble;
 import com.xs.net.message.RpcMessage;
+
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -21,7 +25,10 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @UtilityClass
 public class AkkaKit {
-    public static final List<Class<?>> local = new ArrayList<>();
+    /** 分片实体专用调度器：实体 Actor 会做阻塞式 Redis 访问，用大容量线程池提升并发吞吐。 */
+    public static final String ENTITY_DISPATCHER = "akka.actor.xs-entity-dispatcher";
+
+    private static final Set<Class<?>> LOCAL = ConcurrentHashMap.newKeySet();
     private static final Map<Class<?>, EntityTypeKey<?>> ENTITY_TYPE_KEYS = new ConcurrentHashMap<>();
     private static final Map<Class<?>, Method> CREATE_METHODS = new ConcurrentHashMap<>();
     private static volatile ClusterSharding clusterSharding;
@@ -38,54 +45,38 @@ public class AkkaKit {
         return sharding;
     }
 
-
-    /**
-     * 发送消息到集群
-     * <p/>
-     *
-     * @param actorCmdClass
-     * @param message
-     * @param entityId
-     * @throws IOException
-     */
-    @SuppressWarnings("all")
-    public <T> void tell(
-            Class<T> actorCmdClass,
-            T message,
-            String entityId
-    ) {
-        EntityTypeKey<T> entityTypeKey = entityTypeKey(actorCmdClass);
-        EntityRef<T> entityRef = getClusterSharding().entityRefFor(entityTypeKey, entityId);
-        Object sedMessage;
-        if (local.contains(actorCmdClass)) {
-            sedMessage = message;
-        } else if (message instanceof RpcMessage rpcMessage) {
-            sedMessage = MessageAble.toNetMessage(rpcMessage);
-        } else {
-            throw new IllegalArgumentException(
-                    "Remote messages must implement RpcMessage: " + message.getClass().getName());
-        }
-        entityRef.tell((T) sedMessage);
+    public static void tell(Class<?> actorCmdClass, Object message, String entityId) {
+        tellToRole(actorCmdClass, message, entityId);
     }
 
-    public <T> void entityRefForClusterSharding(ClusterSharding clusterSharding, String roles, Class<T> actorCmdClass) {
-        clusterSharding.init(
-                Entity.of(entityTypeKey(actorCmdClass),
-                        entityContext -> Behaviors.receive(actorCmdClass)
-                                .onAnyMessage(msg -> Behaviors.same())
-                                .build()
-                ).withRole(roles)
-        );
+    public static void tellRpc(Class<?> roleClass, RpcMessage message, String entityId) {
+        tellToRole(roleClass, message, entityId);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void tellToRole(Class<?> roleClass, Object message, String entityId) {
+        EntityRef entityRef = getClusterSharding().entityRefFor(entityTypeKey((Class) roleClass), entityId);
+        Object deliveredMessage = LOCAL.contains(roleClass) ? message : MessageAble.toNetMessage(message);
+        entityRef.tell(deliveredMessage);
+    }
+
+    public static <T> void entityRefForClusterSharding(ClusterSharding sharding, String roles, Class<T> actorCmdClass) {
+        sharding.init(Entity.of(entityTypeKey(actorCmdClass), entityContext -> Behaviors.receive(actorCmdClass)
+                .onAnyMessage(message -> Behaviors.same()).build())
+                .withRole(roles)
+                .withEntityProps(Props.empty().withDispatcherFromConfig(ENTITY_DISPATCHER)));
         log.info("初始化集群Actor代理 {} {}", actorCmdClass.getSimpleName(), roles);
     }
 
-    public static void initClusterSharding(ClusterSharding clusterSharding, Class<?> actorCmdClass, Class<?> actorClass, String roles) {
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    public static void initClusterSharding(ClusterSharding sharding, Class<?> actorCmdClass, Class<?> actorClass, String roles) {
         EntityTypeKey<?> typeKey = entityTypeKey(actorCmdClass);
-        clusterSharding.init(Entity.of(
-                typeKey,
-                entityContext -> createEntityContext(entityContext, actorClass)
-        ).withRole(roles));
-        local.add(actorCmdClass);
+        // 分片实体（PlayerMessage / S2C 通道）统一使用大容量专用调度器，
+        // 实体 Actor 会做阻塞式 Redis 访问，默认 32 线程 fork-join 在高并发下成瓶颈。
+        sharding.init(Entity.of(typeKey, entityContext -> createEntityContext(entityContext, actorClass))
+                .withRole(roles)
+                .withEntityProps(Props.empty().withDispatcherFromConfig(ENTITY_DISPATCHER)));
+        LOCAL.add(actorCmdClass);
         log.info("初始化集群 Actor 实例 {} {}", actorCmdClass.getSimpleName(), roles);
     }
 
@@ -93,42 +84,29 @@ public class AkkaKit {
     private static <M> Behavior<M> createEntityContext(EntityContext<M> context, Class<?> actorClass) {
         try {
             Method create = CREATE_METHODS.computeIfAbsent(actorClass, AkkaKit::resolveCreateMethod);
-            Object arg = create.getParameterCount() == 1 ? context.getEntityId() : null;
-            return (Behavior<M>) create.invoke(null, arg);
+            Object argument = create.getParameterCount() == 1 ? context.getEntityId() : null;
+            return (Behavior<M>) create.invoke(null, argument);
         } catch (IllegalAccessException | InvocationTargetException e) {
             throw new RuntimeException("创建 Actor 失败：" + actorClass.getSimpleName(), e);
         }
     }
 
-    /**
-     * 解析 Actor 的 create 方法（优先无参，其次 create(String)），结果缓存避免重复反射。
-     */
     private static Method resolveCreateMethod(Class<?> actorClass) {
         try {
             return actorClass.getMethod("create");
         } catch (NoSuchMethodException e) {
             try {
                 return actorClass.getMethod("create", String.class);
-            } catch (NoSuchMethodException e2) {
-                throw new RuntimeException("创建 Actor 失败：" + actorClass.getSimpleName(), e2);
+            } catch (NoSuchMethodException nested) {
+                throw new RuntimeException("创建 Actor 失败：" + actorClass.getSimpleName(), nested);
             }
         }
     }
 
-
-    /**
-     * 获取当前节点的角色
-     * 从 ActorSystem 运行时环境中读取，支持通过 JVM 参数动态配置
-     * 例如：-Dakka.cluster.roles.0=gateway
-     */
     public static Set<String> getCurrentNodeRoles(ActorSystem<?> system) {
         Set<String> roles = new HashSet<>();
         try {
-            // 从 Akka Cluster 运行时获取角色（包含 JVM 参数覆盖后的配置）
-            scala.collection.immutable.Set<String> scalaRoles =
-                    akka.cluster.Cluster.get(system).selfRoles();
-
-            scala.collection.Iterator<String> iterator = scalaRoles.iterator();
+            scala.collection.Iterator<String> iterator = akka.cluster.Cluster.get(system).selfRoles().iterator();
             while (iterator.hasNext()) {
                 roles.add(iterator.next());
             }
@@ -140,9 +118,7 @@ public class AkkaKit {
 
     @SuppressWarnings("unchecked")
     private static <T> EntityTypeKey<T> entityTypeKey(Class<T> actorCmdClass) {
-        return (EntityTypeKey<T>) ENTITY_TYPE_KEYS.computeIfAbsent(
-                actorCmdClass,
-                key -> EntityTypeKey.create(key, key.getSimpleName())
-        );
+        return (EntityTypeKey<T>) ENTITY_TYPE_KEYS.computeIfAbsent(actorCmdClass,
+                key -> EntityTypeKey.create(key, key.getSimpleName()));
     }
 }

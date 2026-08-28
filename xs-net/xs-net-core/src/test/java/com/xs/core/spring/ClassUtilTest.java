@@ -1,0 +1,33 @@
+package com.xs.core.actor;
+
+import akka.actor.typed.javadsl.AbstractBehavior;
+import akka.actor.typed.javadsl.ActorContext;
+import com.xs.core.spring.ClassUtil;
+import junit.framework.TestCase;
+
+public class ClassUtilTest extends TestCase {
+
+    public void testResolvesMessageTypeThroughIntermediateGenericParent() {
+        assertEquals(TestMessage.class, ClassUtil.findMessageInterface(ConcreteActor.class));
+    }
+
+    private interface TestMessage {
+    }
+
+    private abstract static class IntermediateActor<M> extends AbstractBehavior<M> {
+        protected IntermediateActor(ActorContext<M> context) {
+            super(context);
+        }
+    }
+
+    private static final class ConcreteActor extends IntermediateActor<TestMessage> {
+        private ConcreteActor(ActorContext<TestMessage> context) {
+            super(context);
+        }
+
+        @Override
+        public akka.actor.typed.javadsl.Receive<TestMessage> createReceive() {
+            return newReceiveBuilder().build();
+        }
+    }
+}

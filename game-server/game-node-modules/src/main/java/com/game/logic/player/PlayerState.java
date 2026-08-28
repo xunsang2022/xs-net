@@ -1,5 +1,8 @@
 package com.game.logic.player;
 
+import lombok.Getter;
+import lombok.Setter;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -11,8 +14,9 @@ import java.util.Set;
 /**
  * Player runtime state stored in Redis hash {@code player:{playerId}}.
  */
+@Getter
+@Setter
 public class PlayerState {
-
     public static final String FIELD_ID = "id";
     public static final String FIELD_NAME = "name";
     public static final String FIELD_EMAIL = "email";
@@ -120,61 +124,5 @@ public class PlayerState {
         } catch (NumberFormatException e) {
             return 0L;
         }
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public boolean isOnline() {
-        return online;
-    }
-
-    public void setOnline(boolean online) {
-        this.online = online;
-    }
-
-    public long getLastLoginAt() {
-        return lastLoginAt;
-    }
-
-    public void setLastLoginAt(long lastLoginAt) {
-        this.lastLoginAt = lastLoginAt;
-    }
-
-    public long getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(long updatedAt) {
-        this.updatedAt = updatedAt;
-    }
-
-    public long getVersion() {
-        return version;
-    }
-
-    public void setVersion(long version) {
-        this.version = version;
     }
 }

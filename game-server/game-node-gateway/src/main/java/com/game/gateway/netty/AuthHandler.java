@@ -1,37 +1,73 @@
 package com.game.gateway.netty;
 
 import com.game.comment.util.JwtUtil;
+import com.game.gateway.config.NettyConfig;
 import com.game.message.actor.logic.PlayerMessage;
-import com.game.message.rpc.GameRpcEnvelope;
+import com.game.message.c2s.LoginRequest;
+import com.game.message.c2s.PlayerEnterCommand;
 import com.game.message.rpc.GameRpcMessages;
 import com.google.protobuf.MessageLite;
 import com.xs.core.akka.AkkaKit;
 import com.xs.net.message.RpcMessageSpec;
 import com.xs.net.message.pb.NetMessage;
 import io.jsonwebtoken.Claims;
+import io.micrometer.core.instrument.Metrics;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.util.ReferenceCountUtil;
+import io.netty.handler.timeout.IdleStateEvent;
+import io.netty.channel.EventLoop;
 import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 连接认证 + 上行消息处理。
+ * <p>挂载在业务线程池执行（见 {@link NettyChannelInitializer}），避免阻塞 I/O 事件循环。</p>
  * 握手协议：连接建立后第一个帧为 JWT token（UTF-8），认证通过后进入游戏消息模式。
  * 游戏消息帧为 NetMessage 信封（rpcNum + payload），解码后路由到 Logic 的 PlayerActor。
  */
 @Slf4j
 public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
 
+    private static final String METRIC_AUTH_SUCCESS = "gateway.auth.success";
+    private static final String METRIC_AUTH_FAILURE = "gateway.auth.failure";
+    private static final String METRIC_CONN_REJECTED = "gateway.connection.rejected";
+    private static final String METRIC_C2S_MESSAGES = "gateway.c2s.messages";
+
+    // 缓存各消息类型的 playerId() 方法，避免每条消息反射 getMethod（高频热点）
+    private static final ConcurrentMap<Class<?>, Method> PLAYER_ID_METHODS = new ConcurrentHashMap<>();
+
     private final JwtUtil jwtUtil;
+    private final NettyConfig config;
+
     private boolean authenticated;
     private String channelId;
+    private ScheduledFuture<?> authTimeoutTask;
 
-    public AuthHandler(JwtUtil jwtUtil) {
+    public AuthHandler(JwtUtil jwtUtil, NettyConfig config) {
         this.jwtUtil = jwtUtil;
+        this.config = config;
+    }
+
+    @Override
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        super.channelActive(ctx);
+        // 握手认证超时保护：超时仍未提交有效 token 则踢出，防资源占用
+        if (config.getAuthTimeoutSeconds() > 0) {
+            EventLoop eventLoop = ctx.channel().eventLoop();
+            authTimeoutTask = eventLoop.schedule(() -> {
+                if (!authenticated) {
+                    log.warn("Auth timeout, closing channel: local={}", ctx.channel().localAddress());
+                    ctx.close();
+                }
+            }, config.getAuthTimeoutSeconds(), TimeUnit.SECONDS);
+        }
     }
 
     @Override
@@ -51,20 +87,33 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
             Claims claims = jwtUtil.validateToken(token);
             if (claims == null) {
                 log.warn("Channel auth failed: invalid token");
-                ctx.close();
+                Metrics.counter(METRIC_AUTH_FAILURE).increment();
+                failAuth(ctx);
                 return;
             }
             channelId = jwtUtil.getChannelId(claims);
             if (channelId == null || channelId.isBlank()) {
                 log.warn("Channel auth failed: token has no channelId");
-                ctx.close();
+                Metrics.counter(METRIC_AUTH_FAILURE).increment();
+                failAuth(ctx);
                 return;
             }
-            ChannelRegistry.INSTANCE.register(channelId, ctx.channel());
+            // 单账号/单通道并发连接上限：已存在活跃连接时拒绝新连接
+            if (config.getMaxConnectionsPerAccount() > 0
+                    && ChannelRegistry.INSTANCE.isActive(channelId)) {
+                log.warn("Reject duplicate active connection: channelId={}", channelId);
+                Metrics.counter(METRIC_CONN_REJECTED).increment();
+                failAuth(ctx);
+                return;
+            }
+            ChannelRegistry.INSTANCE.register(channelId, new TcpClientEndpoint(ctx.channel()));
             authenticated = true;
+            cancelAuthTimeout();
+            Metrics.counter(METRIC_AUTH_SUCCESS).increment();
             log.info("Channel authenticated: channelId={}", channelId);
         } catch (Exception e) {
             log.error("Channel auth error", e);
+            Metrics.counter(METRIC_AUTH_FAILURE).increment();
             ctx.close();
         }
     }
@@ -80,13 +129,21 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
                 return;
             }
             MessageLite payload = spec.parser().parseFrom(netMessage.getData());
-            GameRpcEnvelope envelope = new GameRpcEnvelope(netMessage.getRpcNum(), payload);
-            String playerId = extractPlayerId(payload);
+            Object actionMessage = spec.decode(payload);
+            String playerId = extractPlayerId(actionMessage.getClass(), actionMessage);
             if (playerId == null || playerId.isBlank()) {
                 log.warn("Message without playerId, rpcNum={}", netMessage.getRpcNum());
                 return;
             }
-            AkkaKit.tell(PlayerMessage.class, envelope, playerId);
+            Metrics.counter(METRIC_C2S_MESSAGES).increment();
+            // CS_Login（LoginRequest）未实现 PlayerMessage，需转换为内部 PlayerEnterCommand 再路由到 PlayerActor
+            if (actionMessage instanceof LoginRequest login) {
+                PlayerEnterCommand cmd = new PlayerEnterCommand(
+                        Long.parseLong(login.playerId()), login.playerName(), login.sessionId());
+                AkkaKit.tell(PlayerMessage.class, cmd, playerId);
+                return;
+            }
+            AkkaKit.tell(PlayerMessage.class, (PlayerMessage) actionMessage, playerId);
         } catch (Exception e) {
             log.error("Failed to handle game message, closing channel: channelId={}", channelId, e);
             ctx.close();
@@ -94,7 +151,19 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
     }
 
     @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+        // 读空闲超时：判定客户端已半开/失联，主动关闭并清理注册表
+        if (evt instanceof IdleStateEvent) {
+            log.warn("Channel idle timeout, closing: channelId={}", channelId);
+            ctx.close();
+            return;
+        }
+        super.userEventTriggered(ctx, evt);
+    }
+
+    @Override
     public void channelInactive(ChannelHandlerContext ctx) {
+        cancelAuthTimeout();
         if (channelId != null) {
             ChannelRegistry.INSTANCE.remove(channelId);
             log.info("Channel closed: channelId={}", channelId);
@@ -102,20 +171,34 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
         ctx.fireChannelInactive();
     }
 
-    @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        log.error("Channel exception: channelId={}", channelId, cause);
+    private void failAuth(ChannelHandlerContext ctx) {
         ctx.close();
+    }
+
+    private void cancelAuthTimeout() {
+        if (authTimeoutTask != null && !authTimeoutTask.isDone()) {
+            authTimeoutTask.cancel(false);
+        }
     }
 
     /**
      * 从 protobuf 消息中反射提取 playerId（兼容 string / int64 字段）。
+     * <p>Method 采用缓存，避免每条消息都执行 {@code getClass().getMethod()}。</p>
      */
-    private static String extractPlayerId(MessageLite payload) {
+    static String extractPlayerId(Class<?> type, Object payload) {
         try {
-            Method method = payload.getClass().getMethod("getPlayerId");
-            Object value = method.invoke(payload);
-            return value == null ? null : String.valueOf(value);
+            Method method = PLAYER_ID_METHODS.computeIfAbsent(type, t -> {
+                try {
+                    return t.getMethod("playerId");
+                } catch (NoSuchMethodException e) {
+                    return null;
+                }
+            });
+            if (method == null) {
+                return null;
+            }
+            Object playerId = method.invoke(payload);
+            return playerId == null ? null : playerId.toString();
         } catch (Exception e) {
             return null;
         }

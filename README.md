@@ -1,38 +1,54 @@
 # xs-net
 
-Java 21 多模块游戏服务端工程，包含工具库、网络框架和游戏服务节点。
+Java 21 多模块游戏服务端工程，包含底层 RPC/Actor 框架、游戏服务节点和联调客户端。
+
+## 模块
+
+项目根目录统一聚合以下三个 Maven 工程：
+
+- `xs-net`：Akka、RPC 消息注册、SDK 和构建插件等底层框架；
+- `game-server`：Gateway、Login 和非 Spring Boot Logic 节点；
+- `game-client`：用于联调 Gateway HTTP/TCP 接口的测试客户端。
 
 ## 构建
 
-项目根目录现在统一聚合以下两个 Maven 工程：
-
-- `xs-net`
-- `game-server`
-
-Windows PowerShell 下执行：
+在 Windows PowerShell 中于仓库根目录执行：
 
 ```powershell
-./mvnw.ps1 -DskipTests package
+.\mvnw.cmd -DskipTests package
 ```
 
-脚本自动探测 IntelliJ IDEA 自带 Maven 与 JDK 21（可通过环境变量 `IDEA_MAVEN_HOME` / `JAVA_HOME` 显式指定），并固定使用 `%USERPROFILE%\.m2\repository` 作为本地仓库。也可以直接使用 `./mvnw.cmd`。
+包装脚本使用 JDK 21、IntelliJ IDEA 自带 Maven，并固定使用 `%USERPROFILE%\.m2\repository` 作为本地仓库。请不要依赖 PATH 中的全局 Maven。
 
-## 架构文档
+## 本地运行
 
-完整架构、数据流转与技术栈见 [ARCHITECTURE.md](./ARCHITECTURE.md)。
-
-## 环境变量
-
-运行游戏服务前请设置：
+1. 启动 PostgreSQL 和 Redis：
 
 ```powershell
-$env:DB_URL = 'jdbc:postgresql://localhost:5432/gamedb'
-$env:DB_USERNAME = 'root'
-$env:DB_PASSWORD = '<your-database-password>'
-$env:JWT_SECRET = '<at-least-32-byte-secret>'
+docker compose up -d
 ```
 
-配置文件不再保存数据库密码或 JWT 密钥。生产环境请通过部署平台的密钥管理功能注入这些变量。
+2. 构建工程后，按 Login → Logic → Gateway 的顺序启动服务。
+3. 端口、配置项、启动细节和客户端联调方式见 [game-server/README.md](./game-server/README.md)。
+
+## 配置与安全
+
+仓库当前 YAML 保留了仅供本地开发的 Redis、PostgreSQL 和 JWT 默认值。生产环境必须通过部署配置覆盖它们；Gateway 与 Login 必须配置为完全一致、长度至少 32 字节的 JWT 密钥。
+
+Logic 节点的配置优先级为 JVM 系统属性、环境变量、YAML、内置默认值。环境变量名由启动代码明确映射，例如：
+
+```powershell
+$env:DB_URL = 'jdbc:postgresql://db.example.com:5432/gamedb'
+$env:DB_USERNAME = 'game'
+$env:DB_PASSWORD = '<database-password>'
+```
+
+## 文档
+
+- [ARCHITECTURE.md](./ARCHITECTURE.md)：跨模块架构、数据流和服务边界；
+- [game-server/README.md](./game-server/README.md)：服务端构建、配置、端口与运行；
+- [xs-net/README.md](./xs-net/README.md)：框架模块与 RPC 基础设施；
+- [docs/消息注册与消息处理流程.md](./docs/消息注册与消息处理流程.md)：消息注册、路由和网关 wire protocol。
 
 ## 编码
 

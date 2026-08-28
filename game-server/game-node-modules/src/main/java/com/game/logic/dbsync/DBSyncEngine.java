@@ -110,16 +110,16 @@ public class DBSyncEngine {
     }
 
     /**
-     * 从 PG 读取玩家行回填：INSERT ... ON CONFLICT DO NOTHING 后 SELECT。
+     * 从 PG 读取玩家行回填：单条 UPSERT ... RETURNING 原子完成「不存在则创建、存在则读取」，
+     * 相比「INSERT ... ON CONFLICT DO NOTHING + SELECT」省去一次 DB 往返（新玩家登录热路径）。
      */
     public Map<String, String> loadOrCreate(Long playerId) {
-        jdbcTemplate.update(
-                "INSERT INTO users (id, name, email, online, last_login_at, updated_at, version) "
-                        + "VALUES (?, ?, ?, 0, NOW(), NOW(), 1) ON CONFLICT (id) DO NOTHING",
-                playerId, "player-" + playerId, "");
         Map<String, Object> row = jdbcTemplate.queryForMap(
-                "SELECT id, name, email, online, last_login_at, updated_at, version FROM users WHERE id = ?",
-                playerId);
+                "INSERT INTO users (id, name, email, online, last_login_at, updated_at, version) "
+                        + "VALUES (?, ?, ?, 0, NOW(), NOW(), 1) "
+                        + "ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id "
+                        + "RETURNING id, name, email, online, last_login_at, updated_at, version",
+                playerId, "player-" + playerId, "");
         Map<String, String> fields = new LinkedHashMap<>();
         fields.put("id", String.valueOf(row.get("id")));
         fields.put("name", row.get("name") == null ? "player-" + playerId : String.valueOf(row.get("name")));

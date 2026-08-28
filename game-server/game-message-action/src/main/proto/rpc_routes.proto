@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package game.message;
+
+option java_multiple_files = true;
+option java_package = "com.game.protocol.pb";
+
+enum RpcRoute {
+  RPC_ROUTE_UNSPECIFIED = 0;
+  RPC_LOG_RECORD_COMMAND = 999;
+  RPC_CS_LOGIN = 1000;
+  RPC_CS_LOGOUT = 1001;
+  RPC_SC_LOGIN = 1002;
+  RPC_SC_LOGOUT = 1003;
+  RPC_CS_LOG_REPORT = 2100;
+  RPC_SC_LOG_REPORT = 2101;
+  RPC_PLAYER_ENTER_COMMAND = 3003;
+}

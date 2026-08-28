@@ -8,18 +8,19 @@ import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
 import akka.cluster.sharding.typed.javadsl.ClusterSharding;
 import com.google.protobuf.MessageLite;
+import com.xs.core.actor.RpcActor;
 import com.xs.core.akka.AkkaKit;
 import com.xs.core.config.GameFrameworkProperties;
 import com.xs.core.spring.ClassScanner;
 import com.xs.core.spring.ClassUtil;
 import com.xs.core.spring.SpringUtil;
 import com.xs.net.message.MessageAble;
-import com.xs.net.message.RpcEnvelopeFactory;
 import com.xs.net.message.RpcMessageRegistry;
 import com.xs.net.message.RpcMessageSpec;
 import lombok.SneakyThrows;
 import org.slf4j.Logger;
 
+import java.lang.reflect.Modifier;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -36,10 +37,7 @@ public class NodeActor extends AbstractBehavior<Command> {
 
     @SneakyThrows
     private void init(ActorContext<Command> context) {
-        // Actor 类扫描使用 actor-base-packages（如 logic 节点的 com.game.logic.actor），
-        // 消息注册表由 registeredAgentActor 基于已注册的 RpcMessageSpec 处理，不需要包扫描。
         String[] basePackages = properties.getActorBasePackages();
-
         ActorSystem<?> system = context.getSystem();
         ClusterSharding sharding = ClusterSharding.get(system);
         AkkaKit.setClusterSharding(sharding);
@@ -51,8 +49,7 @@ public class NodeActor extends AbstractBehavior<Command> {
         if (!MessageAble.isInitialized()) {
             try {
                 messageRegistry = SpringUtil.getBean(RpcMessageRegistry.class);
-                RpcEnvelopeFactory envelopeFactory = SpringUtil.getBean(RpcEnvelopeFactory.class);
-                MessageAble.initialize(messageRegistry, envelopeFactory);
+                MessageAble.initialize(messageRegistry);
             } catch (Exception e) {
                 log.error("Failed to initialize RpcMessageRegistry from Spring", e);
             }
@@ -60,10 +57,8 @@ public class NodeActor extends AbstractBehavior<Command> {
         if (messageRegistry == null) {
             messageRegistry = MessageAble.registry();
         }
-
-        this.registerALocalActor(sharding, basePackages, roles);
-        this.registeredAgentActor(sharding,
-                messageRegistry == null ? List.of() : messageRegistry.all(), roles);
+        registerALocalActor(sharding, basePackages, roles);
+        registeredAgentActor(sharding, messageRegistry == null ? List.of() : messageRegistry.all(), roles);
     }
 
     private void registeredAgentActor(
@@ -71,51 +66,42 @@ public class NodeActor extends AbstractBehavior<Command> {
             List<RpcMessageSpec<? extends MessageLite>> specs,
             Set<String> roles
     ) {
-        specs.stream()
-                .map(RpcMessageSpec::roleClass)
-                .filter(Objects::nonNull)
-                .distinct()
-                .forEach(roleClass -> {
-                    Roles annotation = roleClass.getAnnotation(Roles.class);
-                    if (annotation == null) {
-                        return;
-                    }
-                    String messageRoles = annotation.value();
-                    if (!roles.contains(messageRoles)) {
-                        AkkaKit.entityRefForClusterSharding(sharding, messageRoles, roleClass);
-                    }
-                });
-
+        specs.stream().map(RpcMessageSpec::roleClass).filter(Objects::nonNull).distinct().forEach(roleClass -> {
+            Roles annotation = roleClass.getAnnotation(Roles.class);
+            if (annotation != null && !roles.contains(annotation.value())) {
+                AkkaKit.entityRefForClusterSharding(sharding, annotation.value(), roleClass);
+            }
+        });
     }
 
     private void registerALocalActor(ClusterSharding sharding, String[] basePackages, Set<String> roles) {
-        Set<Class<?>> locationActorClasses = ClassScanner.scanClasses(
-                basePackages,
-                aClass -> aClass.getSuperclass() == AbstractBehavior.class && aClass != NodeActor.class
-        );
-        for (Class<?> locationActorClass : locationActorClasses) {
-            Class<?> messageInterface = ClassUtil.findMessageInterface(locationActorClass);
-            if (messageInterface == null) continue;
+        Set<Class<?>> actorClasses = ClassScanner.scanClasses(basePackages, this::isConcreteActor);
+        for (Class<?> actorClass : actorClasses) {
+            Class<?> messageInterface = ClassUtil.findMessageInterface(actorClass);
+            if (messageInterface == null) {
+                continue;
+            }
             Roles annotation = messageInterface.getAnnotation(Roles.class);
-            if (annotation == null) continue;
-            String actorRole = annotation.value();
-            if (!roles.contains(actorRole)) continue;
-            AkkaKit.initClusterSharding(sharding, messageInterface, locationActorClass, actorRole);
+            if (annotation != null && roles.contains(annotation.value())) {
+                AkkaKit.initClusterSharding(sharding, messageInterface, actorClass, annotation.value());
+            }
         }
     }
 
-
-    public static Behavior<Command> create(GameFrameworkProperties properties) {
-        return Behaviors.setup(
-                context -> new NodeActor(context, properties)
-        );
+    private boolean isConcreteActor(Class<?> actorClass) {
+        return AbstractBehavior.class.isAssignableFrom(actorClass)
+                && actorClass != NodeActor.class
+                && actorClass != RpcActor.class
+                && !actorClass.isInterface()
+                && !Modifier.isAbstract(actorClass.getModifiers());
     }
 
+    public static Behavior<Command> create(GameFrameworkProperties properties) {
+        return Behaviors.setup(context -> new NodeActor(context, properties));
+    }
 
     @Override
     public Receive<Command> createReceive() {
         return newReceiveBuilder().build();
     }
 }
-
-

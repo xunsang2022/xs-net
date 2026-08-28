@@ -18,8 +18,13 @@ public class MessageAble {
         envelopeFactory = messageEnvelopeFactory;
     }
 
+    public static void initialize(RpcMessageRegistry messageRegistry) {
+        registry = messageRegistry;
+        envelopeFactory = null;
+    }
+
     public static boolean isInitialized() {
-        return registry != null && envelopeFactory != null;
+        return registry != null;
     }
 
     public static RpcMessageRegistry registry() {
@@ -46,7 +51,24 @@ public class MessageAble {
             throw new IllegalArgumentException("Unknown rpc number: " + rpcNum);
         }
         MessageLite payload = spec.parser().parseFrom(netMessage.getData());
-        return requireFactory().create(rpcNum, payload);
+        if (envelopeFactory == null) {
+            return spec.decode(payload);
+        }
+        return envelopeFactory.create(rpcNum, payload);
+    }
+
+    public static NetMessage toNetMessage(Object message) {
+        if (message instanceof RpcMessage rpcMessage) {
+            return toNetMessage(rpcMessage);
+        }
+        RpcMessageSpec<? extends MessageLite> spec = requireRegistry().findByDtoClass(message.getClass());
+        if (spec == null) {
+            throw new IllegalArgumentException("Unknown RPC DTO: " + message.getClass().getName());
+        }
+        return NetMessage.newBuilder()
+                .setRpcNum(spec.rpcNum())
+                .setData(ByteString.copyFrom(spec.encode(message).toByteArray()))
+                .build();
     }
 
     /// action message dto -> net message dto

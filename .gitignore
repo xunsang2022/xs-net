@@ -8,3 +8,15 @@ classes/
 target/
 .tools/
 .log/
+
+# Local editor state
+.trae/
+.idea/workspace.xml
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# .NET build output
+[Bb]in/
+[Oo]bj/

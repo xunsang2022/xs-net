@@ -8,8 +8,11 @@
     <file url="file://$PROJECT_DIR$/game-server/game-node-gateway/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/game-server/game-node-login/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/game-server/game-node-modules/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/game-server/game-rpc-contract/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/game-server/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/game-server/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/sdk-build/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/sdk-build/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/xs-net/src/main/java" charset="UTF-8" />
@@ -20,6 +23,10 @@
     <file url="file://$PROJECT_DIR$/xs-net/xs-net-core/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/xs-net/xs-net-message/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/xs-net/xs-net-message/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/xs-net/xs-net-rpc-maven-plugin/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/xs-net/xs-net-rpc-maven-plugin/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/xs-net/xs-net-sdk/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/xs-net/xs-net-sdk/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/xs-net/xs-net-tools/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/xs-net/xs-net-tools/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/xs-net/xs-net-tools/tool-all/src/main/java" charset="UTF-8" />

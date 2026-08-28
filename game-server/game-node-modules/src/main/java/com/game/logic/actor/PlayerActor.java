@@ -2,43 +2,37 @@ package com.game.logic.actor;
 
 import akka.actor.typed.Behavior;
 import akka.actor.typed.PostStop;
-import akka.actor.typed.javadsl.AbstractBehavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
 import akka.actor.typed.javadsl.StashBuffer;
 import akka.actor.typed.javadsl.TimerScheduler;
+import com.game.message.c2s.LogoutRequest;
+import com.game.message.s2c.LogoutResponse;
+import com.game.message.c2s.PlayerEnterCommand;
+import com.game.message.s2c.LoginResponse;
 import com.game.logic.context.LogicContext;
 import com.game.logic.dbsync.DBSyncEngine;
 import com.game.logic.player.PlayerState;
 import com.game.logic.redis.RedisStore;
 import com.game.message.actor.S2C;
 import com.game.message.actor.logic.PlayerMessage;
-import com.game.message.rpc.GameRpcEnvelope;
-import com.game.message.rpc.GameRpcMessages;
-import com.game.protocol.pb.CS_Logout;
-import com.game.protocol.pb.PlayerEnter;
-import com.game.protocol.pb.SC_Logout;
-import com.xs.core.akka.AkkaKit;
+import com.xs.core.actor.RpcActor;
+import com.game.message.routing.ChannelRoutable;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
-/**
- * Cluster sharded player entity on the logic node. State lives in Redis and is
- * written back to PostgreSQL by the db-sync service.
- */
 @Slf4j
-public class PlayerActor extends AbstractBehavior<PlayerMessage> {
+public class PlayerActor extends RpcActor<PlayerMessage> {
 
     private static final Object LOAD_TIMEOUT_KEY = new Object();
     private static final Object FLUSH_KEY = new Object();
     private static final long LOAD_TIMEOUT_MS = 3000L;
     private static final int STASH_CAPACITY = 512;
 
-    private final String entityId;
     private final StashBuffer<PlayerMessage> stash;
     private final TimerScheduler<PlayerMessage> timers;
     private final PlayerState state = new PlayerState();
@@ -46,6 +40,7 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
 
     private RedisStore redisStore;
     private String pendingPlayerName;
+    private String pendingChannelId;
     private boolean loaded;
     private boolean loadPending;
     private boolean destroyed;
@@ -56,8 +51,7 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
             StashBuffer<PlayerMessage> stash,
             TimerScheduler<PlayerMessage> timers
     ) {
-        super(context);
-        this.entityId = entityId;
+        super(context, entityId);
         this.stash = stash;
         this.timers = timers;
         this.syncIntervalMs = LogicContext.getSyncIntervalMs();
@@ -72,7 +66,8 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
     @Override
     public Receive<PlayerMessage> createReceive() {
         return newReceiveBuilder()
-                .onMessage(GameRpcEnvelope.class, this::onRpc)
+                .onMessage(PlayerEnterCommand.class, this::onPlayerEnterMessage)
+                .onMessage(LogoutRequest.class, this::onLogoutMessage)
                 .onMessage(FlushDirty.class, this::onFlushDirty)
                 .onMessage(LoadTimeout.class, this::onLoadTimeout)
                 .onMessage(LoadResult.class, this::onLoadResult)
@@ -80,51 +75,61 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
                 .build();
     }
 
-    private Behavior<PlayerMessage> onRpc(GameRpcEnvelope envelope) {
-        if (envelope.payload() instanceof PlayerEnter enter) {
-            return onPlayerEnter(envelope, enter);
+    private Behavior<PlayerMessage> onPlayerEnterMessage(PlayerEnterCommand command) {
+        if (!loaded && loadPending) {
+            stash.stash(command);
+            return this;
         }
-        if (envelope.payload() instanceof CS_Logout logout) {
-            return onLogout(logout);
-        }
-        log.warn("Unhandled rpc payload: {}", envelope.payload().getClass().getName());
+        onPlayerEnter(command);
         return this;
     }
 
-    private Behavior<PlayerMessage> onPlayerEnter(GameRpcEnvelope envelope, PlayerEnter msg) {
+    private Behavior<PlayerMessage> onLogoutMessage(LogoutRequest request) {
+        if (!loaded && loadPending) {
+            stash.stash(request);
+            return this;
+        }
+        LogoutResponse response = onLogout(request);
+        sendResponse(response, request);
+        return Behaviors.stopped();
+    }
+
+    private void onPlayerEnter(PlayerEnterCommand command) {
         if (!loaded && !loadPending) {
             loadPending = true;
-            pendingPlayerName = msg.hasPlayerName() ? msg.getPlayerName() : null;
-            state.setId(msg.getPlayerId());
-            state.setName(msg.getPlayerName());
+            pendingPlayerName = command.playerName();
+            pendingChannelId = command.channelId();
+            state.setId(command.playerId());
+            state.setName(command.playerName());
 
             try {
-                Map<String, String> cached = redisStore().load(entityId);
+                Map<String, String> cached = redisStore().load(entityId());
                 if (!cached.isEmpty()) {
-                    return finishLoad(msg.getPlayerId(), cached);
+                    finishLoad(command.playerId(), cached);
+                    return;
                 }
-            } catch (Exception e) {
-                log.warn("Failed to read player cache, requesting db load: playerId={}", entityId, e);
+            } catch (Exception exception) {
+                log.warn("Failed to read player cache, requesting db load: playerId={}", entityId(), exception);
             }
 
             timers.startSingleTimer(LOAD_TIMEOUT_KEY, new LoadTimeout(), Duration.ofMillis(LOAD_TIMEOUT_MS));
-            CompletableFuture<Map<String, String>> future =
-                    CompletableFuture.supplyAsync(() -> dbsyncEngine().loadOrCreate(msg.getPlayerId()));
+            CompletableFuture<Map<String, String>> future = CompletableFuture.supplyAsync(
+                    () -> dbsyncEngine().loadOrCreate(command.playerId())
+            );
             getContext().pipeToSelf(future, (fields, error) -> new LoadResult(fields, error));
-            return this;
+            return;
         }
 
         if (loaded) {
-            applyEnter(msg);
-            return this;
+            applyEnter(command);
+            return;
         }
 
-        stash.stash(envelope);
-        return this;
+        log.warn("Ignoring PlayerEnter while loading because RPC replay is not available: playerId={}", entityId());
     }
 
-    private void applyEnter(PlayerEnter msg) {
-        String playerName = msg.hasPlayerName() ? msg.getPlayerName() : null;
+    private void applyEnter(PlayerEnterCommand command) {
+        String playerName = command.playerName();
         if (playerName != null && !playerName.equals(state.getName())) {
             state.setName(playerName);
             state.markDirty(PlayerState.FIELD_NAME);
@@ -138,7 +143,8 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
         state.markDirty(PlayerState.FIELD_LAST_LOGIN_AT);
         state.markDirty(PlayerState.FIELD_UPDATED_AT);
         state.markDirty(PlayerState.FIELD_VERSION);
-        log.info("PlayerActor enter: playerId={}, channelId={}", entityId, msg.getChannelId());
+        log.info("PlayerActor enter: playerId={}, channelId={}", entityId(), command.channelId());
+        sendLoginResponse(command.playerId(), state.getName(), command.channelId());
     }
 
     private Behavior<PlayerMessage> finishLoad(Long playerId, Map<String, String> fields) {
@@ -163,19 +169,20 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
         state.markDirty(PlayerState.FIELD_VERSION);
 
         try {
-            redisStore().create(entityId, state);
-            if (state.hasDirtyFields() && redisStore().flushDirty(entityId, state)) {
-                state.clearDirty();
-            }
-        } catch (Exception e) {
-            log.error("Failed to write player state to Redis: playerId={}", entityId, e);
+            // create 已把全量 state 写入 Redis（HPUTALL + 进 online 集合），无需再 flushDirty，
+            // 直接清脏，避免登录热路径上的一次冗余 Redis 往返。
+            redisStore().create(entityId(), state);
+            state.clearDirty();
+        } catch (Exception exception) {
+            log.error("Failed to write player state to Redis: playerId={}", entityId(), exception);
             stash.clear();
             return Behaviors.stopped();
         }
 
         loaded = true;
         startFlushTimer();
-        log.info("PlayerActor loaded: playerId={}", entityId);
+        log.info("PlayerActor loaded: playerId={}", entityId());
+        sendLoginResponse(playerId, state.getName(), pendingChannelId);
         return stash.unstashAll(this);
     }
 
@@ -184,18 +191,18 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
             return this;
         }
         if (result.error != null || result.fields == null || result.fields.isEmpty()) {
-            log.error("Player load failed: playerId={}", entityId, result.error);
+            log.error("Player load failed: playerId={}", entityId(), result.error);
             timers.cancel(LOAD_TIMEOUT_KEY);
             loadPending = false;
             stash.clear();
             return Behaviors.stopped();
         }
-        return finishLoad(Long.parseLong(entityId), result.fields);
+        return finishLoad(Long.parseLong(entityId()), result.fields);
     }
 
-    private Behavior<PlayerMessage> onLoadTimeout(LoadTimeout msg) {
+    private Behavior<PlayerMessage> onLoadTimeout(LoadTimeout message) {
         if (!loaded && loadPending) {
-            log.error("Player load timed out: playerId={}", entityId);
+            log.error("Player load timed out: playerId={}", entityId());
             loadPending = false;
             stash.clear();
             return Behaviors.stopped();
@@ -203,38 +210,51 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
         return this;
     }
 
-    private Behavior<PlayerMessage> onFlushDirty(FlushDirty msg) {
+    private Behavior<PlayerMessage> onFlushDirty(FlushDirty message) {
         if (!loaded || !state.hasDirtyFields()) {
             return this;
         }
         try {
-            if (redisStore().flushDirty(entityId, state)) {
-                dbsyncEngine().submit(Long.parseLong(entityId), state.toHash(state.getDirtyFields()), state.getVersion());
+            if (redisStore().flushDirty(entityId(), state)) {
+                dbsyncEngine().submit(Long.parseLong(entityId()), state.toHash(), state.getVersion());
                 state.clearDirty();
             } else {
-                log.warn("Dirty flush failed: playerId={}, fields={}", entityId, state.getDirtyFields());
+                log.warn("Dirty flush failed: playerId={}, fields={}", entityId(), state.getDirtyFields());
             }
-        } catch (Exception e) {
-            log.warn("Dirty flush error: playerId={}", entityId, e);
+        } catch (Exception exception) {
+            log.warn("Dirty flush error: playerId={}", entityId(), exception);
         }
         return this;
     }
 
-    private Behavior<PlayerMessage> onLogout(CS_Logout msg) {
-        SC_Logout.Builder logout = SC_Logout.newBuilder();
-        if (msg.hasPlayerId()) {
-            logout.setPlayerId(msg.getPlayerId());
-        }
-        String sessionId = msg.hasSessionId() ? msg.getSessionId() : "";
-        if (msg.hasSessionId()) {
-            logout.setSessionId(msg.getSessionId());
-        }
-        AkkaKit.tell(S2C.class, GameRpcMessages.wrap(logout.build()), sessionId);
-        log.info("PlayerActor logout: playerId={}", entityId);
+    private LogoutResponse onLogout(LogoutRequest request) {
+        log.info("PlayerActor logout: playerId={}", entityId());
         if (loaded && !destroyed) {
             destroyState();
         }
-        return Behaviors.stopped();
+        return new LogoutResponse(request.playerId(), request.sessionId());
+    }
+
+    private void sendResponse(Object response, ChannelRoutable request) {
+        if (request.channelId() == null || request.channelId().isBlank()) {
+            log.warn("Cannot route RPC response without authenticated channel: playerId={}", entityId());
+            return;
+        }
+        if (!(response instanceof S2C)) {
+            log.warn("Response is not an S2C message: playerId={}, type={}", entityId(), response.getClass().getName());
+            return;
+        }
+        sendRpc(S2C.class, response, request.channelId());
+    }
+
+    /** 进服完成后向客户端回 SC_Login（登录成功回执）。 */
+    private void sendLoginResponse(Long playerId, String playerName, String channelId) {
+        if (channelId == null || channelId.isBlank()) {
+            log.warn("Cannot send SC_Login without channelId: playerId={}", playerId);
+            return;
+        }
+        LoginResponse response = new LoginResponse(0, String.valueOf(playerId), playerName, null);
+        sendRpc(S2C.class, response, channelId);
     }
 
     private void destroyState() {
@@ -244,19 +264,19 @@ public class PlayerActor extends AbstractBehavior<PlayerMessage> {
         state.markDirty(PlayerState.FIELD_ONLINE);
         state.markDirty(PlayerState.FIELD_UPDATED_AT);
         try {
-            destroyed = redisStore().destroy(entityId, state);
+            destroyed = redisStore().destroy(entityId(), state);
             if (destroyed) {
-                dbsyncEngine().submit(Long.parseLong(entityId), state.toHash(state.getDirtyFields()), state.getVersion());
+                dbsyncEngine().submit(Long.parseLong(entityId()), state.toHash(), state.getVersion());
             }
-        } catch (Exception e) {
+        } catch (Exception exception) {
             destroyed = false;
-            log.error("Failed to destroy player state: playerId={}", entityId, e);
+            log.error("Failed to destroy player state: playerId={}", entityId(), exception);
         }
     }
 
     private Behavior<PlayerMessage> onPostStop() {
         if (loaded && !destroyed) {
-            log.info("PlayerActor stopping, flushing state: playerId={}", entityId);
+            log.info("PlayerActor stopping, flushing state: playerId={}", entityId());
             destroyState();
         }
         return Behaviors.same();

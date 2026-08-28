@@ -1,149 +1,71 @@
-# XS-NET (游戏服务器框架)
+# XS-NET（游戏服务器框架）
 
-基于 Akka + Netty + ProtoBuf 的高性能游戏服务器框架。
+XS-NET 为游戏服务端提供 Akka Cluster Sharding、RPC 消息契约、Protobuf 信封及 SDK 生成基础设施。Gateway 的 Netty 网络接入属于 `game-server`，不在本框架模块内实现。
 
-## 技术栈
+## 模块结构
 
-| 技术 | 版本 | 说明 |
-|------|------|------|
-| Java | 21 | 开发语言 |
-| Akka | 2.8.5 | 分布式 Actor 模型 |
-| Netty | - | 网络通信框架（game-server 侧使用） |
-| Protobuf | 3.25.5 | 消息序列化 |
-| Spring | 7.0.1 | 轻量级容器 |
-| Lombok | 1.18.34 | 代码简化 |
-
-## 项目结构
-
-```
+```text
 xs-net/
-├── xs-net-core/          # 核心框架模块
-│   ├── src/main/
-│   │   ├── java/com/xs/core/
-│   │   │   ├── actor/            # Actor 相关
-│   │   │   │   ├── node/         # 节点 Actor
-│   │   │   │   │   ├── Command.java
-│   │   │   │   │   ├── NodeActor.java
-│   │   │   │   │   └── Roles.java
-│   │   │   │   ├── ActorRegisterManager.java  # Actor 注册管理
-│   │   │   │   └── NodeConfig.java           # 节点配置
-│   │   │   ├── akka/               # Akka 工具封装
-│   │   │   │   └── AkkaKit.java
-│   │   │   ├── config/             # 自动配置
-│   │   │   │   ├── GameFrameworkAutoConfiguration.java
-│   │   │   │   └── GameFrameworkProperties.java
-│   │   │   └── spring/             # Spring 工具类
-│   │   │       ├── ClassScanner.java
-│   │   │       ├── ClassUtil.java
-│   │   │       └── SpringUtil.java
-│   │   └── resources/
-│   │       └── application-framework-example.properties
-│   └── pom.xml
-├── xs-net-message/       # 消息协议模块
-│   ├── src/main/
-│   │   ├── java/com/xs/net/message/
-│   │   │   ├── annotation/         # 注解定义
-│   │   │   │   ├── ActionController.java
-│   │   │   │   └── ActionMessage.java
-│   │   │   ├── serializer/         # 序列化器
-│   │   │   │   └── NetMessageSerializer.java
-│   │   │   ├── INetMessage.java    # 消息接口
-│   │   │   ├── MessageAble.java    # 消息能力接口
-│   │   │   └── NetMessage.java     # 消息基类
-│   │   └── resources/
-│   │       └── application.conf    # Akka 配置
-│   └── pom.xml
-├── xs-net-tools/         # 工具模块
-│   └── pom.xml
-├── xs-net-all/           # 聚合打包模块
-│   └── pom.xml
-└── pom.xml
+├── xs-net-core/              # Akka 封装、Actor 扫描与分片初始化
+├── xs-net-message/           # NetMessage、RpcMessageSpec、注册表和编解码
+├── xs-net-rpc-maven-plugin/  # RPC 与 SDK 生成插件
+├── xs-net-sdk/               # SDK 打包模块
+├── xs-net-tools/             # 通用工具与 LuBan 配置工具
+└── xs-net-all/               # 框架聚合包
 ```
 
-## 核心模块说明
+## 核心能力
 
-### 1. xs-net-core（核心框架）
-提供游戏服务器的核心功能：
+### RPC 消息契约
 
-- **Actor 系统**: 基于 Akka 的 Actor 模型实现
-- **节点管理**: 支持多节点部署和通信
-- **自动配置**: Spring Boot 风格的条件装配
-- **类扫描**: 自动扫描和注册 Actor、Message
+`RpcMessageSpec` 描述一条协议的编号、Protobuf 类型、解析器、DTO 编解码器、目标角色、方向和路由要求。`RpcMessageRegistry` 提供按编号、Protobuf 类型和 DTO 类型的检索；`RpcMessageRegistryBuilder` 在注册时拒绝重复编号或类型。
 
-#### 核心组件
+`MessageAble` 在已初始化的注册表上完成 DTO、`RpcMessage` 与 `NetMessage` 的转换。跨节点的 Actor 消息以 `NetMessage` 序列化；本地分片则直接投递对象。
 
-| 组件 | 说明 |
-|------|------|
-| NodeActor | 节点 Actor 基类 |
-| ActorRegisterManager | Actor 注册管理器 |
-| NodeConfig | 节点配置 |
-| AkkaKit | Akka 工具封装 |
-| GameFrameworkAutoConfiguration | 框架自动配置 |
+### Actor 与分片
 
-### 2. xs-net-message（消息协议）
-定义消息通信协议和序列化机制：
+- `RpcActor<M>` 是基于 Akka Typed `AbstractBehavior<M>` 的基类，保存实体 ID 和消息注册表，并提供 `sendRpc`；
+- `AkkaKit` 负责初始化 Cluster Sharding、获取实体引用和投递消息；
+- 节点启动时扫描其 Actor 包。节点拥有的角色初始化为本地实体分片；不拥有的角色初始化为远程代理分片。
 
-- **注解驱动**: 通过 `@ActionController` 和 `@ActionMessage` 定义消息处理器
-- **序列化**: Protobuf 序列化
-- **消息路由**: 基于注解的自动路由分发
+远程投递的消息必须能转换为 `NetMessage`，以便 Akka 跨节点传输。
 
-#### 核心接口
+### SDK 与插件
 
-| 接口/类 | 说明 |
-|---------|------|
-| INetMessage | 网络消息接口 |
-| MessageAble | 消息能力接口 |
-| NetMessage | 消息基类 |
-| NetMessageSerializer | 消息序列化器 |
+`xs-net-rpc-maven-plugin` 根据 RPC 协议生成相关产物；`xs-net-sdk` 负责 SDK 打包。游戏侧的 Protobuf 协议位于 `game-server/game-message-action`，Unity 产物位于 `xs-net-sdk-unity`。
 
-### 3. xs-net-tools（工具集）
-集成各种工具库：
+## 使用的核心类型
 
-- ProtoBuf 序列化工具
-- LuBan 配置生成工具
+| 类型 | 职责 |
+|---|---|
+| `NetMessage` | Protobuf 网络信封，包含 `rpcNum` 和 `data` |
+| `RpcMessage` | 可路由 RPC 消息抽象 |
+| `RpcMessageSpec` | 单个 RPC 协议契约 |
+| `RpcMessageRegistry` | RPC 协议查询接口 |
+| `RpcMessageRegistryBuilder` | 构建并校验不可变注册表 |
+| `RpcPayloadCodec` | DTO 与 Protobuf payload 的双向编解码 |
+| `RpcActor` | 支持 RPC 投递的 Akka Typed Actor 基类 |
+| `AkkaKit` | Cluster Sharding 初始化与消息投递工具 |
 
-### 4. xs-net-all（聚合包）
-将所有模块打包，方便外部项目依赖使用。
+## 构建
 
-## 配置示例
+在仓库根目录执行：
 
-### application-framework-example.properties
-```properties
-# 启用 Actor 自动注册
-game.framework.actor-auto-register-enabled=true
-
-# 启用消息自动注册
-game.framework.message-auto-register-enabled=true
+```powershell
+.\mvnw.cmd -pl xs-net -am clean install
 ```
 
-### Akka 配置 (application.conf)
-```hocon
-akka {
-  actor {
-    provider = "remote"
-  }
-  remote {
-    artery {
-      enabled = on
-    }
-  }
-}
+需要构建整个工作区时执行：
+
+```powershell
+.\mvnw.cmd clean install
 ```
 
-## 快速开始
+仓库使用 JDK 21 和包装脚本定位的 Maven；不要依赖 PATH 中的全局 Maven。
 
-### 前置要求
-- JDK 21+
-- Maven 3.6+
+## 依赖使用
 
-### 构建项目
-```bash
-mvn clean install
-```
-
-### 使用方式
-
-在您的游戏服务器项目中添加依赖：
+框架聚合包的坐标为：
 
 ```xml
 <dependency>
@@ -153,86 +75,27 @@ mvn clean install
 </dependency>
 ```
 
-### 创建 Actor
+实际版本应与当前 reactor 保持一致。
+
+## Actor 示例
 
 ```java
-@ActionController
-public class PlayerActor extends NodeActor {
-    
-    @ActionMessage
-    public void handleLogin(CS_LOGIN login) {
-        // 处理登录逻辑
+public final class PlayerActor extends RpcActor<PlayerMessage> {
+    private PlayerActor(ActorContext<PlayerMessage> context, String entityId) {
+        super(context, entityId);
+    }
+
+    public static Behavior<PlayerMessage> create(String entityId) {
+        return Behaviors.setup(context -> new PlayerActor(context, entityId));
     }
 }
 ```
 
-## 特性
-
-### 1. 分布式支持
-- 基于 Akka Remoting 实现节点间通信
-- 支持 Aeron UDP 传输（可选）
-- 高性能消息路由
-
-### 2. 序列化协议
-- **ProtoBuf**: Protocol Buffers，跨语言支持
-- 可扩展的序列化器接口
-
-### 3. 注解驱动
-- `@ActionController`: 标记消息控制器
-- `@ActionMessage`: 标记消息处理方法
-- 自动扫描和注册
-
-### 4. Spring 集成
-- 自动配置支持
-- Spring Bean 管理
-- 条件装配
-
-## 架构设计
-
-```
-┌─────────────────────────────────────────┐
-│         Client (游戏客户端)              │
-└───────────────┬─────────────────────────┘
-                │ TCP/WebSocket
-┌───────────────▼─────────────────────────┐
-│   Gateway Node (网关节点)                │
-│   - 连接管理                             │
-│   - 协议编解码                           │
-│   - 消息路由                             │
-└───────────────┬─────────────────────────┘
-                │ Akka Remoting
-┌───────────────▼─────────────────────────┐
-│   Logic Node (逻辑节点)                  │
-│   - 业务逻辑处理                         │
-│   - Actor 消息处理                       │
-│   - 数据持久化                           │
-└─────────────────────────────────────────┘
-```
-
-## 依赖关系
-
-本项目为 `game-server` 提供底层框架支持：
-- 分布式通信能力
-- 消息协议定义
-- 序列化工具
-- Actor 模型基础设施
-
-## 开发指南
-
-### 1. 扩展序列化器
-实现 `NetMessageSerializer` 接口自定义序列化方式。
-
-### 2. 自定义 Actor
-继承 `NodeActor` 类，使用 `@ActionController` 注解。
-
-### 3. 定义消息
-实现 `INetMessage` 接口或使用 `@ActionMessage` 注解。
+Actor 的消息接口需由节点角色配置和 RPC 注册表共同约束。完整的注册、分片和网关路由流程见 [消息注册与消息处理流程.md](../docs/消息注册与消息处理流程.md)。
 
 ## 注意事项
 
-- 确保各个节点的 Akka 配置正确（特别是远程通信端口）
-- 生产环境建议配置 JVM 参数优化性能
-
-## 许可证
-
-MIT License
+- 远程分片消息必须具有可用的 RPC 契约；
+- 同一协议编号、Protobuf 类型和 DTO 类型不得重复注册；
+- Gateway wire protocol 为 `4 字节大端长度前缀 + NetMessage protobuf bytes`，长度前缀不属于 `xs-net-message` 的跨节点消息转换；
+- Logic 节点不使用 Spring Boot，Redis 与 Akka 由普通 Java 启动流程装配。

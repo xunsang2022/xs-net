@@ -3,7 +3,7 @@ package com.game.logic.redis;
 import com.game.logic.enums.LogLevel;
 import com.game.logic.enums.LogType;
 import com.game.logic.player.PlayerState;
-import com.game.protocol.pb.LogRecordMessage;
+import com.game.protocol.pb.LogRecordCommand;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.redis.core.HashOperations;
@@ -125,7 +125,7 @@ class RedisStoreTest {
         verify(streamOps).add(eq(RedisStore.LOG_EVENTS_KEY), captor.capture());
         Map<String, String> record = captor.getValue();
         assertNotNull(record.get("createTime"));
-        LogRecordMessage msg = LogRecordMessage.parseFrom(Base64.getDecoder().decode(record.get("payload")));
+        LogRecordCommand msg = LogRecordCommand.parseFrom(Base64.getDecoder().decode(record.get("payload")));
         assertEquals(LogLevel.HIGH.ordinal(), msg.getLevel());
         assertEquals(LogType.LOGIN.ordinal(), msg.getType());
         assertEquals("hello", msg.getMessage());

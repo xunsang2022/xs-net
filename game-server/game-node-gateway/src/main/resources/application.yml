@@ -1,24 +1,21 @@
-# Spring Boot Server Configuration
-server:
-  port: 8080
-
-# Spring Boot Actuator Configuration
-management:
-  endpoints:
-    web:
-      exposure:
-        include: "*"
-  endpoint:
-    health:
-      show-details: always
-
-# Logging Configuration
 logging:
   level:
     com.game: INFO
     akka: INFO
 
-# Auth proxy configuration
+# Actuator 管理端点（健康检查 / 指标）
+server:
+  port: 8080
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
 game:
   framework:
     actor-auto-register-enabled: true
@@ -28,14 +25,29 @@ game:
       - com.game.message.actor
     message-base-packages:
       - com.game.message.actor
-  auth:
-    login-base-url: http://127.0.0.1:8081
-    verify-mode: local
-    verify-timeout-ms: 2000
   netty:
-    port: 8082
+    port: 8082                # Netty TCP 客户端长连接端口
+    boss-threads: 1           # Acceptor 线程数（一般保持 1）
+    worker-threads: 64        # I/O 线程数（0 = 自动：2 * CPU 核数），32 核本机显式 64
+    business-threads: 64      # 业务线程池大小（0 = 自动：2 * CPU 核数），承载验签/解码/投递
+    backlog: 1024             # TCP accept 队列长度（SO_BACKLOG），避免高并发下连接被拒
+    max-frame-length: 65536   # 单帧最大长度（字节）
+    auth-timeout-seconds: 10  # 握手认证超时，超时未认证即踢出
+    max-connections-per-account: 1  # 同一账号/通道最大并发连接，超限拒绝新连接
+    reader-idle-timeout-seconds: 300 # 读空闲超时（应用层心跳检测），0 = 关闭
+    write-buffer-low-water-mark: 32768  # 出站缓冲低水位（字节）
+    write-buffer-high-water-mark: 65536  # 出站缓冲高水位（字节）
+  udp:
+    port: 2002                # UDP 客户端接入端口（轻量可靠 UDP）
+    window: 32                # 在途未确认包窗口大小
+    retry-interval-ms: 200    # 未确认包重传间隔（毫秒）
+    session-idle-timeout-seconds: 60  # 会话空闲超时，超时未活动即清理
+    auth-timeout-seconds: 10  # 握手认证超时
+    max-connections-per-account: 1    # 同一账号最大并发会话，超限拒绝
+    worker-threads: 32        # UDP I/O 线程数（0 = 自动：max(2, CPU 核数)）
+    business-threads: 64      # UDP 业务线程池大小（0 = 自动：2 * CPU 核数），承载解码/验签/回 ACK
+    max-frame-length: 65536   # 单包最大长度（字节）
 
-# JWT Configuration
 jwt:
   secret: xs-net-dev-jwt-secret-key-32bytes-minimum!!
   expiration: 86400000

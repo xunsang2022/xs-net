@@ -1,6 +1,5 @@
 package com.game.gateway.netty;
 
-import io.netty.channel.Channel;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -22,20 +21,20 @@ class ChannelRegistryTest {
 
     @Test
     void registerAndGet() {
-        Channel channel = mock(Channel.class);
-        ChannelRegistry.INSTANCE.register("ch-1", channel);
+        ClientEndpoint endpoint = mock(ClientEndpoint.class);
+        ChannelRegistry.INSTANCE.register("ch-1", endpoint);
 
         assertTrue(ChannelRegistry.INSTANCE.isRegistered("ch-1"));
-        assertSame(channel, ChannelRegistry.INSTANCE.get("ch-1"));
+        assertSame(endpoint, ChannelRegistry.INSTANCE.get("ch-1"));
         assertEquals(1, ChannelRegistry.INSTANCE.size());
     }
 
     @Test
-    void removeReturnsChannelAndClears() {
-        Channel channel = mock(Channel.class);
-        ChannelRegistry.INSTANCE.register("ch-1", channel);
+    void removeReturnsEndpointAndClears() {
+        ClientEndpoint endpoint = mock(ClientEndpoint.class);
+        ChannelRegistry.INSTANCE.register("ch-1", endpoint);
 
-        assertSame(channel, ChannelRegistry.INSTANCE.remove("ch-1"));
+        assertSame(endpoint, ChannelRegistry.INSTANCE.remove("ch-1"));
         assertFalse(ChannelRegistry.INSTANCE.isRegistered("ch-1"));
         assertNull(ChannelRegistry.INSTANCE.get("ch-1"));
         assertEquals(0, ChannelRegistry.INSTANCE.size());
@@ -43,8 +42,8 @@ class ChannelRegistryTest {
 
     @Test
     void registerOverwritesExisting() {
-        Channel first = mock(Channel.class);
-        Channel second = mock(Channel.class);
+        ClientEndpoint first = mock(ClientEndpoint.class);
+        ClientEndpoint second = mock(ClientEndpoint.class);
         ChannelRegistry.INSTANCE.register("ch-1", first);
         ChannelRegistry.INSTANCE.register("ch-1", second);
 
@@ -54,9 +53,9 @@ class ChannelRegistryTest {
 
     @Test
     void blankChannelIdIsIgnored() {
-        Channel channel = mock(Channel.class);
-        ChannelRegistry.INSTANCE.register("", channel);
-        ChannelRegistry.INSTANCE.register(null, channel);
+        ClientEndpoint endpoint = mock(ClientEndpoint.class);
+        ChannelRegistry.INSTANCE.register("", endpoint);
+        ChannelRegistry.INSTANCE.register(null, endpoint);
 
         assertEquals(0, ChannelRegistry.INSTANCE.size());
     }

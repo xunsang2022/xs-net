@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.game.logic.enums.LogLevel;
 import com.game.logic.enums.LogType;
-import com.game.protocol.pb.LogRecordMessage;
+import com.game.protocol.pb.LogRecordCommand;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
@@ -46,7 +46,7 @@ public class LogEventCodec {
     }
 
     private LogEvent fromProto(String payload, Map<String, String> fields) throws Exception {
-        LogRecordMessage msg = LogRecordMessage.parseFrom(Base64.getDecoder().decode(payload));
+        LogRecordCommand msg = LogRecordCommand.parseFrom(Base64.getDecoder().decode(payload));
         LogLevel level = msg.hasLevel() ? LogLevel.valueOf(msg.getLevel()) : LogLevel.MEDIUM;
         LogType type = msg.hasType() ? LogType.valueOf(msg.getType()) : LogType.OTHER;
         String content = asJson(msg.hasMessage() ? msg.getMessage() : "");

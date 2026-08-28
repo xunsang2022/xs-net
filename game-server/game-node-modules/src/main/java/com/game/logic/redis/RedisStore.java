@@ -3,7 +3,7 @@ package com.game.logic.redis;
 import com.game.logic.enums.LogLevel;
 import com.game.logic.enums.LogType;
 import com.game.logic.player.PlayerState;
-import com.game.protocol.pb.LogRecordMessage;
+import com.game.protocol.pb.LogRecordCommand;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.util.Base64;
@@ -67,7 +67,7 @@ public class RedisStore {
     }
 
     public void writeLog(Map<String, String> event) {
-        LogRecordMessage.Builder builder = LogRecordMessage.newBuilder();
+        LogRecordCommand.Builder builder = LogRecordCommand.newBuilder();
         Integer level = parseEnumOrdinal(event.get("level"), LogLevel.values());
         if (level != null) {
             builder.setLevel(level);

@@ -14,12 +14,17 @@
         <module name="tool-commons-lang4" />
         <module name="xs-net-message" />
         <module name="game-node-modules" />
+        <module name="xs-net-rpc-maven-plugin" />
         <module name="xs-net-core" />
+        <module name="tool-luBan-cfg" />
         <module name="game-client" />
         <module name="game-message-action" />
-        <module name="tool-luBan-cfg" />
       </profile>
     </annotationProcessing>
+    <bytecodeTargetLevel>
+      <module name="game-rpc-contract" target="21" />
+      <module name="sdk-build" target="1.5" />
+    </bytecodeTargetLevel>
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
@@ -28,6 +33,7 @@
       <module name="game-node-gateway" options="-parameters" />
       <module name="game-node-login" options="-parameters" />
       <module name="game-node-modules" options="-parameters" />
+      <module name="game-rpc-contract" options="-parameters" />
       <module name="game-server" options="-parameters" />
     </option>
   </component>

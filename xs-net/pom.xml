@@ -17,6 +17,8 @@
         <module>xs-net-tools</module>
         <module>xs-net-message</module>
         <module>xs-net-core</module>
+        <module>xs-net-rpc-maven-plugin</module>
+        <module>xs-net-sdk</module>
         <module>xs-net-all</module>
     </modules>
 
@@ -45,7 +47,6 @@
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- Akka Bill of Materials (BOM) - 统一管理所有Akka组件的版本 -->
             <dependency>
                 <groupId>com.typesafe.akka</groupId>
                 <artifactId>akka-bom_2.13</artifactId>
@@ -54,14 +55,12 @@
                 <scope>import</scope>
             </dependency>
 
-            <!-- Aeron媒体驱动 - 提供高性能UDP传输支持，用于Akka Artery的Aeron UDP模式 -->
             <dependency>
                 <groupId>io.aeron</groupId>
                 <artifactId>aeron-driver</artifactId>
                 <version>1.40.0</version>
             </dependency>
 
-            <!-- LMDB Java绑定 - 用于Akka分布式数据持久化 -->
             <dependency>
                 <groupId>org.lmdbjava</groupId>
                 <artifactId>lmdbjava</artifactId>

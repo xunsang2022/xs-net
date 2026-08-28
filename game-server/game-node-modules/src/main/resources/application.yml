@@ -15,9 +15,9 @@ game:
     password: ""
     batch-size: 100
     bgsave-seconds: 3
-    flush-concurrency: 4
+    flush-concurrency: 8
     connection-timeout-ms: 5000
-    max-pool-size: 10
+    max-pool-size: 50
     min-idle: 2
   akka:
     hostname: 127.0.0.1

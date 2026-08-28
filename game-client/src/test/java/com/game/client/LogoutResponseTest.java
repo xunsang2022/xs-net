@@ -8,7 +8,6 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -36,15 +35,15 @@ class LogoutResponseTest {
     }
 
     @Test
-    void logoutRequiresTcpConnection() {
+    void sendRequiresTcpConnection() {
         GameClientApplication.ClientSettings settings = new GameClientApplication.ClientSettings(
-                "http://127.0.0.1:8080", "127.0.0.1", 8082, 10001, "game-client", java.time.Duration.ofSeconds(1));
+                "127.0.0.1", 0, "127.0.0.1", 8082, java.time.Duration.ofSeconds(1));
         GameTestClient client = new GameTestClient(settings);
 
         IllegalStateException error = org.junit.jupiter.api.Assertions.assertThrows(
                 IllegalStateException.class,
-                () -> client.logout(new LoginSession(10001, "game-client", "token")));
+                () -> client.send(1001, java.util.Map.of()));
 
-        assertEquals("Connect to the gateway before logging out", error.getMessage());
+        assertEquals("Connect to the gateway before sending messages", error.getMessage());
     }
 }

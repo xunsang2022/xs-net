@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.game.logic.dbsync.LogEventCodec.LogEvent;
 import com.game.logic.enums.LogLevel;
 import com.game.logic.enums.LogType;
-import com.game.protocol.pb.LogRecordMessage;
+import com.game.protocol.pb.LogRecordCommand;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Timestamp;
@@ -21,7 +21,7 @@ class LogEventCodecTest {
 
     @Test
     void parsesProtoPayload() {
-        LogRecordMessage msg = LogRecordMessage.newBuilder()
+        LogRecordCommand msg = LogRecordCommand.newBuilder()
                 .setLevel(LogLevel.HIGH.ordinal())
                 .setType(LogType.LOGIN.ordinal())
                 .setMessage("hello")
@@ -57,7 +57,7 @@ class LogEventCodecTest {
 
     @Test
     void protoPayloadWithoutOptionalFieldsUsesDefaults() {
-        LogRecordMessage msg = LogRecordMessage.newBuilder().build();
+        LogRecordCommand msg = LogRecordCommand.newBuilder().build();
         Map<String, String> fields = new LinkedHashMap<>();
         fields.put("payload", Base64.getEncoder().encodeToString(msg.toByteArray()));
         fields.put("createTime", "1700000000000");

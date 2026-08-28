@@ -1,11 +1,9 @@
 package com.game.message;
 
-import com.game.message.rpc.GameRpcEnvelopeFactory;
+import com.game.message.s2c.LogoutResponse;
+import com.game.message.c2s.PlayerEnterCommand;
 import com.game.message.rpc.GameRpcMessages;
-import com.game.protocol.pb.PlayerEnter;
-import com.game.protocol.pb.SC_Logout;
 import com.xs.net.message.MessageAble;
-import com.xs.net.message.RpcMessage;
 import com.xs.net.message.pb.NetMessage;
 import com.xs.net.message.serializer.NetMessageSerializer;
 import org.junit.Before;
@@ -18,39 +16,30 @@ public class RpcTransportTest {
 
     @Before
     public void setUp() {
-        MessageAble.initialize(GameRpcMessages.INSTANCE, new GameRpcEnvelopeFactory());
+        MessageAble.initialize(GameRpcMessages.INSTANCE);
     }
 
     @Test
     public void loginToLogicTransport() throws Exception {
-        PlayerEnter enter = PlayerEnter.newBuilder()
-                .setPlayerId(42L)
-                .setPlayerName("alice")
-                .setChannelId("ch-1")
-                .build();
+        PlayerEnterCommand enter = new PlayerEnterCommand(42L, "alice", "ch-1");
 
-        RpcMessage decoded = transport(enter);
-        assertEquals(3003, decoded.rpcNum());
-        assertEquals(enter, decoded.payload());
+        Object decoded = transport(enter);
+        assertTrue(decoded instanceof PlayerEnterCommand);
+        assertEquals(enter, decoded);
     }
 
     @Test
     public void logicToGatewayTransport() throws Exception {
-        SC_Logout logout = SC_Logout.newBuilder()
-                .setPlayerId("42")
-                .setSessionId("s-1")
-                .build();
+        LogoutResponse logout = new LogoutResponse("42", "s-1");
 
-        RpcMessage decoded = transport(logout);
-        assertEquals(1003, decoded.rpcNum());
-        assertEquals(logout, decoded.payload());
+        Object decoded = transport(logout);
+        assertTrue(decoded instanceof LogoutResponse);
+        assertEquals(logout, decoded);
     }
 
-    private static RpcMessage transport(com.google.protobuf.MessageLite payload) throws Exception {
-        NetMessage netMessage = MessageAble.toNetMessage(GameRpcMessages.wrap(payload));
+    private static Object transport(Object message) throws Exception {
+        NetMessage netMessage = MessageAble.toNetMessage(message);
         NetMessageSerializer serializer = new NetMessageSerializer();
-        Object decoded = serializer.fromBinary(serializer.toBinary(netMessage));
-        assertTrue(decoded instanceof RpcMessage);
-        return (RpcMessage) decoded;
+        return serializer.fromBinary(serializer.toBinary(netMessage));
     }
 }

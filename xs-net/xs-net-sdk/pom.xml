@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.xs</groupId>
+        <artifactId>xs-net</artifactId>
+        <version>0.0.1</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>xs-net-sdk</artifactId>
+    <packaging>pom</packaging>
+    <name>xs-net-sdk</name>
+    <description>Generate Unity C# SDK package from RPC message definitions</description>
+
+    <!--
+      Unity C# SDK 生成选项（可被依赖方读取/覆盖）：
+        -Dgenerate.unity.sdk=false  关闭本模块的 C# SDK 生成（默认开启）
+        sdk.csharp.namespace        C# 代码命名空间
+        sdk.package.name/version    导出的 UPM 包名与版本
+      game-message-action 依赖本模块后，可在自身 pom 中覆盖这些属性，
+      并通过 -Pgenerate-unity-sdk 激活同名生成选项。
+    -->
+    <properties>
+        <protobuf.version>3.25.5</protobuf.version>
+        <protoc.classifier>windows-x86_64</protoc.classifier>
+        <sdk.package.name>com.xs.game.sdk</sdk.package.name>
+        <sdk.package.version>0.0.1</sdk.package.version>
+        <sdk.package.displayName>XS Net Game SDK</sdk.package.displayName>
+        <sdk.package.description>Generated C# SDK for Unity</sdk.package.description>
+        <sdk.csharp.namespace>Game.Message</sdk.csharp.namespace>
+    </properties>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>com.xs</groupId>
+                <artifactId>xs-net-rpc-maven-plugin</artifactId>
+                <version>0.0.6</version>
+                <executions>
+                    <execution>
+                        <id>generate-sdk-proto</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <sourceDirectories>
+                                <sourceDirectory>${project.basedir}/../../game-server/game-message-action/src/main/java</sourceDirectory>
+                                <sourceDirectory>${project.basedir}/../../game-server/game-node-modules/src/main/java</sourceDirectory>
+                            </sourceDirectories>
+                            <protoOutputDirectory>${project.build.directory}/generated-proto</protoOutputDirectory>
+                            <javaOutputDirectory>${project.build.directory}/generated-sources/rpc</javaOutputDirectory>
+                            <protoJavaPackage>com.game.protocol.pb</protoJavaPackage>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.xolstice.maven.plugins</groupId>
+                <artifactId>protobuf-maven-plugin</artifactId>
+                <version>0.6.1</version>
+                <configuration>
+                    <protocArtifact>com.google.protobuf:protoc:${protobuf.version}:exe:${protoc.classifier}</protocArtifact>
+                    <protoSourceRoot>${project.build.directory}/generated-proto</protoSourceRoot>
+                    <outputDirectory>${project.build.directory}/generated-sources/protobuf-java</outputDirectory>
+                    <clearOutputDirectory>true</clearOutputDirectory>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>download-protoc</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>create-unity-runtime-dir</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${project.build.directory}/unity-package/Runtime"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>generate-csharp-sdk</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>${user.home}/.m2/repository/com/google/protobuf/protoc/${protobuf.version}/protoc-${protobuf.version}-${protoc.classifier}.exe</executable>
+                            <arguments>
+                                <argument>--proto_path=${project.build.directory}/generated-proto</argument>
+                                <argument>--csharp_out=${project.build.directory}/unity-package/Runtime</argument>
+                                <argument>--csharp_opt=base_namespace=${sdk.csharp.namespace}</argument>
+                                <argument>${project.build.directory}/generated-proto/comment.proto</argument>
+                                <argument>${project.build.directory}/generated-proto/PlayerMessages.proto</argument>
+                                <argument>${project.build.directory}/generated-proto/rpc_routes.proto</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-unity-package-metadata</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/unity-package</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/src/main/unity</directory>
+                                    <filtering>true</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>3.7.1</version>
+                <configuration>
+                    <descriptors>
+                        <descriptor>${project.basedir}/src/assembly/unity-package.xml</descriptor>
+                    </descriptors>
+                    <appendAssemblyId>false</appendAssemblyId>
+                    <finalName>${sdk.package.name}-${sdk.package.version}</finalName>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>package-unity-sdk</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

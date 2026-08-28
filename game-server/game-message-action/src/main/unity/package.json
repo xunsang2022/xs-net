@@ -1,0 +1,10 @@
+{
+  "name": "${unity.sdk.package.name}",
+  "version": "${unity.sdk.package.version}",
+  "displayName": "${unity.sdk.package.displayName}",
+  "description": "${unity.sdk.package.description}",
+  "unity": "2021.3",
+  "author": {
+    "name": "XS Net"
+  }
+}
