@@ -18,6 +18,21 @@ public final class ChannelRegistry {
 
     private final ConcurrentHashMap<String, ClientEndpoint> endpoints = new ConcurrentHashMap<>();
 
+    /** 登录请求进入网关的入口时间戳（ns，按 sessionId/channelId），供 S2C 回包时计算网关内登录往返。 */
+    private final ConcurrentHashMap<String, Long> loginIngressNanos = new ConcurrentHashMap<>();
+
+    /** 记录一次登录请求进入网关的时间戳。 */
+    public void recordLoginIngress(String channelId, long nanoTime) {
+        if (channelId != null && !channelId.isBlank()) {
+            loginIngressNanos.put(channelId, nanoTime);
+        }
+    }
+
+    /** 取出并移除该 channelId 的登录入口时间戳；若无则返回 null。 */
+    public Long takeLoginIngress(String channelId) {
+        return channelId == null ? null : loginIngressNanos.remove(channelId);
+    }
+
     private ChannelRegistry() {
         // 在线连接数 Gauge：随注册表大小实时变化
         Metrics.gauge(METRIC_ONLINE, endpoints, ConcurrentHashMap::size);

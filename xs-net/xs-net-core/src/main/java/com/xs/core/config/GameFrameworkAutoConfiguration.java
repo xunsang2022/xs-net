@@ -1,7 +1,7 @@
 package com.xs.core.config;
 
-import akka.actor.typed.ActorSystem;
-import akka.cluster.sharding.typed.javadsl.ClusterSharding;
+import org.apache.pekko.actor.typed.ActorSystem;
+import org.apache.pekko.cluster.sharding.typed.javadsl.ClusterSharding;
 import com.xs.core.actor.node.NodeActor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -21,7 +21,7 @@ public class GameFrameworkAutoConfiguration {
      * 创建 ClusterSharding bean
      */
     @Bean
-    @ConditionalOnClass(name = "akka.cluster.sharding.typed.javadsl.ClusterSharding")
+    @ConditionalOnClass(name = "org.apache.pekko.cluster.sharding.typed.javadsl.ClusterSharding")
     public ClusterSharding clusterSharding(ActorSystem<Void> actorSystem) {
         return ClusterSharding.get(actorSystem);
     }
@@ -31,16 +31,16 @@ public class GameFrameworkAutoConfiguration {
      * NodeActor 将在 ActorRegisterManager 中通过 SpawnProtocol 创建
      */
     @Bean
-    @ConditionalOnClass(name = "akka.actor.typed.ActorSystem")
+    @ConditionalOnClass(name = "org.apache.pekko.actor.typed.ActorSystem")
     public ActorSystem<Void> actorSystem(GameFrameworkProperties  properties) {
-        akka.actor.typed.Behavior<Void> guardianBehavior = 
-            akka.actor.typed.javadsl.Behaviors.setup(context -> {
+        org.apache.pekko.actor.typed.Behavior<Void> guardianBehavior =
+            org.apache.pekko.actor.typed.javadsl.Behaviors.setup(context -> {
                 // 在守护者 Actor 中创建 NodeActor
                 context.spawn(
                     NodeActor.create(properties),
                     "node"
                 );
-                return akka.actor.typed.javadsl.Behaviors.empty();
+                return org.apache.pekko.actor.typed.javadsl.Behaviors.empty();
             });
         
         return ActorSystem.create(guardianBehavior, "game-system");

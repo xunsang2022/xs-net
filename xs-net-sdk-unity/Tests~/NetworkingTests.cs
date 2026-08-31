@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using Game.Message.Networking;
 using Xunit;
 
@@ -187,6 +190,35 @@ public class ReliableUdpTests
         int before = sent.Count;
         layer.RetryOutstanding();
         Assert.Equal(before + 2, sent.Count);
+    }
+
+    [Fact]
+    public async Task ConcurrentSendReceiveAndRetry_DoNotModifyCollectionsDuringIteration()
+    {
+        var errors = new ConcurrentQueue<Exception>();
+        var layer = new ReliableUdp(32)
+        {
+            SendAction = _ => { },
+            OnDeliver = _ => { }
+        };
+
+        var tasks = Enumerable.Range(0, 1000).Select(_ => Task.Run(() =>
+        {
+            try
+            {
+                layer.Send(A("payload"));
+                layer.RetryOutstanding();
+                layer.OnPacket(new Frame.Packet { Type = Frame.TypeAck, Ack = uint.MaxValue });
+            }
+            catch (Exception exception)
+            {
+                errors.Enqueue(exception);
+            }
+        }));
+
+        await Task.WhenAll(tasks);
+
+        Assert.Empty(errors);
     }
 
     private static byte[] A(string s) => Encoding.UTF8.GetBytes(s);

@@ -1,0 +1,80 @@
+services:
+  login:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.login
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET before starting the cluster}
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  gateway-1:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.gateway
+    environment:
+      PEKKO_HOSTNAME: gateway-1
+      PEKKO_PORT: "2001"
+      JAVA_TOOL_OPTIONS: -Dconfig.resource=application-cluster.conf
+      GM_TOKEN: ${GM_TOKEN:?set GM_TOKEN before starting the cluster}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET before starting the cluster}
+    ports:
+      - "8080:8080"
+      - "8082:8082"
+      - "2002:2002/udp"
+    depends_on:
+      redis:
+        condition: service_healthy
+      logic-1:
+        condition: service_started
+
+  gateway-2:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.gateway
+    environment:
+      PEKKO_HOSTNAME: gateway-2
+      PEKKO_PORT: "2003"
+      JAVA_TOOL_OPTIONS: -Dconfig.resource=application-cluster.conf
+      GM_TOKEN: ${GM_TOKEN:?set GM_TOKEN before starting the cluster}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET before starting the cluster}
+    depends_on:
+      redis:
+        condition: service_healthy
+      logic-1:
+        condition: service_started
+
+  logic-1:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.logic
+    environment:
+      PEKKO_HOSTNAME: logic-1
+      PEKKO_PORT: "4001"
+      JAVA_TOOL_OPTIONS: -Dconfig.resource=application-cluster.conf
+      REDIS_HOST: redis
+      DB_URL: jdbc:postgresql://postgres:5432/gamedb
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  logic-2:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.logic
+    environment:
+      PEKKO_HOSTNAME: logic-2
+      PEKKO_PORT: "4002"
+      JAVA_TOOL_OPTIONS: -Dconfig.resource=application-cluster.conf
+      REDIS_HOST: redis
+      DB_URL: jdbc:postgresql://postgres:5432/gamedb
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy

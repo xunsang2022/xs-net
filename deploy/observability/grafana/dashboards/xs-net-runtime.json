@@ -1,0 +1,38 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "xs-net-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "id": 1,
+      "targets": [{ "expr": "dbsync_dirty_size", "refId": "A" }],
+      "title": "Logic Dirty Queue",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "xs-net-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "id": 2,
+      "targets": [{ "expr": "sum(rate(dbsync_flush_failures_total[5m]))", "refId": "A" }],
+      "title": "DBSync Failures / Second",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "xs-net-prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "id": 3,
+      "targets": [{ "expr": "sum(gateway_online_connections)", "refId": "A" }],
+      "title": "Gateway Online Connections",
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 41,
+  "tags": ["xs-net"],
+  "title": "xs-net Runtime",
+  "uid": "xs-net-runtime",
+  "version": 1
+}

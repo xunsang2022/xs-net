@@ -31,8 +31,8 @@
         </dependency>
 
         <dependency>
-            <groupId>com.typesafe.akka</groupId>
-            <artifactId>akka-actor_2.13</artifactId>
+            <groupId>org.apache.pekko</groupId>
+            <artifactId>pekko-actor_2.13</artifactId>
         </dependency>
 
         <dependency>
@@ -53,8 +53,8 @@
         </dependency>
 
         <dependency>
-            <groupId>com.typesafe.akka</groupId>
-            <artifactId>akka-cluster-sharding-typed_2.13</artifactId>
+            <groupId>org.apache.pekko</groupId>
+            <artifactId>pekko-cluster-sharding-typed_2.13</artifactId>
         </dependency>
 
         <dependency>

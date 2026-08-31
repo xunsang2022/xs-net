@@ -34,6 +34,10 @@
             <artifactId>spring-data-redis</artifactId>
         </dependency>
         <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <dependency>
             <groupId>io.lettuce</groupId>
             <artifactId>lettuce-core</artifactId>
         </dependency>
@@ -66,40 +70,40 @@
         <!-- Akka Core Dependencies -->
         <!-- Akka Actor Typed - 提供Akka类型化Actor支持，用于构建类型安全的Actor系统 -->
         <dependency>
-            <groupId>com.typesafe.akka</groupId>
-            <artifactId>akka-actor-typed_2.13</artifactId>
-            <version>${akka.version}</version>
+            <groupId>org.apache.pekko</groupId>
+            <artifactId>pekko-actor-typed_2.13</artifactId>
+            <version>${pekko.version}</version>
         </dependency>
         <!-- Akka Cluster Typed - 提供类型化Akka集群支持，用于构建类型安全的集群应用 -->
         <dependency>
-            <groupId>com.typesafe.akka</groupId>
-            <artifactId>akka-cluster-typed_2.13</artifactId>
-            <version>${akka.version}</version>
+            <groupId>org.apache.pekko</groupId>
+            <artifactId>pekko-cluster-typed_2.13</artifactId>
+            <version>${pekko.version}</version>
         </dependency>
         <!-- Akka Cluster Sharding Typed - 提供类型化Akka集群分片支持，用于分布式实体管理 -->
         <dependency>
-            <groupId>com.typesafe.akka</groupId>
-            <artifactId>akka-cluster-sharding-typed_2.13</artifactId>
-            <version>${akka.version}</version>
+            <groupId>org.apache.pekko</groupId>
+            <artifactId>pekko-cluster-sharding-typed_2.13</artifactId>
+            <version>${pekko.version}</version>
         </dependency>
         <!-- Akka Remote - 提供Akka远程通信支持，用于节点间消息传递 -->
         <dependency>
-            <groupId>com.typesafe.akka</groupId>
-            <artifactId>akka-remote_2.13</artifactId>
-            <version>${akka.version}</version>
+            <groupId>org.apache.pekko</groupId>
+            <artifactId>pekko-remote_2.13</artifactId>
+            <version>${pekko.version}</version>
         </dependency>
         <!-- Akka SLF4J - 提供Akka日志与SLF4J的集成，用于日志记录 -->
         <dependency>
-            <groupId>com.typesafe.akka</groupId>
-            <artifactId>akka-slf4j_2.13</artifactId>
-            <version>${akka.version}</version>
+            <groupId>org.apache.pekko</groupId>
+            <artifactId>pekko-slf4j_2.13</artifactId>
+            <version>${pekko.version}</version>
         </dependency>
         
         <!-- Akka Serialization - 提供Akka序列化支持 -->
         <dependency>
-            <groupId>com.typesafe.akka</groupId>
-            <artifactId>akka-serialization-jackson_2.13</artifactId>
-            <version>${akka.version}</version>
+            <groupId>org.apache.pekko</groupId>
+            <artifactId>pekko-serialization-jackson_2.13</artifactId>
+            <version>${pekko.version}</version>
         </dependency>
         
         <!-- Protobuf Dependencies - 用于Protocol Buffers序列化 -->
@@ -133,7 +137,11 @@
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
         </dependency>
-        
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
         <!-- Test Dependencies -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -166,6 +174,23 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
                 <executions>
+                    <execution>
+                        <id>unpack-arthas</id>
+                        <phase>package</phase>
+                        <goals><goal>unpack</goal></goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>com.taobao.arthas</groupId>
+                                    <artifactId>arthas-packaging</artifactId>
+                                    <version>4.0.5</version>
+                                    <classifier>bin</classifier>
+                                    <type>zip</type>
+                                    <outputDirectory>${project.build.directory}/arthas</outputDirectory>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </execution>
                     <execution>
                         <id>copy-dependencies</id>
                         <phase>package</phase>

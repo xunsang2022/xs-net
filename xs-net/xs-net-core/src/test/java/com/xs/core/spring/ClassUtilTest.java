@@ -1,7 +1,7 @@
 package com.xs.core.actor;
 
-import akka.actor.typed.javadsl.AbstractBehavior;
-import akka.actor.typed.javadsl.ActorContext;
+import org.apache.pekko.actor.typed.javadsl.AbstractBehavior;
+import org.apache.pekko.actor.typed.javadsl.ActorContext;
 import com.xs.core.spring.ClassUtil;
 import junit.framework.TestCase;
 
@@ -26,7 +26,7 @@ public class ClassUtilTest extends TestCase {
         }
 
         @Override
-        public akka.actor.typed.javadsl.Receive<TestMessage> createReceive() {
+        public org.apache.pekko.actor.typed.javadsl.Receive<TestMessage> createReceive() {
             return newReceiveBuilder().build();
         }
     }

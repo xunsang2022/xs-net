@@ -47,7 +47,8 @@ namespace Game.Message.Networking
 
             // 握手：发 HELLO(JWT)
             byte[] token = Encoding.UTF8.GetBytes(jwt ?? string.Empty);
-            client.Send(Frame.EncodeUdpPacket(Frame.TypeHello, 0, 0, token), 0);
+            byte[] hello = Frame.EncodeUdpPacket(Frame.TypeHello, 0, 0, token);
+            client.Send(hello, hello.Length);
 
             _retryTimer = new Timer(_ => _reliable.RetryOutstanding(), null,
                 Config.RetryIntervalMs, Config.RetryIntervalMs);
@@ -88,7 +89,7 @@ namespace Game.Message.Networking
         {
             if (_client != null)
             {
-                _client.Send(datagram, 0);
+                _client.Send(datagram, datagram.Length);
             }
         }
 

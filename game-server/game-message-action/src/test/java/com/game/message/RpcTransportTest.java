@@ -2,7 +2,12 @@ package com.game.message;
 
 import com.game.message.s2c.LogoutResponse;
 import com.game.message.c2s.PlayerEnterCommand;
+import com.game.message.management.GmKickPlayerCommand;
+import com.game.message.management.GmKickPlayerRequest;
 import com.game.message.rpc.GameRpcMessages;
+import com.game.message.scene.PlayerSceneChanged;
+import com.game.message.scene.SceneJoinCommand;
+import com.game.message.scene.SceneLeaveCommand;
 import com.xs.net.message.MessageAble;
 import com.xs.net.message.pb.NetMessage;
 import com.xs.net.message.serializer.NetMessageSerializer;
@@ -35,6 +40,18 @@ public class RpcTransportTest {
         Object decoded = transport(logout);
         assertTrue(decoded instanceof LogoutResponse);
         assertEquals(logout, decoded);
+    }
+
+    @Test
+    public void managementAndSceneMessagesTransportBetweenNodes() throws Exception {
+        assertEquals(new GmKickPlayerRequest("request-1", 42L, "operator", "reason", 100L),
+                transport(new GmKickPlayerRequest("request-1", 42L, "operator", "reason", 100L)));
+        assertEquals(new GmKickPlayerCommand("request-1", "operator", "reason", 100L),
+                transport(new GmKickPlayerCommand("request-1", "operator", "reason", 100L)));
+        assertEquals(new SceneJoinCommand(42L), transport(new SceneJoinCommand(42L)));
+        assertEquals(new SceneLeaveCommand(42L), transport(new SceneLeaveCommand(42L)));
+        assertEquals(new PlayerSceneChanged("scene-1", true),
+                transport(new PlayerSceneChanged("scene-1", true)));
     }
 
     private static Object transport(Object message) throws Exception {

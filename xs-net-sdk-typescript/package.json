@@ -1,0 +1,31 @@
+{
+  "name": "@xs-net/game-sdk-typescript",
+  "version": "0.0.1",
+  "description": "TypeScript client SDK for XS Net",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "files": ["dist", "proto", "README.md"],
+  "scripts": {
+    "sync-proto": "node scripts/sync-proto.mjs",
+    "generate": "npm run sync-proto && node scripts/generate-proto.mjs",
+    "typecheck": "npm run generate && tsc --noEmit",
+    "build": "npm run generate && tsc",
+    "test": "npm run generate && vitest run"
+  },
+  "dependencies": {
+    "protobufjs": "^7.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "ts-proto": "^2.7.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

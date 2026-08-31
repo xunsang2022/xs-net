@@ -25,8 +25,8 @@
     </properties>
     <dependencies>
         <dependency>
-            <groupId>com.typesafe.akka</groupId>
-            <artifactId>akka-actor-typed_2.13</artifactId>
+            <groupId>org.apache.pekko</groupId>
+            <artifactId>pekko-actor-typed_2.13</artifactId>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -41,8 +41,8 @@
             <artifactId>spring-context</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.typesafe.akka</groupId>
-            <artifactId>akka-cluster-sharding-typed_2.13</artifactId>
+            <groupId>org.apache.pekko</groupId>
+            <artifactId>pekko-cluster-sharding-typed_2.13</artifactId>
         </dependency>
         <dependency>
             <groupId>com.xs</groupId>

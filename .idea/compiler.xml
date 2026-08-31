@@ -17,11 +17,11 @@
         <module name="xs-net-rpc-maven-plugin" />
         <module name="xs-net-core" />
         <module name="tool-luBan-cfg" />
-        <module name="game-client" />
         <module name="game-message-action" />
       </profile>
     </annotationProcessing>
     <bytecodeTargetLevel>
+      <module name="game-client" target="21" />
       <module name="game-rpc-contract" target="21" />
       <module name="sdk-build" target="1.5" />
     </bytecodeTargetLevel>

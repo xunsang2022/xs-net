@@ -2,14 +2,6 @@ package com.game.gateway.netty;
 
 import com.game.comment.util.JwtUtil;
 import com.game.gateway.config.UdpConfig;
-import com.game.message.actor.logic.PlayerMessage;
-import com.game.message.c2s.LoginRequest;
-import com.game.message.c2s.PlayerEnterCommand;
-import com.game.message.rpc.GameRpcMessages;
-import com.google.protobuf.MessageLite;
-import com.xs.core.akka.AkkaKit;
-import com.xs.net.message.RpcMessageSpec;
-import com.xs.net.message.pb.NetMessage;
 import io.jsonwebtoken.Claims;
 import io.micrometer.core.instrument.Metrics;
 import io.netty.buffer.Unpooled;
@@ -41,6 +33,7 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
     private final UdpConfig config;
     private final ExecutorService businessExecutor;
     private final ConcurrentMap<InetSocketAddress, UdpSession> sessions = new ConcurrentHashMap<>();
+    private final GatewayMessageRouter router = new GatewayMessageRouter();
 
     public UdpAuthHandler(JwtUtil jwtUtil, UdpConfig config, ExecutorService businessExecutor) {
         this.jwtUtil = jwtUtil;
@@ -113,28 +106,8 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
     /** 可靠层交付的上行 DATA 消息（NetMessage 字节）→ 解码并路由 Logic。 */
     private void handleGameMessage(byte[] body) {
         try {
-            NetMessage netMessage = NetMessage.parseFrom(body);
-            RpcMessageSpec<? extends MessageLite> spec = GameRpcMessages.INSTANCE.find(netMessage.getRpcNum());
-            if (spec == null) {
-                log.warn("Unknown rpcNum: {}", netMessage.getRpcNum());
-                return;
-            }
-            MessageLite payload = spec.parser().parseFrom(netMessage.getData());
-            Object actionMessage = spec.decode(payload);
-            String playerId = AuthHandler.extractPlayerId(actionMessage.getClass(), actionMessage);
-            if (playerId == null || playerId.isBlank()) {
-                log.warn("Message without playerId, rpcNum={}", netMessage.getRpcNum());
-                return;
-            }
             Metrics.counter(METRIC_C2S_MESSAGES).increment();
-            // CS_Login（LoginRequest）未实现 PlayerMessage，需转换为内部 PlayerEnterCommand 再路由到 PlayerActor
-            if (actionMessage instanceof LoginRequest login) {
-                PlayerEnterCommand cmd = new PlayerEnterCommand(
-                        Long.parseLong(login.playerId()), login.playerName(), login.sessionId());
-                AkkaKit.tell(PlayerMessage.class, cmd, playerId);
-                return;
-            }
-            AkkaKit.tell(PlayerMessage.class, (PlayerMessage) actionMessage, playerId);
+            router.route(body);
         } catch (Exception e) {
             log.error("Failed to handle UDP game message", e);
         }

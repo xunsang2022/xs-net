@@ -1,0 +1,7 @@
+site_name: xs-net
+docs_dir: docs
+theme:
+  name: material
+nav:
+  - Home: index.md
+  - Quick Start: quickstart.md

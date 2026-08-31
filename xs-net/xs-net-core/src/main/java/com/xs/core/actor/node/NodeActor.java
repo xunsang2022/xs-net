@@ -1,12 +1,12 @@
 package com.xs.core.actor.node;
 
-import akka.actor.typed.ActorSystem;
-import akka.actor.typed.Behavior;
-import akka.actor.typed.javadsl.AbstractBehavior;
-import akka.actor.typed.javadsl.ActorContext;
-import akka.actor.typed.javadsl.Behaviors;
-import akka.actor.typed.javadsl.Receive;
-import akka.cluster.sharding.typed.javadsl.ClusterSharding;
+import org.apache.pekko.actor.typed.ActorSystem;
+import org.apache.pekko.actor.typed.Behavior;
+import org.apache.pekko.actor.typed.javadsl.AbstractBehavior;
+import org.apache.pekko.actor.typed.javadsl.ActorContext;
+import org.apache.pekko.actor.typed.javadsl.Behaviors;
+import org.apache.pekko.actor.typed.javadsl.Receive;
+import org.apache.pekko.cluster.sharding.typed.javadsl.ClusterSharding;
 import com.google.protobuf.MessageLite;
 import com.xs.core.actor.RpcActor;
 import com.xs.core.akka.AkkaKit;

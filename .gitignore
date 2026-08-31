@@ -20,3 +20,9 @@ __pycache__/
 # .NET build output
 [Bb]in/
 [Oo]bj/
+
+# Generated multi-client SDK sources
+xs-net-sdk-typescript/generated/
+xs-net-sdk-typescript/dist/
+xs-net-sdk-cpp/generated/
+node_modules/

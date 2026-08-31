@@ -1,6 +1,6 @@
 package com.xs.core.spring;
 
-import akka.actor.typed.javadsl.AbstractBehavior;
+import org.apache.pekko.actor.typed.javadsl.AbstractBehavior;
 import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.ParameterizedType;

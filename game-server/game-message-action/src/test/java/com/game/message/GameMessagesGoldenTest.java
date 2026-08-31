@@ -82,7 +82,7 @@ public class GameMessagesGoldenTest {
             assertNotNull(spec.messageClass());
             assertNotNull(spec.parser());
         }
-        assertEquals(8, GameRpcMessages.INSTANCE.all().size());
+        assertEquals(Set.of(999, 1000, 1001, 1002, 1003, 2100, 2101, 3003, 3004, 3005, 3006, 3007, 3008), rpcNums);
         assertNotNull(GameRpcMessages.INSTANCE.find(1000));
         assertEquals(1003, GameRpcMessages.INSTANCE.find(1003).rpcNum());
     }
@@ -92,9 +92,16 @@ public class GameMessagesGoldenTest {
         assertEquals(1001, RpcRoute.RPC_CS_LOGOUT.getNumber());
         assertEquals(1003, RpcRoute.RPC_SC_LOGOUT.getNumber());
         assertEquals(3003, RpcRoute.RPC_PLAYER_ENTER_COMMAND.getNumber());
+        assertEquals(3004, RpcRoute.RPC_CS_GM_KICK_PLAYER.getNumber());
+        assertEquals(3005, RpcRoute.RPC_GM_KICK_PLAYER_COMMAND.getNumber());
+        assertEquals(3006, RpcRoute.RPC_SCENE_JOIN_COMMAND.getNumber());
+        assertEquals(3007, RpcRoute.RPC_SCENE_LEAVE_COMMAND.getNumber());
+        assertEquals(3008, RpcRoute.RPC_PLAYER_SCENE_CHANGED.getNumber());
         assertEquals(RpcRoute.RPC_CS_LOGOUT, RpcRoute.forNumber(1001));
         assertEquals(RpcRoute.RPC_SC_LOGOUT, RpcRoute.forNumber(1003));
         assertEquals(RpcRoute.RPC_PLAYER_ENTER_COMMAND, RpcRoute.forNumber(3003));
+        assertEquals(RpcRoute.RPC_CS_GM_KICK_PLAYER, RpcRoute.forNumber(3004));
+        assertEquals(RpcRoute.RPC_PLAYER_SCENE_CHANGED, RpcRoute.forNumber(3008));
     }
 
     @Test

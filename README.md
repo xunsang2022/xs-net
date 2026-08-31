@@ -1,14 +1,13 @@
 # xs-net
 
-Java 21 多模块游戏服务端工程，包含底层 RPC/Actor 框架、游戏服务节点和联调客户端。
+Java 21 多模块游戏服务端工程，包含底层 RPC/Actor 框架和游戏服务节点。
 
 ## 模块
 
-项目根目录统一聚合以下三个 Maven 工程：
+项目根目录统一聚合以下两个 Maven 工程：
 
 - `xs-net`：Akka、RPC 消息注册、SDK 和构建插件等底层框架；
 - `game-server`：Gateway、Login 和非 Spring Boot Logic 节点；
-- `game-client`：用于联调 Gateway HTTP/TCP 接口的测试客户端。
 
 ## 构建
 

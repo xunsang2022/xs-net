@@ -2,14 +2,6 @@ package com.game.gateway.netty;
 
 import com.game.comment.util.JwtUtil;
 import com.game.gateway.config.NettyConfig;
-import com.game.message.actor.logic.PlayerMessage;
-import com.game.message.c2s.LoginRequest;
-import com.game.message.c2s.PlayerEnterCommand;
-import com.game.message.rpc.GameRpcMessages;
-import com.google.protobuf.MessageLite;
-import com.xs.core.akka.AkkaKit;
-import com.xs.net.message.RpcMessageSpec;
-import com.xs.net.message.pb.NetMessage;
 import io.jsonwebtoken.Claims;
 import io.micrometer.core.instrument.Metrics;
 import io.netty.buffer.ByteBuf;
@@ -19,10 +11,7 @@ import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.channel.EventLoop;
 import lombok.extern.slf4j.Slf4j;
 
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -40,11 +29,9 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
     private static final String METRIC_CONN_REJECTED = "gateway.connection.rejected";
     private static final String METRIC_C2S_MESSAGES = "gateway.c2s.messages";
 
-    // 缓存各消息类型的 playerId() 方法，避免每条消息反射 getMethod（高频热点）
-    private static final ConcurrentMap<Class<?>, Method> PLAYER_ID_METHODS = new ConcurrentHashMap<>();
-
     private final JwtUtil jwtUtil;
     private final NettyConfig config;
+    private final GatewayMessageRouter router = new GatewayMessageRouter();
 
     private boolean authenticated;
     private String channelId;
@@ -122,28 +109,8 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
         try {
             byte[] body = new byte[msg.readableBytes()];
             msg.readBytes(body);
-            NetMessage netMessage = NetMessage.parseFrom(body);
-            RpcMessageSpec<? extends MessageLite> spec = GameRpcMessages.INSTANCE.find(netMessage.getRpcNum());
-            if (spec == null) {
-                log.warn("Unknown rpcNum: {}", netMessage.getRpcNum());
-                return;
-            }
-            MessageLite payload = spec.parser().parseFrom(netMessage.getData());
-            Object actionMessage = spec.decode(payload);
-            String playerId = extractPlayerId(actionMessage.getClass(), actionMessage);
-            if (playerId == null || playerId.isBlank()) {
-                log.warn("Message without playerId, rpcNum={}", netMessage.getRpcNum());
-                return;
-            }
             Metrics.counter(METRIC_C2S_MESSAGES).increment();
-            // CS_Login（LoginRequest）未实现 PlayerMessage，需转换为内部 PlayerEnterCommand 再路由到 PlayerActor
-            if (actionMessage instanceof LoginRequest login) {
-                PlayerEnterCommand cmd = new PlayerEnterCommand(
-                        Long.parseLong(login.playerId()), login.playerName(), login.sessionId());
-                AkkaKit.tell(PlayerMessage.class, cmd, playerId);
-                return;
-            }
-            AkkaKit.tell(PlayerMessage.class, (PlayerMessage) actionMessage, playerId);
+            router.route(body);
         } catch (Exception e) {
             log.error("Failed to handle game message, closing channel: channelId={}", channelId, e);
             ctx.close();
@@ -186,21 +153,6 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
      * <p>Method 采用缓存，避免每条消息都执行 {@code getClass().getMethod()}。</p>
      */
     static String extractPlayerId(Class<?> type, Object payload) {
-        try {
-            Method method = PLAYER_ID_METHODS.computeIfAbsent(type, t -> {
-                try {
-                    return t.getMethod("playerId");
-                } catch (NoSuchMethodException e) {
-                    return null;
-                }
-            });
-            if (method == null) {
-                return null;
-            }
-            Object playerId = method.invoke(payload);
-            return playerId == null ? null : playerId.toString();
-        } catch (Exception e) {
-            return null;
-        }
+        return GatewayMessageRouter.extractPlayerId(type, payload);
     }
 }

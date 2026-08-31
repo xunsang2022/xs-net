@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package game.message;
+
+option java_multiple_files = true;
+option java_package = "com.game.protocol.pb";
+
+// SceneJoinCommand = 3006
+message SceneJoinCommand {
+  optional int64 player_id = 1;
+}
+
+// SceneLeaveCommand = 3007
+message SceneLeaveCommand {
+  optional int64 player_id = 1;
+}

@@ -1,16 +1,17 @@
 package com.xs.core.akka;
 
-import akka.actor.typed.ActorSystem;
-import akka.actor.typed.Behavior;
-import akka.actor.typed.Props;
-import akka.actor.typed.javadsl.Behaviors;
-import akka.cluster.sharding.typed.javadsl.ClusterSharding;
-import akka.cluster.sharding.typed.javadsl.Entity;
-import akka.cluster.sharding.typed.javadsl.EntityContext;
-import akka.cluster.sharding.typed.javadsl.EntityRef;
-import akka.cluster.sharding.typed.javadsl.EntityTypeKey;
+import org.apache.pekko.actor.typed.ActorSystem;
+import org.apache.pekko.actor.typed.Behavior;
+import org.apache.pekko.actor.typed.Props;
+import org.apache.pekko.actor.typed.javadsl.Behaviors;
+import org.apache.pekko.cluster.sharding.typed.javadsl.ClusterSharding;
+import org.apache.pekko.cluster.sharding.typed.javadsl.Entity;
+import org.apache.pekko.cluster.sharding.typed.javadsl.EntityContext;
+import org.apache.pekko.cluster.sharding.typed.javadsl.EntityRef;
+import org.apache.pekko.cluster.sharding.typed.javadsl.EntityTypeKey;
 import com.xs.net.message.MessageAble;
 import com.xs.net.message.RpcMessage;
+import com.xs.net.message.pb.NetMessage;
 
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
@@ -26,9 +27,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @UtilityClass
 public class AkkaKit {
     /** 分片实体专用调度器：实体 Actor 会做阻塞式 Redis 访问，用大容量线程池提升并发吞吐。 */
-    public static final String ENTITY_DISPATCHER = "akka.actor.xs-entity-dispatcher";
+    public static final String ENTITY_DISPATCHER = "pekko.actor.xs-entity-dispatcher";
 
-    private static final Set<Class<?>> LOCAL = ConcurrentHashMap.newKeySet();
     private static final Map<Class<?>, EntityTypeKey<?>> ENTITY_TYPE_KEYS = new ConcurrentHashMap<>();
     private static final Map<Class<?>, Method> CREATE_METHODS = new ConcurrentHashMap<>();
     private static volatile ClusterSharding clusterSharding;
@@ -56,7 +56,9 @@ public class AkkaKit {
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static void tellToRole(Class<?> roleClass, Object message, String entityId) {
         EntityRef entityRef = getClusterSharding().entityRefFor(entityTypeKey((Class) roleClass), entityId);
-        Object deliveredMessage = LOCAL.contains(roleClass) ? message : MessageAble.toNetMessage(message);
+        // Entity placement can change at runtime. Always use the protocol envelope so a local
+        // sender cannot accidentally deliver a non-serializable DTO to a remote shard.
+        Object deliveredMessage = message instanceof NetMessage ? message : MessageAble.toNetMessage(message);
         entityRef.tell(deliveredMessage);
     }
 
@@ -76,7 +78,6 @@ public class AkkaKit {
         sharding.init(Entity.of(typeKey, entityContext -> createEntityContext(entityContext, actorClass))
                 .withRole(roles)
                 .withEntityProps(Props.empty().withDispatcherFromConfig(ENTITY_DISPATCHER)));
-        LOCAL.add(actorCmdClass);
         log.info("初始化集群 Actor 实例 {} {}", actorCmdClass.getSimpleName(), roles);
     }
 
@@ -106,7 +107,7 @@ public class AkkaKit {
     public static Set<String> getCurrentNodeRoles(ActorSystem<?> system) {
         Set<String> roles = new HashSet<>();
         try {
-            scala.collection.Iterator<String> iterator = akka.cluster.Cluster.get(system).selfRoles().iterator();
+            scala.collection.Iterator<String> iterator = org.apache.pekko.cluster.Cluster.get(system).selfRoles().iterator();
             while (iterator.hasNext()) {
                 roles.add(iterator.next());
             }

@@ -28,7 +28,7 @@ flowchart LR
     Client -- "TCP · protobuf" --> Netty
     Channel -- "Netty 写回" --> Client
     GW -- "HTTP · JWT" --> Login
-    Netty <-- "Akka Cluster · protobuf" --> Player
+    Netty <-- "Pekko Cluster · protobuf" --> Player
     Player -- "S2C" --> Channel
     Player -- "Redis" --> Redis
     DBSync -- "批量 UPSERT + version" --> PG
@@ -41,7 +41,7 @@ flowchart LR
 
 1. 客户端连接 Gateway 的 TCP 8082，首个帧发送 UTF-8 JWT；认证通过后，Gateway 将 JWT 中的 `cid` 绑定到 Netty Channel。
 2. 后续游戏消息的 wire protocol 是 `4 字节大端长度前缀 + NetMessage protobuf 字节`。`NetMessage` 内含 `rpcNum` 与 `data`。
-3. Gateway 根据 `rpcNum` 查找协议契约，解码 `data`，提取 `playerId` 后通过 Akka Cluster Sharding 投递到 Logic 的 `PlayerActor`。
+3. Gateway 根据 `rpcNum` 查找协议契约，解码 `data`，提取 `playerId` 后通过 Pekko Cluster Sharding 投递到 Logic 的 `PlayerActor`。
 
 ### 下行：Logic 到客户端
 
@@ -70,7 +70,7 @@ flowchart LR
 |---|---|---|
 | Java | 21 | 开发语言 |
 | Spring Boot | 4.0.0 | Gateway / Login Web 框架 |
-| Akka | 2.8.5 | Cluster + Sharding，Artery/Aeron UDP 传输 |
+| Apache Pekko | 1.1.5 | Cluster + Sharding，Artery/Aeron UDP 传输 |
 | Netty | 4.1.115 | Gateway TCP 长连接 |
 | Protobuf | 3.25.5 | `NetMessage` 信封及消息序列化 |
 | Redis | - | Logic 运行时状态和 Streams |
@@ -82,20 +82,20 @@ flowchart LR
 
 | 模块 | 说明 |
 |---|---|
-| `xs-net/xs-net-core` | Akka 封装、`RpcActor`、分片初始化与 Actor 创建缓存 |
+| `xs-net/xs-net-core` | Pekko 封装、`RpcActor`、分片初始化与 Actor 创建缓存 |
 | `xs-net/xs-net-message` | `NetMessage` 信封、注册表、协议契约与编解码能力 |
 | `xs-net/xs-net-rpc-maven-plugin` | RPC 协议与 SDK 生成 Maven 插件 |
 | `xs-net/xs-net-sdk` | SDK 打包模块 |
 | `xs-net/xs-net-tools` | 工具模块 |
-| `game-server/game-node-gateway` | Netty 长连接、JWT 校验、Akka 路由和 S2C 写回 |
+| `game-server/game-node-gateway` | Netty 长连接、JWT 校验、Pekko 路由和 S2C 写回 |
 | `game-server/game-node-login` | JWT 签发与校验 |
 | `game-server/game-node-modules` | `PlayerActor`、`DBSyncEngine`、`LogConsumer`；非 Spring Boot |
 | `game-server/game-message-action` | 游戏 protobuf、DTO、路由接口与 RPC 注册表 |
 | `game-server/game-comment` | JWT 等公共工具 |
-| `game-client` | Gateway HTTP/TCP 联调测试客户端 |
 
 ## 已移除组件
 
+- `game-client`：联调/压测客户端模块，压测端迁移至 `xs-net-sdk`；
 - 独立 db-sync 服务：批处理能力下沉进 Logic 的 `DBSyncEngine` 和 `LogConsumer`；
 - SBE 序列化：协议统一使用 Protobuf；
 - db-sync 跨节点消息协议（3100-3102）。

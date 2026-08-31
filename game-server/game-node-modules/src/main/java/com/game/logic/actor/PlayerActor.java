@@ -1,12 +1,12 @@
 package com.game.logic.actor;
 
-import akka.actor.typed.Behavior;
-import akka.actor.typed.PostStop;
-import akka.actor.typed.javadsl.ActorContext;
-import akka.actor.typed.javadsl.Behaviors;
-import akka.actor.typed.javadsl.Receive;
-import akka.actor.typed.javadsl.StashBuffer;
-import akka.actor.typed.javadsl.TimerScheduler;
+import org.apache.pekko.actor.typed.Behavior;
+import org.apache.pekko.actor.typed.PostStop;
+import org.apache.pekko.actor.typed.javadsl.ActorContext;
+import org.apache.pekko.actor.typed.javadsl.Behaviors;
+import org.apache.pekko.actor.typed.javadsl.Receive;
+import org.apache.pekko.actor.typed.javadsl.StashBuffer;
+import org.apache.pekko.actor.typed.javadsl.TimerScheduler;
 import com.game.message.c2s.LogoutRequest;
 import com.game.message.s2c.LogoutResponse;
 import com.game.message.c2s.PlayerEnterCommand;
@@ -15,8 +15,13 @@ import com.game.logic.context.LogicContext;
 import com.game.logic.dbsync.DBSyncEngine;
 import com.game.logic.player.PlayerState;
 import com.game.logic.redis.RedisStore;
+import com.game.logic.scene.PlayerSceneTracker;
 import com.game.message.actor.S2C;
 import com.game.message.actor.logic.PlayerMessage;
+import com.game.message.actor.gateway.GatewayControlMessage;
+import com.game.message.management.DisconnectChannelCommand;
+import com.game.message.management.GmKickPlayerCommand;
+import com.game.message.scene.PlayerSceneChanged;
 import com.xs.core.actor.RpcActor;
 import com.game.message.routing.ChannelRoutable;
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +41,7 @@ public class PlayerActor extends RpcActor<PlayerMessage> {
     private final StashBuffer<PlayerMessage> stash;
     private final TimerScheduler<PlayerMessage> timers;
     private final PlayerState state = new PlayerState();
-    private final long syncIntervalMs;
+    private long scheduledSyncIntervalMs;
 
     private RedisStore redisStore;
     private String pendingPlayerName;
@@ -44,6 +49,8 @@ public class PlayerActor extends RpcActor<PlayerMessage> {
     private boolean loaded;
     private boolean loadPending;
     private boolean destroyed;
+    private long loginStartedNanos;
+    private final PlayerSceneTracker sceneTracker = new PlayerSceneTracker();
 
     public PlayerActor(
             ActorContext<PlayerMessage> context,
@@ -54,7 +61,7 @@ public class PlayerActor extends RpcActor<PlayerMessage> {
         super(context, entityId);
         this.stash = stash;
         this.timers = timers;
-        this.syncIntervalMs = LogicContext.getSyncIntervalMs();
+        this.scheduledSyncIntervalMs = LogicContext.getSyncIntervalMs();
     }
 
     public static Behavior<PlayerMessage> create(String entityId) {
@@ -65,9 +72,11 @@ public class PlayerActor extends RpcActor<PlayerMessage> {
 
     @Override
     public Receive<PlayerMessage> createReceive() {
-        return newReceiveBuilder()
+        return newRpcReceiveBuilder()
                 .onMessage(PlayerEnterCommand.class, this::onPlayerEnterMessage)
                 .onMessage(LogoutRequest.class, this::onLogoutMessage)
+                .onMessage(GmKickPlayerCommand.class, this::onGmKickPlayer)
+                .onMessage(PlayerSceneChanged.class, this::onSceneChanged)
                 .onMessage(FlushDirty.class, this::onFlushDirty)
                 .onMessage(LoadTimeout.class, this::onLoadTimeout)
                 .onMessage(LoadResult.class, this::onLoadResult)
@@ -94,27 +103,77 @@ public class PlayerActor extends RpcActor<PlayerMessage> {
         return Behaviors.stopped();
     }
 
+    private Behavior<PlayerMessage> onGmKickPlayer(GmKickPlayerCommand command) {
+        if (!loaded || destroyed) {
+            log.info("GM kick ignored because player is not online: requestId={}, playerId={}",
+                    command.requestId(), entityId());
+            return this;
+        }
+        if (pendingChannelId != null && !pendingChannelId.isBlank()) {
+            sendRpc(GatewayControlMessage.class, new DisconnectChannelCommand(
+                    command.requestId(),
+                    Long.parseLong(entityId()),
+                    command.reason()), pendingChannelId);
+        }
+        log.info("GM kick executed: requestId={}, playerId={}, operator={}",
+                command.requestId(), entityId(), command.operator());
+        destroyState();
+        return Behaviors.stopped();
+    }
+
+    private Behavior<PlayerMessage> onSceneChanged(PlayerSceneChanged command) {
+        if (!loaded || destroyed) {
+            log.info("Scene membership ignored because player is offline: playerId={}", entityId());
+            return this;
+        }
+        boolean changed = command.joined()
+                ? sceneTracker.join(command.sceneId())
+                : sceneTracker.leave(command.sceneId());
+        if (changed) {
+            log.info("Player scene changed: playerId={}, sceneId={}", entityId(), sceneTracker.currentSceneId());
+        } else {
+            log.info("Ignoring stale scene leave: playerId={}, sceneId={}, currentSceneId={}",
+                    entityId(), command.sceneId(), sceneTracker.currentSceneId());
+        }
+        return this;
+    }
+
     private void onPlayerEnter(PlayerEnterCommand command) {
         if (!loaded && !loadPending) {
             loadPending = true;
             pendingPlayerName = command.playerName();
             pendingChannelId = command.channelId();
+            loginStartedNanos = System.nanoTime();
             state.setId(command.playerId());
             state.setName(command.playerName());
 
+            long redisLoadStartedNanos = System.nanoTime();
             try {
                 Map<String, String> cached = redisStore().load(entityId());
+                LogicContext.getLogicMetrics().recordLoginRedisLoad(
+                        System.nanoTime() - redisLoadStartedNanos,
+                        !cached.isEmpty());
                 if (!cached.isEmpty()) {
                     finishLoad(command.playerId(), cached);
                     return;
                 }
             } catch (Exception exception) {
+                LogicContext.getLogicMetrics().recordLoginRedisLoadFailure(
+                        System.nanoTime() - redisLoadStartedNanos);
                 log.warn("Failed to read player cache, requesting db load: playerId={}", entityId(), exception);
             }
 
             timers.startSingleTimer(LOAD_TIMEOUT_KEY, new LoadTimeout(), Duration.ofMillis(LOAD_TIMEOUT_MS));
             CompletableFuture<Map<String, String>> future = CompletableFuture.supplyAsync(
-                    () -> dbsyncEngine().loadOrCreate(command.playerId())
+                    () -> {
+                        long databaseLoadStartedNanos = System.nanoTime();
+                        try {
+                            return dbsyncEngine().loadOrCreate(command.playerId());
+                        } finally {
+                            LogicContext.getLogicMetrics().recordLoginDatabaseLoad(
+                                    System.nanoTime() - databaseLoadStartedNanos);
+                        }
+                    }
             );
             getContext().pipeToSelf(future, (fields, error) -> new LoadResult(fields, error));
             return;
@@ -171,7 +230,10 @@ public class PlayerActor extends RpcActor<PlayerMessage> {
         try {
             // create 已把全量 state 写入 Redis（HPUTALL + 进 online 集合），无需再 flushDirty，
             // 直接清脏，避免登录热路径上的一次冗余 Redis 往返。
+            long redisCreateStartedNanos = System.nanoTime();
             redisStore().create(entityId(), state);
+            LogicContext.getLogicMetrics().recordLoginRedisCreate(
+                    System.nanoTime() - redisCreateStartedNanos);
             state.clearDirty();
         } catch (Exception exception) {
             log.error("Failed to write player state to Redis: playerId={}", entityId(), exception);
@@ -183,6 +245,8 @@ public class PlayerActor extends RpcActor<PlayerMessage> {
         startFlushTimer();
         log.info("PlayerActor loaded: playerId={}", entityId());
         sendLoginResponse(playerId, state.getName(), pendingChannelId);
+        LogicContext.getLogicMetrics().recordLoginLogicTotal(
+                System.nanoTime() - loginStartedNanos);
         return stash.unstashAll(this);
     }
 
@@ -211,6 +275,7 @@ public class PlayerActor extends RpcActor<PlayerMessage> {
     }
 
     private Behavior<PlayerMessage> onFlushDirty(FlushDirty message) {
+        refreshFlushTimerIfNeeded();
         if (!loaded || !state.hasDirtyFields()) {
             return this;
         }
@@ -254,6 +319,7 @@ public class PlayerActor extends RpcActor<PlayerMessage> {
             return;
         }
         LoginResponse response = new LoginResponse(0, String.valueOf(playerId), playerName, null);
+        LogicContext.getLogicMetrics().setLoginS2cSendNanos(System.nanoTime());
         sendRpc(S2C.class, response, channelId);
     }
 
@@ -287,10 +353,23 @@ public class PlayerActor extends RpcActor<PlayerMessage> {
             timers.startTimerWithFixedDelay(
                     FLUSH_KEY,
                     new FlushDirty(),
-                    Duration.ofMillis(syncIntervalMs),
-                    Duration.ofMillis(syncIntervalMs)
+                    Duration.ofMillis(scheduledSyncIntervalMs),
+                    Duration.ofMillis(scheduledSyncIntervalMs)
             );
         }
+    }
+
+    private void refreshFlushTimerIfNeeded() {
+        long currentIntervalMs = LogicContext.getSyncIntervalMs();
+        if (currentIntervalMs == scheduledSyncIntervalMs) {
+            return;
+        }
+        scheduledSyncIntervalMs = currentIntervalMs;
+        timers.startTimerWithFixedDelay(
+                FLUSH_KEY,
+                new FlushDirty(),
+                Duration.ofMillis(scheduledSyncIntervalMs),
+                Duration.ofMillis(scheduledSyncIntervalMs));
     }
 
     private RedisStore redisStore() {

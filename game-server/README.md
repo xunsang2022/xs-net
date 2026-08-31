@@ -1,6 +1,6 @@
 # Game Server（游戏服务器）
 
-游戏服务端由 Gateway、Login 和 Logic 节点组成。Gateway 与 Login 使用 Spring Boot；Logic 是手动装配 Redis 与 Akka 的普通 Java 进程，不使用 Spring Boot。
+游戏服务端由 Gateway、Login 和 Logic 节点组成。Gateway 与 Login 使用 Spring Boot；Logic 是手动装配 Redis 与 Pekko 的普通 Java 进程，不使用 Spring Boot。
 
 跨模块架构和数据流见 [../ARCHITECTURE.md](../ARCHITECTURE.md)。
 
@@ -19,9 +19,9 @@ game-server/
 
 | 节点 | 职责 | 端口 |
 |---|---|---|
-| Gateway | 首帧 JWT 认证、Netty 游戏消息接入、Akka 路由、S2C 写回 | HTTP 8080、TCP 8082、Akka UDP 2001 |
+| Gateway | 首帧 JWT 认证、Netty TCP/UDP 游戏消息接入、Pekko 路由、S2C 写回 | HTTP 8080、TCP 8082、客户端 UDP 2002、Pekko Artery 2001 |
 | Login | JWT 签发与校验 | HTTP 8081 |
-| Logic | 游戏状态、Redis、异步 PostgreSQL 持久化、日志消费 | Akka UDP 4001 |
+| Logic | 游戏状态、Redis、异步 PostgreSQL 持久化、日志消费 | Pekko Artery 4001 |
 
 Gateway 不直连 Redis 或 PostgreSQL；Login 不创建玩家、不处理游戏状态；Logic 承担状态和持久化。
 
@@ -47,14 +47,14 @@ Gateway 的 `application.yml` 默认监听 HTTP 8080、Netty TCP 8082；Login �
 
 ### Logic
 
-Logic 从 `game-node-modules/src/main/resources/application.yml` 读取 Redis、PostgreSQL 和 Akka 参数，优先级为：JVM 系统属性 > 环境变量 > YAML > 内置默认值。环境变量名由启动代码明确映射，例如：
+Logic 从 `game-node-modules/src/main/resources/application.yml` 读取 Redis、PostgreSQL 和 Pekko 参数，优先级为：JVM 系统属性 > 环境变量 > YAML > 内置默认值。环境变量名由启动代码明确映射，例如：
 
 ```powershell
 $env:REDIS_HOST = 'redis.example.com'
 $env:DB_URL = 'jdbc:postgresql://db.example.com:5432/gamedb'
 $env:DB_USERNAME = 'game'
 $env:DB_PASSWORD = '<database-password>'
-$env:AKKA_PORT = '4001'
+$env:PEKKO_PORT = '4001'
 ```
 
 ## 本地运行
@@ -93,14 +93,29 @@ docker compose down
 2. `game-node-modules`；
 3. `game-node-gateway`。
 
-同机运行多个 Gateway 或 Logic 实例时，为每个实例分配不同的 Akka canonical 端口；对外 TCP/HTTP 端口也应通过配置或负载均衡避免冲突。
+同机运行多个 Gateway 或 Logic 实例时，为每个实例分配不同的 Pekko Artery canonical 端口；对外 TCP/UDP/HTTP 端口也应通过配置或负载均衡避免冲突。
+
+### Arthas GM 链路诊断
+
+Logic 在启动时预加载 Arthas agent，并且只监听本机回环地址；不会对外暴露 Arthas Telnet 或 HTTP 端口。完整 Arthas 发行包在构建期解包，Arthas 自身日志会写入项目根目录 `.log/`，Logic 管理端口提供受令牌保护的 GM 诊断命令。
+
+本地单独启动 Logic 前设置管理令牌，并确保 Redis、PostgreSQL 已准备好：
+
+```powershell
+$env:LOGIC_GM_TOKEN = 'replace-with-a-long-random-token'
+.\deploy\local\start-logic.ps1 -Build
+```
+
+发送协议号后，命令会等待一条匹配的 Logic 消息，并返回 Arthas 的方法调用树与耗时。`timeoutMs` 的范围是 1000 到 30000：
+
+```powershell
+$headers = @{ 'X-GM-Token' = $env:LOGIC_GM_TOKEN }
+$body = @{ protocolNumber = 1001; timeoutMs = 10000 } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:9090/admin/gm/trace' -Headers $headers -ContentType 'application/json' -Body $body
+```
+
+返回值包含实际追踪的 Actor、handler、Arthas 命令和原始 trace 输出。客户端登录协议 `1000` 会在 Gateway 转换为 Logic 内部协议 `3003`，因此返回的有效协议号是 `3003`。管理令牌为空时，该端点不会注册。
 
 ## 测试客户端
 
-`game-client` 已纳入根 Maven reactor，提供 Gateway HTTP/TCP 联调入口。先启动服务端，再从仓库根目录运行：
-
-```powershell
-.\mvnw.cmd -pl game-client -am exec:java
-```
-
-默认连接 Gateway HTTP `127.0.0.1:8080` 与 Netty `127.0.0.1:8082`。可通过 Maven 的 `-Dexec.args="--http-host=<host> --http-port=<port> --netty-host=<host> --netty-port=<port>"` 传入连接参数。
+原 `game-client` 模块已移除。登录压测使用 `xs-net-sdk-unity/LoadTest/XsNet.LoadTest.csproj`，它直接复用 Unity Runtime 的 TCP/UDP 协议实现；先启动服务端，再执行该控制台工程完成联调与压测。

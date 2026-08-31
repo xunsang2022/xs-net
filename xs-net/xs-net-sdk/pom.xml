@@ -14,7 +14,7 @@
     <artifactId>xs-net-sdk</artifactId>
     <packaging>pom</packaging>
     <name>xs-net-sdk</name>
-    <description>Generate Unity C# SDK package from RPC message definitions</description>
+    <description>Generate Unity, TypeScript and C++ SDKs from RPC message definitions</description>
 
     <!--
       Unity C# SDK 生成选项（可被依赖方读取/覆盖）：
@@ -169,4 +169,58 @@
             </plugin>
         </plugins>
     </build>
+    <profiles>
+        <profile>
+            <id>generate-typescript-sdk</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.xs</groupId>
+                        <artifactId>xs-net-rpc-maven-plugin</artifactId>
+                        <version>0.0.6</version>
+                        <configuration>
+                            <protoSourceDirectories>
+                                <protoSourceDirectory>${project.basedir}/../../game-server/game-message-action/src/main/proto</protoSourceDirectory>
+                                <protoSourceDirectory>${project.basedir}/../../xs-net/xs-net-message/src/main/proto</protoSourceDirectory>
+                            </protoSourceDirectories>
+                            <outputDirectory>${project.basedir}/../../xs-net-sdk-typescript</outputDirectory>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>export-typescript-sdk</id>
+                                <phase>generate-sources</phase>
+                                <goals><goal>export-typescript-sdk</goal></goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>generate-cpp-sdk</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.xs</groupId>
+                        <artifactId>xs-net-rpc-maven-plugin</artifactId>
+                        <version>0.0.6</version>
+                        <configuration>
+                            <protoSourceDirectories>
+                                <protoSourceDirectory>${project.basedir}/../../game-server/game-message-action/src/main/proto</protoSourceDirectory>
+                                <protoSourceDirectory>${project.basedir}/../../xs-net/xs-net-message/src/main/proto</protoSourceDirectory>
+                            </protoSourceDirectories>
+                            <outputDirectory>${project.basedir}/../../xs-net-sdk-cpp</outputDirectory>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>export-cpp-sdk</id>
+                                <phase>generate-sources</phase>
+                                <goals><goal>export-cpp-sdk</goal></goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

@@ -17,6 +17,7 @@ namespace Game.Message.Networking
         public Action<byte[]> OnDeliver { get; set; }
 
         private readonly int _window;
+        private readonly object _sync = new();
         private readonly SortedDictionary<uint, byte[]> _inFlight = new();
         private readonly SortedDictionary<uint, byte[]> _reorder = new();
 
@@ -32,31 +33,49 @@ namespace Game.Message.Networking
         /// <summary>发送一条业务消息：分配 seq 入在途窗口并组 DATA 包发出。</summary>
         public void Send(byte[] payload)
         {
-            if (_inFlight.Count >= _window)
+            byte[] datagram;
+            lock (_sync)
             {
-                // 窗口满：丢弃最旧腾出空间
-                _inFlight.Remove(FirstKey(_inFlight));
+                if (_inFlight.Count >= _window)
+                {
+                    // 窗口满：丢弃最旧腾出空间
+                    _inFlight.Remove(FirstKey(_inFlight));
+                }
+                uint seq = _sendSeq++;
+                _inFlight[seq] = payload;
+                datagram = Frame.EncodeUdpPacket(Frame.TypeData, seq, _highestAck, payload);
             }
-            uint seq = _sendSeq++;
-            _inFlight[seq] = payload;
-            Emit(Frame.TypeData, seq, _highestAck, payload);
+            SendAction?.Invoke(datagram);
         }
 
         /// <summary>处理收到的对端包：DATA 按序交付并回 ACK；ACK 移除已确认在途。</summary>
         public void OnPacket(Frame.Packet packet)
         {
-            if (packet.Ack > 0)
+            var deliveries = new List<byte[]>();
+            byte[]? ackDatagram = null;
+            lock (_sync)
             {
-                RemoveAcked(packet.Ack);
+                if (packet.Ack > 0)
+                {
+                    RemoveAcked(packet.Ack);
+                }
+                if (packet.Type == Frame.TypeData)
+                {
+                    HandleData(packet.Seq, packet.Payload, deliveries);
+                    ackDatagram = Frame.EncodeUdpPacket(Frame.TypeAck, 0, _highestAck, null);
+                }
             }
-            if (packet.Type == Frame.TypeData)
+            foreach (byte[] payload in deliveries)
             {
-                HandleData(packet.Seq, packet.Payload);
-                Emit(Frame.TypeAck, 0, _highestAck, null);
+                OnDeliver?.Invoke(payload);
+            }
+            if (ackDatagram is not null)
+            {
+                SendAction?.Invoke(ackDatagram);
             }
         }
 
-        private void HandleData(uint seq, byte[] payload)
+        private void HandleData(uint seq, byte[] payload, List<byte[]> deliveries)
         {
             if (seq < _nextRecvSeq)
             {
@@ -65,7 +84,7 @@ namespace Game.Message.Networking
             }
             if (seq == _nextRecvSeq)
             {
-                Deliver(seq, payload);
+                Deliver(seq, payload, deliveries);
                 // 补发乱序缓存中可连序的部分
                 while (_reorder.Count > 0)
                 {
@@ -76,7 +95,7 @@ namespace Game.Message.Networking
                     }
                     byte[] value = _reorder[key];
                     _reorder.Remove(key);
-                    Deliver(key, value);
+                    Deliver(key, value, deliveries);
                 }
             }
             else
@@ -93,30 +112,56 @@ namespace Game.Message.Networking
             }
         }
 
-        private void Deliver(uint seq, byte[] payload)
+        private void Deliver(uint seq, byte[] payload, List<byte[]> deliveries)
         {
             _nextRecvSeq = seq + 1;
             if (seq > _highestAck)
             {
                 _highestAck = seq;
             }
-            OnDeliver?.Invoke(payload);
+            deliveries.Add(payload);
         }
 
         /// <summary>当前已连续收到的最大 seq（用于累积 ACK）。</summary>
-        public uint Contiguous => _highestAck;
+        public uint Contiguous
+        {
+            get
+            {
+                lock (_sync)
+                {
+                    return _highestAck;
+                }
+            }
+        }
 
         /// <summary>重传所有未确认在途包（由定时器调用）。</summary>
         public void RetryOutstanding()
         {
-            foreach (var kv in _inFlight)
+            var datagrams = new List<byte[]>();
+            lock (_sync)
             {
-                Emit(Frame.TypeData, kv.Key, _highestAck, kv.Value);
+                foreach (var kv in _inFlight)
+                {
+                    datagrams.Add(Frame.EncodeUdpPacket(Frame.TypeData, kv.Key, _highestAck, kv.Value));
+                }
+            }
+            foreach (byte[] datagram in datagrams)
+            {
+                SendAction?.Invoke(datagram);
             }
         }
 
         /// <summary>当前在途未确认数量。</summary>
-        public int Outstanding => _inFlight.Count;
+        public int Outstanding
+        {
+            get
+            {
+                lock (_sync)
+                {
+                    return _inFlight.Count;
+                }
+            }
+        }
 
         private void RemoveAcked(uint ack)
         {
@@ -136,11 +181,6 @@ namespace Game.Message.Networking
             {
                 _inFlight.Remove(key);
             }
-        }
-
-        private void Emit(byte type, uint seq, uint ack, byte[] payload)
-        {
-            SendAction?.Invoke(Frame.EncodeUdpPacket(type, seq, ack, payload));
         }
 
         private static uint FirstKey(SortedDictionary<uint, byte[]> dict)

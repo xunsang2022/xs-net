@@ -1,21 +1,28 @@
 package com.game;
 
-import akka.actor.typed.ActorSystem;
-import akka.actor.typed.Behavior;
-import akka.actor.typed.javadsl.Behaviors;
+import org.apache.pekko.actor.typed.ActorSystem;
+import org.apache.pekko.actor.typed.Behavior;
+import org.apache.pekko.actor.typed.javadsl.Behaviors;
 import com.game.logic.context.LogicContext;
 import com.game.logic.context.LogicMetrics;
+import com.game.logic.config.LogbackLevelUpdater;
+import com.game.logic.config.LogicRuntimeConfiguration;
 import com.game.logic.dbsync.DBSyncConfig;
 import com.game.logic.dbsync.DBSyncEngine;
 import com.game.logic.dbsync.LogConsumer;
 import com.game.logic.redis.RedisStore;
+import com.game.logic.metrics.LogicPrometheusServer;
+import com.game.logic.management.GmProtocolTraceService;
+import com.game.logic.management.ProcessArthasTraceClient;
+import com.game.logic.management.ProtocolTraceTargetResolver;
 import com.game.message.rpc.GameRpcMessages;
 import com.xs.core.actor.node.NodeActor;
 import com.xs.core.config.GameFrameworkProperties;
 import com.xs.net.message.MessageAble;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.prometheusmetrics.PrometheusConfig;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import io.lettuce.core.api.StatefulConnection;
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
@@ -27,11 +34,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.InputStream;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Plain Java entry point for the logic node. Akka, Redis and the in-process
+ * Plain Java entry point for the logic node. Pekko, Redis and the in-process
  * DBSyncEngine are wired manually instead of through Spring Boot.
  */
 public final class GameLogicApplication {
@@ -113,16 +121,31 @@ public final class GameLogicApplication {
         dbSyncEngine.start();
         LogicContext.setDbSyncEngine(dbSyncEngine);
 
-        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        PrometheusMeterRegistry meterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
         LogicMetrics logicMetrics = new LogicMetrics(meterRegistry, dbSyncEngine);
         LogicContext.setMeterRegistry(meterRegistry);
         LogicContext.setLogicMetrics(logicMetrics);
 
+        MessageAble.initialize(GameRpcMessages.INSTANCE);
+        GmProtocolTraceService traceService = new GmProtocolTraceService(
+                new ProtocolTraceTargetResolver(GameRpcMessages.INSTANCE),
+                new ProcessArthasTraceClient(
+                        arthasHome(),
+                        ProcessHandle.current().info().command().orElse("java"),
+                        parseInt("game.management.arthas.telnet-port", "LOGIC_ARTHAS_TELNET_PORT", "36581")));
+        LogicPrometheusServer prometheusServer = startPrometheusServer(meterRegistry, traceService);
+        LogicRuntimeConfiguration runtimeConfiguration = LogicRuntimeConfiguration.fromSystemProperty(
+                GameLogicApplication::applyRuntimeConfiguration);
+        if (runtimeConfiguration != null) {
+            runtimeConfiguration.start(parseLong(
+                    "game.management.config-reload-interval-ms",
+                    "LOGIC_CONFIG_RELOAD_INTERVAL_MS",
+                    "1000"));
+        }
+
         LogConsumer logConsumer = new LogConsumer(redisTemplate, jdbcTemplate, dbSyncConfig);
         logConsumer.start();
         LogicContext.setLogConsumer(logConsumer);
-
-        MessageAble.initialize(GameRpcMessages.INSTANCE);
 
         Behavior<Void> guardian = Behaviors.setup(context -> {
             context.spawn(NodeActor.create(properties), "node");
@@ -134,6 +157,10 @@ public final class GameLogicApplication {
             system.terminate();
             logConsumer.stop();
             dbSyncEngine.stop();
+            if (runtimeConfiguration != null) {
+                runtimeConfiguration.close();
+            }
+            prometheusServer.close();
             connectionFactory.destroy();
             dataSource.close();
         }, "logic-shutdown"));
@@ -158,6 +185,40 @@ public final class GameLogicApplication {
 
     private static long parseLong(String key, String envKey, String defaultValue) {
         return Long.parseLong(config(key, envKey, defaultValue));
+    }
+
+    private static LogicPrometheusServer startPrometheusServer(
+            PrometheusMeterRegistry meterRegistry,
+            GmProtocolTraceService traceService
+    ) {
+        String host = config("game.management.metrics.host", "LOGIC_METRICS_HOST", "127.0.0.1");
+        int port = parseInt("game.management.metrics.port", "LOGIC_METRICS_PORT", "9090");
+        String managementToken = config("game.management.token", "LOGIC_GM_TOKEN", "");
+        try {
+            return LogicPrometheusServer.start(host, port, meterRegistry, managementToken, traceService);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to start Logic Prometheus endpoint on " + host + ':' + port, exception);
+        }
+    }
+
+    private static java.nio.file.Path arthasHome() {
+        String home = System.getProperty("arthas.home");
+        if (home == null || home.isBlank()) {
+            home = config("game.management.arthas.home", "LOGIC_ARTHAS_HOME", "");
+        }
+        return java.nio.file.Path.of(home);
+    }
+
+    private static void applyRuntimeConfiguration(Map<String, String> settings) {
+        String syncInterval = settings.get("game.storage.sync-interval-ms");
+        if (syncInterval != null && !syncInterval.isBlank()) {
+            try {
+                LogicContext.setSyncIntervalMs(Long.parseLong(syncInterval));
+            } catch (NumberFormatException exception) {
+                throw new IllegalArgumentException("game.storage.sync-interval-ms must be a positive integer", exception);
+            }
+        }
+        LogbackLevelUpdater.updateApplicationLevel(settings.get("game.logging.level"));
     }
 
     @SuppressWarnings("unchecked")

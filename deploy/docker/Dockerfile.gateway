@@ -1,0 +1,11 @@
+FROM maven:3.9.9-eclipse-temurin-21 AS build
+WORKDIR /workspace
+COPY . .
+RUN mvn -f xs-net/pom.xml install -DskipTests \
+    && mvn -f game-server/pom.xml -pl game-node-gateway -am package -DskipTests
+
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY --from=build /workspace/game-server/game-node-gateway/target/*-SNAPSHOT.jar /app/app.jar
+EXPOSE 8080 8082 2002/udp
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

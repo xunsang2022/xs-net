@@ -1,0 +1,24 @@
+groups:
+  - name: xs-net-runtime
+    rules:
+      - alert: LogicDbSyncFailures
+        expr: increase(dbsync_flush_failures_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Logic DBSync flush failures detected
+      - alert: LogicDirtyQueueGrowing
+        expr: dbsync_dirty_size > 10000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Logic dirty queue is above the initial investigation threshold
+      - alert: GatewayUnavailable
+        expr: up{job="gateway"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: A Gateway metrics target is unavailable

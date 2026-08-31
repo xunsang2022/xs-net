@@ -1,0 +1,14 @@
+FROM maven:3.9.9-eclipse-temurin-21 AS build
+WORKDIR /workspace
+COPY . .
+RUN mvn -f xs-net/pom.xml install -DskipTests \
+    && mvn -f game-server/pom.xml -pl game-node-modules -am package -DskipTests
+
+FROM eclipse-temurin:21-jdk
+WORKDIR /app
+COPY --from=build /workspace/game-server/game-node-modules/target/*-SNAPSHOT.jar /app/app.jar
+COPY --from=build /workspace/game-server/game-node-modules/target/lib /app/lib
+COPY --from=build /workspace/game-server/game-node-modules/target/arthas /opt/arthas
+RUN mkdir -p /app/.log
+EXPOSE 9090
+ENTRYPOINT ["sh", "-c", "exec java --add-opens=java.base/sun.nio.ch=ALL-UNNAMED -Duser.home=/app/.log -Darthas.home=/opt/arthas -Darthas.ip=127.0.0.1 -Darthas.telnetPort=36581 -Darthas.httpPort=-1 -javaagent:/opt/arthas/arthas-agent.jar -cp /app/app.jar:/app/lib/* com.game.GameLogicApplication"]
