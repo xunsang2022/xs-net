@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,28 +17,81 @@ final class RpcArtifactGenerator {
                   String protoJavaPackage, String generatedJavaPackage) throws Exception {
         Map<String, List<MessageModel>> messagesByProtoFile = messagesByProtoFile(model);
         clearProtoDirectory(protoDirectory);
+        VelocityRenderer renderer = new VelocityRenderer();
         for (Map.Entry<String, List<MessageModel>> entry : messagesByProtoFile.entrySet()) {
-            write(protoDirectory.resolve(entry.getKey()), proto(entry.getValue(), protoPackage, protoJavaPackage));
+            write(protoDirectory.resolve(entry.getKey()), renderer.render("templates/proto.vm",
+                    protoContext(protoPackage, protoJavaPackage, entry.getValue())));
         }
         // 路由表以 proto 枚举存放：消息号 <-> 消息名，供客户端/服务端引用协议号
-        write(protoDirectory.resolve("rpc_routes.proto"), routingProto(model.messages(), protoPackage, protoJavaPackage));
+        write(protoDirectory.resolve("rpc_routes.proto"), renderer.render("templates/rpc_routes.vm",
+                protoContext(protoPackage, protoJavaPackage, model.messages())));
         Path packageDirectory = javaDirectory.resolve(generatedJavaPackage.replace('.', '/'));
-        write(packageDirectory.resolve("GameRpcMessages.java"), registry(model, generatedJavaPackage, protoJavaPackage));
-        write(packageDirectory.resolve("GeneratedRpcCodec.java"), codec(model, generatedJavaPackage, protoJavaPackage));
-        write(packageDirectory.resolve("GeneratedRpcHandlers.java"), handlers(model, generatedJavaPackage));
+        Map<String, Object> registryContext = new HashMap<>();
+        registryContext.put("generatedPackage", generatedJavaPackage);
+        registryContext.put("protoJavaPackage", protoJavaPackage);
+        registryContext.put("messages", templateMessages(model.messages()));
+        write(packageDirectory.resolve("GameRpcMessages.java"), renderer.render("templates/GameRpcMessages.vm", registryContext));
+        write(packageDirectory.resolve("GeneratedRpcCodec.java"), renderer.render("templates/GeneratedRpcCodec.vm", registryContext));
+        write(packageDirectory.resolve("GeneratedRpcHandlers.java"), renderer.render("templates/GeneratedRpcHandlers.vm", registryContext));
     }
 
-    private String routingProto(List<MessageModel> messages, String protoPackage, String javaPackage) {
-        StringBuilder value = new StringBuilder("syntax = \"proto3\";\n\npackage ").append(protoPackage).append(";\n\n")
-                .append("option java_multiple_files = true;\noption java_package = \"").append(javaPackage).append("\";\n\n")
-                .append("enum RpcRoute {\n")
-                .append("  RPC_ROUTE_UNSPECIFIED = 0;\n");
+    private Map<String, Object> protoContext(String protoPackage, String protoJavaPackage, List<MessageModel> messages)
+            throws MojoFailureException {
+        Map<String, Object> context = new HashMap<>();
+        context.put("protoPackage", protoPackage);
+        context.put("protoJavaPackage", protoJavaPackage);
+        context.put("messages", templateMessages(messages));
+        return context;
+    }
+
+    private List<Map<String, Object>> templateMessages(List<MessageModel> messages) throws MojoFailureException {
+        List<Map<String, Object>> views = new ArrayList<>();
         for (MessageModel message : messages) {
-            value.append("  RPC_").append(snakeCase(message.name()).toUpperCase()).append(" = ")
-                    .append(message.number()).append(";\n");
+            Map<String, Object> view = new LinkedHashMap<>();
+            view.put("number", message.number());
+            view.put("name", message.name());
+            view.put("dtoType", message.dtoType());
+            view.put("roleClass", message.roleType() == null ? "null" : message.roleType() + ".class");
+            view.put("direction", message.direction().name());
+            view.put("publicVisible", message.publicVisible());
+            view.put("isRequest", message.direction() == Direction.REQUEST);
+            view.put("channelRoutingRequired", channelRoutingRequired(message));
+            view.put("codecName", codecName(message));
+            view.put("routeName", "RPC_" + snakeCase(message.name()).toUpperCase());
+            view.put("handler", handler(message));
+            view.put("handlerMethod", message.handlerMethod());
+            view.put("actorType", message.actorType());
+            view.put("fields", templateFields(message.fields()));
+            view.put("decodeArgs", decodeArgs(message.fields()));
+            views.add(view);
         }
-        value.append("}\n");
-        return value.toString();
+        return views;
+    }
+
+    private List<Map<String, Object>> templateFields(List<FieldModel> fields) throws MojoFailureException {
+        List<Map<String, Object>> views = new ArrayList<>();
+        for (FieldModel field : fields) {
+            Map<String, Object> view = new LinkedHashMap<>();
+            view.put("name", field.name());
+            view.put("number", field.number());
+            view.put("protoType", RpcSourceScanner.protoType(field.javaType()));
+            view.put("snakeName", snakeCase(field.name()));
+            view.put("primitive", isPrimitive(field.javaType()));
+            view.put("setter", "builder.set" + upper(field.name()) + "(" + encodeValue(field, "dto." + field.name() + "()") + ");");
+            views.add(view);
+        }
+        return views;
+    }
+
+    private String decodeArgs(List<FieldModel> fields) {
+        List<String> args = new ArrayList<>();
+        for (FieldModel field : fields) {
+            String getter = "payload.get" + upper(field.name()) + "()";
+            String decoded = decodeValue(field, getter);
+            args.add(isPrimitive(field.javaType()) ? decoded
+                    : "payload.has" + upper(field.name()) + "() ? " + decoded + " : null");
+        }
+        return String.join(", ", args);
     }
 
     private Map<String, List<MessageModel>> messagesByProtoFile(RpcModel model) throws MojoFailureException {
@@ -49,111 +103,6 @@ final class RpcArtifactGenerator {
         messagesByProtoFile.computeIfAbsent("comment.proto", ignored -> new ArrayList<>());
         messagesByProtoFile.values().forEach(messages -> messages.sort(Comparator.comparingInt(MessageModel::number)));
         return messagesByProtoFile;
-    }
-
-    private String proto(List<MessageModel> messages, String protoPackage, String javaPackage) throws MojoFailureException {
-        StringBuilder value = new StringBuilder("syntax = \"proto3\";\n\npackage ").append(protoPackage).append(";\n\n")
-                .append("option java_multiple_files = true;\noption java_package = \"").append(javaPackage).append("\";\n");
-        for (MessageModel message : messages) {
-            // 在消息结构上注释对应的消息 ID，CS/SC 均标注
-            value.append("\n// ").append(message.name()).append(" = ").append(message.number()).append("\n");
-            value.append("message ").append(message.name()).append(" {\n");
-            for (FieldModel field : message.fields()) {
-                value.append("  optional ").append(RpcSourceScanner.protoType(field.javaType())).append(' ').append(snakeCase(field.name()))
-                        .append(" = ").append(field.number()).append(";\n");
-            }
-            value.append("}\n");
-        }
-        return value.toString();
-    }
-
-    private String registry(RpcModel model, String generatedPackage, String protoJavaPackage) {
-        StringBuilder value = new StringBuilder("package ").append(generatedPackage).append(";\n\n")
-                .append("import com.google.protobuf.MessageLite;\n")
-                .append("import com.xs.net.message.RpcMessageRegistry;\n")
-                .append("import com.xs.net.message.RpcMessageRegistryBuilder;\n")
-                .append("import com.xs.net.message.RpcMessageSpec;\n\n")
-                .append("public final class GameRpcMessages {\n")
-                .append("    public static final RpcMessageRegistry INSTANCE = registry();\n\n")
-                .append("    private GameRpcMessages() {}\n\n")
-                .append("    private static RpcMessageRegistry registry() {\n")
-                .append("        RpcMessageRegistryBuilder builder = new RpcMessageRegistryBuilder();\n");
-        for (MessageModel message : model.messages()) {
-            value.append("        builder.register(new RpcMessageSpec<>(").append(message.number()).append(", ")
-                    .append(protoJavaPackage).append('.').append(message.name()).append(".class, ")
-                    .append(protoJavaPackage).append('.').append(message.name()).append(".getDefaultInstance().getParserForType(), ")
-                    .append(message.dtoType()).append(".class, ")
-                    .append(message.roleType() == null ? "null" : message.roleType() + ".class").append(", ")
-                    .append("com.xs.net.message.RpcMessageDirection.").append(message.direction()).append(", ")
-                    .append(message.publicVisible()).append(", ")
-                    .append(message.direction() == Direction.REQUEST).append(", ")
-                    .append(channelRoutingRequired(message)).append(", ")
-                    .append("GeneratedRpcCodec.").append(codecName(message)).append("(), ")
-                    .append(handler(message)).append("));\n");
-        }
-        return value.append("        return builder.build();\n    }\n}\n").toString();
-    }
-
-    private String codec(RpcModel model, String generatedPackage, String protoJavaPackage) {
-        StringBuilder value = new StringBuilder("package ").append(generatedPackage).append(";\n\n")
-                .append("import com.xs.net.message.RpcPayloadCodec;\n\n")
-                .append("public final class GeneratedRpcCodec {\n")
-                .append("    private GeneratedRpcCodec() {}\n\n");
-        for (MessageModel message : model.messages()) {
-            value.append("    public static RpcPayloadCodec<").append(message.dtoType()).append(", ")
-                    .append(protoJavaPackage).append('.').append(message.name()).append("> ").append(codecName(message)).append("() {\n")
-                    .append("        return new RpcPayloadCodec<>() {\n")
-                    .append("            @Override\n            public ").append(protoJavaPackage).append('.').append(message.name())
-                    .append(" encode(").append(message.dtoType()).append(" dto) {\n")
-                    .append("                ").append(protoJavaPackage).append('.').append(message.name()).append(".Builder builder = ")
-                    .append(protoJavaPackage).append('.').append(message.name()).append(".newBuilder();\n");
-            for (FieldModel field : message.fields()) {
-                String access = "dto." + field.name() + "()";
-                String setter = "builder.set" + upper(field.name()) + "(" + encodeValue(field, access) + ");";
-                if (isPrimitive(field.javaType())) {
-                    value.append("                ").append(setter).append("\n");
-                } else {
-                    value.append("                if (").append(access).append(" != null) { ").append(setter).append(" }\n");
-                }
-            }
-            value.append("                return builder.build();\n            }\n\n")
-                    .append("            @Override\n            public ").append(message.dtoType()).append(" decode(")
-                    .append(protoJavaPackage).append('.').append(message.name()).append(" payload) {\n                return new ")
-                    .append(message.dtoType()).append("(");
-            for (int index = 0; index < message.fields().size(); index++) {
-                if (index > 0) {
-                    value.append(", ");
-                }
-                FieldModel field = message.fields().get(index);
-                String getter = "payload.get" + upper(field.name()) + "()";
-                String decoded = decodeValue(field, getter);
-                if (isPrimitive(field.javaType())) {
-                    value.append(decoded);
-                } else {
-                    value.append("payload.has").append(upper(field.name())).append("() ? ").append(decoded).append(" : null");
-                }
-            }
-            value.append(");\n            }\n        };\n    }\n\n");
-        }
-        return value.append("}\n").toString();
-    }
-
-    private String handlers(RpcModel model, String generatedPackage) {
-        StringBuilder value = new StringBuilder("package ").append(generatedPackage).append(";\n\n")
-                .append("import java.util.List;\n\npublic final class GeneratedRpcHandlers {\n    private GeneratedRpcHandlers() {}\n\n")
-                .append("    public static List<HandlerMetadata> handlers() {\n        return List.of(\n");
-        for (MessageModel message : model.messages()) {
-            if (message.handlerMethod() != null) {
-                value.append("                new HandlerMetadata(").append(message.number()).append(", \"")
-                        .append(message.actorType()).append("\", \"").append(message.handlerMethod()).append("\", \"")
-                        .append(message.dtoType()).append("\"),\n");
-            }
-        }
-        if (value.toString().endsWith(",\n")) {
-            value.setLength(value.length() - 2);
-            value.append('\n');
-        }
-        return value.append("        );\n    }\n\n    public record HandlerMetadata(int rpcNumber, String actorType, String methodName, String dtoType) {}\n}\n").toString();
     }
 
     private String handler(MessageModel message) {

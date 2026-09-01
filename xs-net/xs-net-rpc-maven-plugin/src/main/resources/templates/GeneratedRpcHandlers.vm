@@ -1,0 +1,19 @@
+package ${generatedPackage};
+
+import java.util.List;
+
+public final class GeneratedRpcHandlers {
+    private GeneratedRpcHandlers() {}
+
+    public static List<HandlerMetadata> handlers() {
+        return List.of(
+#foreach($message in ${messages})
+#if($message.handlerMethod)
+                new HandlerMetadata(${message.number}, "${message.actorType}", "${message.handlerMethod}", "${message.dtoType}")#if($foreach.hasNext),#end
+#end
+#end
+        );
+    }
+
+    public record HandlerMetadata(int rpcNumber, String actorType, String methodName, String dtoType) {}
+}

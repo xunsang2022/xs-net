@@ -8,7 +8,9 @@ import org.apache.maven.plugins.annotations.Parameter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Mojo(name = "export-typescript-sdk", threadSafe = true)
 public final class ExportTypescriptSdkMojo extends AbstractMojo {
@@ -69,11 +71,11 @@ public final class ExportTypescriptSdkMojo extends AbstractMojo {
     }
 
     private void writeManifest(Path generatedDirectory) throws Exception {
-        String content = "{\n"
-                + "  \"name\": \"" + SdkProtoExporter.json(packageName) + "\",\n"
-                + "  \"version\": \"" + SdkProtoExporter.json(packageVersion) + "\",\n"
-                + "  \"description\": \"" + SdkProtoExporter.json(packageDescription) + "\"\n"
-                + "}\n";
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("name", SdkProtoExporter.json(packageName));
+        context.put("version", SdkProtoExporter.json(packageVersion));
+        context.put("description", SdkProtoExporter.json(packageDescription));
+        String content = new VelocityRenderer().render("templates/ts-sdk-manifest.json.vm", context);
         Files.writeString(generatedDirectory.resolve("sdk-manifest.json"), content, java.nio.charset.StandardCharsets.UTF_8);
     }
 }

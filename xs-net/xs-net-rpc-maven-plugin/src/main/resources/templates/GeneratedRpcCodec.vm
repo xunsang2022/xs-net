@@ -1,0 +1,32 @@
+package ${generatedPackage};
+
+import com.xs.net.message.RpcPayloadCodec;
+
+public final class GeneratedRpcCodec {
+    private GeneratedRpcCodec() {}
+#foreach($message in ${messages})
+
+    public static RpcPayloadCodec<${message.dtoType}, ${protoJavaPackage}.${message.name}> ${message.codecName}() {
+        return new RpcPayloadCodec<>() {
+            @Override
+            public ${protoJavaPackage}.${message.name} encode(${message.dtoType} dto) {
+                ${protoJavaPackage}.${message.name}.Builder builder = ${protoJavaPackage}.${message.name}.newBuilder();
+#foreach($field in ${message.fields})
+#if($field.primitive)
+                ${field.setter}
+#else
+                if (dto.${field.name}() != null) { ${field.setter} }
+#end
+#end
+                return builder.build();
+            }
+
+            @Override
+            public ${message.dtoType} decode(${protoJavaPackage}.${message.name} payload) {
+                return new ${message.dtoType}(${message.decodeArgs});
+            }
+        };
+    }
+
+#end
+}

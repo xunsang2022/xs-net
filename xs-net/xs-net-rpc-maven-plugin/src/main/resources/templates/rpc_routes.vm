@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package ${protoPackage};
+
+option java_multiple_files = true;
+option java_package = "${protoJavaPackage}";
+
+enum RpcRoute {
+  RPC_ROUTE_UNSPECIFIED = 0;
+#foreach($message in ${messages})
+  ${message.routeName} = ${message.number};
+#end
+}

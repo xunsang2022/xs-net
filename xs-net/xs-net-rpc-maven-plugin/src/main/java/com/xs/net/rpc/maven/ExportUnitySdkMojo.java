@@ -9,7 +9,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Mojo(name = "export-unity-sdk", threadSafe = true)
 public final class ExportUnitySdkMojo extends AbstractMojo {
@@ -129,16 +131,12 @@ public final class ExportUnitySdkMojo extends AbstractMojo {
     private void writePackageJson(Path packageDirectory, String name, String version, String displayName,
                                   String description) throws IOException {
         Files.createDirectories(packageDirectory);
-        String content = "{\n"
-                + "  \"name\": \"" + name + "\",\n"
-                + "  \"version\": \"" + version + "\",\n"
-                + "  \"displayName\": \"" + displayName + "\",\n"
-                + "  \"description\": \"" + description + "\",\n"
-                + "  \"unity\": \"2021.3\",\n"
-                + "  \"author\": {\n"
-                + "    \"name\": \"XS Net\"\n"
-                + "  }\n"
-                + "}\n";
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("name", name);
+        context.put("version", version);
+        context.put("displayName", displayName);
+        context.put("description", description);
+        String content = new VelocityRenderer().render("templates/unity-package.json.vm", context);
         Files.writeString(packageDirectory.resolve("package.json"), content, StandardCharsets.UTF_8);
     }
 }

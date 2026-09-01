@@ -20,14 +20,6 @@ message CS_Login {
   optional string session_id = 3;
 }
 
-// SC_Login = 1002
-message SC_Login {
-  optional int32 result = 1;
-  optional string player_id = 2;
-  optional string player_name = 3;
-  optional string token = 4;
-}
-
 // CS_LogReport = 2100
 message CS_LogReport {
   optional string session_id = 1;

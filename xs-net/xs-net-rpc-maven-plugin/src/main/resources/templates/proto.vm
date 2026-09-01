@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package ${protoPackage};
+
+option java_multiple_files = true;
+option java_package = "${protoJavaPackage}";
+#foreach($message in ${messages})
+
+// ${message.name} = ${message.number}
+message ${message.name} {
+#foreach($field in ${message.fields})
+  optional ${field.protoType} ${field.snakeName} = ${field.number};
+#end
+}
+#end

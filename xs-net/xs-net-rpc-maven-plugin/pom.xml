@@ -17,6 +17,7 @@
         <maven.plugin.api.version>3.9.9</maven.plugin.api.version>
         <maven.plugin.annotations.version>3.13.1</maven.plugin.annotations.version>
         <javaparser.version>3.26.3</javaparser.version>
+        <velocity.version>2.3</velocity.version>
         <junit.version>5.11.4</junit.version>
     </properties>
 
@@ -43,6 +44,11 @@
             <groupId>com.github.javaparser</groupId>
             <artifactId>javaparser-core</artifactId>
             <version>${javaparser.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.velocity</groupId>
+            <artifactId>velocity-engine-core</artifactId>
+            <version>${velocity.version}</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

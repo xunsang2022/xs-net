@@ -24,13 +24,16 @@ namespace Game.Message {
     static RpcRoutesReflection() {
       byte[] descriptorData = global::System.Convert.FromBase64String(
           string.Concat(
-            "ChBycGNfcm91dGVzLnByb3RvEgxnYW1lLm1lc3NhZ2Uq3wEKCFJwY1JvdXRl",
+            "ChBycGNfcm91dGVzLnByb3RvEgxnYW1lLm1lc3NhZ2Uq9gIKCFJwY1JvdXRl",
             "EhkKFVJQQ19ST1VURV9VTlNQRUNJRklFRBAAEhsKFlJQQ19MT0dfUkVDT1JE",
             "X0NPTU1BTkQQ5wcSEQoMUlBDX0NTX0xPR0lOEOgHEhIKDVJQQ19DU19MT0dP",
             "VVQQ6QcSEQoMUlBDX1NDX0xPR0lOEOoHEhIKDVJQQ19TQ19MT0dPVVQQ6wcS",
             "FgoRUlBDX0NTX0xPR19SRVBPUlQQtBASFgoRUlBDX1NDX0xPR19SRVBPUlQQ",
-            "tRASHQoYUlBDX1BMQVlFUl9FTlRFUl9DT01NQU5EELsXQhgKFGNvbS5nYW1l",
-            "LnByb3RvY29sLnBiUAFiBnByb3RvMw=="));
+            "tRASHQoYUlBDX1BMQVlFUl9FTlRFUl9DT01NQU5EELsXEhoKFVJQQ19DU19H",
+            "TV9LSUNLX1BMQVlFUhC8FxIfChpSUENfR01fS0lDS19QTEFZRVJfQ09NTUFO",
+            "RBC9FxIbChZSUENfU0NFTkVfSk9JTl9DT01NQU5EEL4XEhwKF1JQQ19TQ0VO",
+            "RV9MRUFWRV9DT01NQU5EEL8XEh0KGFJQQ19QTEFZRVJfU0NFTkVfQ0hBTkdF",
+            "RBDAF0IYChRjb20uZ2FtZS5wcm90b2NvbC5wYlABYgZwcm90bzM="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Game.Message.RpcRoute), }, null, null));
@@ -49,6 +52,11 @@ namespace Game.Message {
     [pbr::OriginalName("RPC_CS_LOG_REPORT")] RpcCsLogReport = 2100,
     [pbr::OriginalName("RPC_SC_LOG_REPORT")] RpcScLogReport = 2101,
     [pbr::OriginalName("RPC_PLAYER_ENTER_COMMAND")] RpcPlayerEnterCommand = 3003,
+    [pbr::OriginalName("RPC_CS_GM_KICK_PLAYER")] RpcCsGmKickPlayer = 3004,
+    [pbr::OriginalName("RPC_GM_KICK_PLAYER_COMMAND")] RpcGmKickPlayerCommand = 3005,
+    [pbr::OriginalName("RPC_SCENE_JOIN_COMMAND")] RpcSceneJoinCommand = 3006,
+    [pbr::OriginalName("RPC_SCENE_LEAVE_COMMAND")] RpcSceneLeaveCommand = 3007,
+    [pbr::OriginalName("RPC_PLAYER_SCENE_CHANGED")] RpcPlayerSceneChanged = 3008,
   }
 
   #endregion

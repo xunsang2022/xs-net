@@ -1,0 +1,10 @@
+{
+  "name": "${name}",
+  "version": "${version}",
+  "displayName": "${displayName}",
+  "description": "${description}",
+  "unity": "2021.3",
+  "author": {
+    "name": "XS Net"
+  }
+}

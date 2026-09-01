@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package game.message;
+
+option java_multiple_files = true;
+option java_package = "com.game.protocol.pb";
+
+// CS_GmKickPlayer = 3004
+message CS_GmKickPlayer {
+  optional string request_id = 1;
+  optional int64 player_id = 2;
+  optional string operator = 3;
+  optional string reason = 4;
+  optional int64 issued_at = 5;
+}
