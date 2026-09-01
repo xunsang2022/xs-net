@@ -1,10 +1,12 @@
 #include "xsnet/client.hpp"
 
 #include "xsnet/frame.hpp"
+#include "xsnet/kcp.hpp"
 #include "xsnet/reliable_udp.hpp"
 
 #include "net_message.pb.h"
 
+#include <array>
 #include <chrono>
 #include <cstring>
 #include <stdexcept>
@@ -22,6 +24,26 @@ std::vector<std::uint8_t> encode_message(std::int32_t rpc_number, const std::vec
         throw std::runtime_error("failed to encode NetMessage");
     }
     return body;
+}
+
+// Monotonic milliseconds since a fixed (arbitrary) epoch, truncated to 32 bits.
+// KCP only compares timestamps with int32 deltas, so a per-side relative clock is
+// sufficient; both endpoints use their own steady clocks.
+std::uint32_t now_ms() {
+    const auto now = std::chrono::steady_clock::now().time_since_epoch();
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+    return static_cast<std::uint32_t>(ms);
+}
+
+// FNV-1a 32-bit hash over the JWT, used as the KCP conversation id shared with
+// the server. Stable across runs and encoding independent.
+std::uint32_t session_conv(const std::string& jwt) {
+    std::uint32_t hash = 2166136261U;
+    for (const auto c : jwt) {
+        hash ^= static_cast<std::uint8_t>(c);
+        hash *= 16777619U;
+    }
+    return hash ? hash : 1U;
 }
 
 }  // namespace
@@ -208,6 +230,128 @@ void UdpConnection::send_datagram(const std::vector<std::uint8_t>& datagram) {
     if (socket_.is_open()) {
         socket_.send(asio::buffer(datagram));
     }
+}
+
+void KcpConnection::connect(const std::string& jwt) {
+    close();
+    context_.restart();
+    asio::ip::udp::resolver resolver(context_);
+    const auto endpoint =
+        *resolver.resolve(asio::ip::udp::v4(), config_.host, std::to_string(config_.kcp_port)).begin();
+    socket_.open(endpoint.endpoint().protocol());
+    socket_.connect(endpoint.endpoint());
+    running_ = true;
+    handshaken_ = false;
+    last_activity_.store(now_ms(), std::memory_order_relaxed);
+
+    kcp_ = std::make_unique<Kcp>(
+        session_conv(jwt),
+        [this](const std::vector<std::uint8_t>& datagram) { send_datagram(datagram); },
+        [this](const std::vector<std::uint8_t>& body) { on_kcp_payload(body); });
+    kcp_->set_nodelay(1, 10, 2, 1);  // fast mode + disable implicit congestion-window cold start
+    kcp_->set_interval(10);
+    kcp_->set_wndsize(static_cast<int>(config_.udp_window_size), 128);
+
+    receiver_ = std::thread(&KcpConnection::receive_loop, this);
+    maintenance_ = std::thread(&KcpConnection::maintenance_loop, this);
+
+    // first application message = jwt; queue it and flush immediately.
+    {
+        std::lock_guard lock(kcp_mutex_);
+        kcp_->send(std::vector<std::uint8_t>(jwt.begin(), jwt.end()));
+        kcp_->update(now_ms());
+    }
+}
+
+void KcpConnection::send(std::int32_t rpc_number, const std::vector<std::uint8_t>& payload) {
+    if (!connected() || !kcp_) {
+        throw std::logic_error("KCP connection is not authenticated");
+    }
+    std::lock_guard lock(kcp_mutex_);
+    kcp_->send(encode_message(rpc_number, payload));
+    kcp_->update(now_ms());
+    last_activity_.store(now_ms(), std::memory_order_relaxed);
+}
+
+void KcpConnection::close() {
+    running_ = false;
+    handshaken_ = false;
+    asio::error_code ignored;
+    socket_.close(ignored);
+    if (receiver_.joinable() && receiver_.get_id() != std::this_thread::get_id()) {
+        receiver_.join();
+    }
+    if (maintenance_.joinable() && maintenance_.get_id() != std::this_thread::get_id()) {
+        maintenance_.join();
+    }
+    std::lock_guard lock(kcp_mutex_);
+    kcp_.reset();
+}
+
+bool KcpConnection::connected() const {
+    return running_ && handshaken_ && socket_.is_open();
+}
+
+void KcpConnection::receive_loop() {
+    std::array<std::uint8_t, kMaxFrameLength> buffer{};
+    while (running_) {
+        try {
+            const auto size = socket_.receive(asio::buffer(buffer));
+            {
+                std::lock_guard lock(kcp_mutex_);
+                kcp_->input(buffer.data(), static_cast<std::size_t>(size));
+            }
+        } catch (const std::exception& exception) {
+            if (running_) {
+                report_error(std::string("KCP receive failure: ") + exception.what());
+            }
+            break;
+        }
+    }
+    running_ = false;
+}
+
+void KcpConnection::maintenance_loop() {
+    while (running_) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::lock_guard lock(kcp_mutex_);
+        kcp_->update(now_ms());
+        // idle keepalive / heartbeat: push a zero-length message so RTO and
+        // dead-link detection keep running and the server can observe the beat.
+        if (handshaken_ &&
+            now_ms() - last_activity_.load(std::memory_order_relaxed) >=
+                static_cast<std::uint64_t>(config_.heartbeat_interval.count())) {
+            kcp_->send({});
+            last_activity_.store(now_ms(), std::memory_order_relaxed);
+        }
+    }
+}
+
+void KcpConnection::send_datagram(const std::vector<std::uint8_t>& datagram) {
+    std::lock_guard lock(socket_mutex_);
+    if (socket_.is_open()) {
+        socket_.send(asio::buffer(datagram));
+    }
+}
+
+void KcpConnection::on_kcp_payload(const std::vector<std::uint8_t>& body) {
+    if (!handshaken_) {
+        if (body.empty()) {
+            handshaken_ = true;  // server acknowledged auth with an empty message
+            return;
+        }
+        report_error("KCP received data before auth handshake");
+        return;
+    }
+    if (body.empty()) {
+        return;  // keepalive heartbeat, nothing to route
+    }
+    deliver(body);
+}
+
+std::vector<std::uint8_t> KcpConnection::encode_message(std::int32_t rpc_number,
+                                                         const std::vector<std::uint8_t>& payload) const {
+    return ::xsnet::encode_message(rpc_number, payload);
 }
 
 }  // namespace xsnet

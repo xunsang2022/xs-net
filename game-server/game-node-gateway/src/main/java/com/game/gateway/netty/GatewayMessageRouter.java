@@ -16,15 +16,15 @@ import java.util.concurrent.ConcurrentMap;
 
 /** Routes a decoded client {@link NetMessage} into the existing PlayerActor path. */
 @Slf4j
-final class GatewayMessageRouter {
+public final class GatewayMessageRouter {
 
     private static final ConcurrentMap<Class<?>, Method> PLAYER_ID_METHODS = new ConcurrentHashMap<>();
 
-    void route(byte[] body) throws Exception {
+    public void route(byte[] body) throws Exception {
         route(NetMessage.parseFrom(body));
     }
 
-    void route(NetMessage netMessage) throws Exception {
+    public void route(NetMessage netMessage) throws Exception {
         RpcMessageSpec<? extends MessageLite> spec = GameRpcMessages.INSTANCE.find(netMessage.getRpcNum());
         if (spec == null) {
             log.warn("Unknown rpcNum: {}", netMessage.getRpcNum());

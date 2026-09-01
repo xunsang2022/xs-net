@@ -2,6 +2,8 @@
 
 #include <asio.hpp>
 
+#include "xsnet/kcp.hpp"
+
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -18,6 +20,7 @@ struct NetworkConfig {
     std::string host = "127.0.0.1";
     std::uint16_t tcp_port = 8082;
     std::uint16_t udp_port = 2002;
+    std::uint16_t kcp_port = 2003;
     std::size_t udp_window_size = 32;
     std::chrono::milliseconds retry_interval{200};
     std::chrono::milliseconds heartbeat_interval{10000};
@@ -88,6 +91,40 @@ private:
     std::atomic_bool running_{false};
     std::atomic_bool handshaken_{false};
     mutable std::mutex socket_mutex_;
+};
+
+// KCP reliable-UDP transport: a self-contained session on top of a plain
+// asio UDP socket. Runs on the same Connection base / NetworkConfig as the
+// self-developed ReliableUdp, switchable without touching TcpConnection or
+// UdpConnection.
+class KcpConnection final : public Connection {
+public:
+    explicit KcpConnection(NetworkConfig config);
+    ~KcpConnection() override;
+    void connect(const std::string& jwt) override;
+    void send(std::int32_t rpc_number, const std::vector<std::uint8_t>& payload) override;
+    void close() override;
+    [[nodiscard]] bool connected() const override;
+
+private:
+    void receive_loop();
+    void maintenance_loop();
+    void send_datagram(const std::vector<std::uint8_t>& datagram);
+
+    void on_kcp_payload(const std::vector<std::uint8_t>& body);
+    std::vector<std::uint8_t> encode_message(std::int32_t rpc_number, const std::vector<std::uint8_t>& payload) const;
+
+    NetworkConfig config_;
+    asio::io_context context_;
+    asio::ip::udp::socket socket_{context_};
+    std::unique_ptr<class Kcp> kcp_;
+    std::thread receiver_;
+    std::thread maintenance_;
+    std::atomic_bool running_{false};
+    std::atomic_bool handshaken_{false};
+    std::atomic<std::uint64_t> last_activity_{0};
+    mutable std::mutex kcp_mutex_;       // guards kcp_->input/update/send
+    mutable std::mutex socket_mutex_;    // guards socket_.send
 };
 
 }  // namespace xsnet

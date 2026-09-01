@@ -2,6 +2,8 @@ export * from "./browser-transport.js";
 export * from "./client.js";
 export * from "./dispatcher.js";
 export * from "./frame.js";
+export * from "./kcp.js";
+export * from "./kcp-udp-transport.js";
 export * from "./node-transport.js";
 export * from "./reliable-udp.js";
 export * from "./transport.js";

@@ -4,7 +4,7 @@ using Google.Protobuf;
 namespace Game.Message.Networking
 {
     /// <summary>
-    /// 网络客户端门面：按 <see cref="NetworkConfig.UseUdp"/> 选择 TCP 或 UDP 连接，
+    /// 网络客户端门面：按 <see cref="NetworkConfig.UseKcp"/> / <see cref="NetworkConfig.UseUdp"/> 选择 KCP、UDP 或 TCP 连接，
     /// 封装连接、JWT 认证、消息发送与上层事件。使用 <see cref="Dispatcher"/> 注册消息处理器。
     /// </summary>
     public sealed class GameNetworkClient : IDisposable
@@ -28,9 +28,11 @@ namespace Game.Message.Networking
         public void Connect(string jwt)
         {
             Disconnect();
-            NetConnection connection = _config.UseUdp
-                ? new UdpConnection(_config, Dispatcher)
-                : new TcpConnection(_config, Dispatcher);
+            NetConnection connection = _config.UseKcp
+                ? new KcpConnection(_config, Dispatcher)
+                : _config.UseUdp
+                    ? new UdpConnection(_config, Dispatcher)
+                    : new TcpConnection(_config, Dispatcher);
             connection.OnConnected += () => OnConnected?.Invoke();
             connection.OnDisconnected += () => OnDisconnected?.Invoke();
             connection.OnError += message => OnError?.Invoke(message);

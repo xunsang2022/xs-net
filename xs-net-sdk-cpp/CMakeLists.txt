@@ -33,4 +33,8 @@ if(XSNET_BUILD_TESTS)
     add_executable(xs_net_sdk_cpp_frame_test tests/frame_test.cpp)
     target_link_libraries(xs_net_sdk_cpp_frame_test PRIVATE xs_net_sdk_cpp)
     add_test(NAME xs_net_sdk_cpp_frame_test COMMAND xs_net_sdk_cpp_frame_test)
+
+    add_executable(xs_net_sdk_cpp_kcp_test tests/kcp_test.cpp)
+    target_link_libraries(xs_net_sdk_cpp_kcp_test PRIVATE xs_net_sdk_cpp)
+    add_test(NAME xs_net_sdk_cpp_kcp_test COMMAND xs_net_sdk_cpp_kcp_test)
 endif()
