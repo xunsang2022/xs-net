@@ -7,18 +7,25 @@ Do not commit credentials, local logs, generated directories, or benchmark data.
 
 ## Development workflow
 
-1. Branch from the current integration branch using a descriptive name.
+1. Each unit of work runs on its own module branch forked from the current
+   integration branch (`build-1.0`). Never commit directly on `build-1.0` or
+   `master`. Name the branch after the module and intent, e.g.
+   `feat/gateway-udp-reliability` or `fix/login-jwt-expiry`.
 2. Add or update focused tests when behavior changes.
 3. Run the Maven verification required by the changed reactor:
    `./mvnw.cmd -f xs-net/pom.xml test` and/or
    `./mvnw.cmd -f game-server/pom.xml test`.
-4. Describe the behavior, validation command, and any environment prerequisites
+4. After validation, merge the module branch back into `build-1.0` with a
+   `--no-ff` merge, based on the latest `build-1.0`, then delete the merged
+   local and remote branch. Do not merge into or push to `master` directly.
+5. Describe the behavior, validation command, and any environment prerequisites
    in the pull request.
 
 ## Commit messages
 
-Conventional Commits are recommended: `feat:`, `fix:`, `docs:`, `test:`,
-`build:`, and `chore:`. Keep the subject imperative and scoped.
+Conventional Commits are required: `feat:`, `fix:`, `refactor:`, `test:`,
+`docs:`, `build:`, and `chore:`, scoped where useful (e.g. `feat(game-gateway)`).
+Keep the subject imperative, focused on a single change, and written in English.
 
 ## Reviews
 
