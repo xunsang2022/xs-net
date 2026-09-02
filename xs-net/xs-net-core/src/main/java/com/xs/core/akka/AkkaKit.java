@@ -1,5 +1,6 @@
 package com.xs.core.akka;
 
+import com.google.protobuf.MessageLite;
 import org.apache.pekko.actor.typed.ActorSystem;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.Props;
@@ -9,9 +10,12 @@ import org.apache.pekko.cluster.sharding.typed.javadsl.Entity;
 import org.apache.pekko.cluster.sharding.typed.javadsl.EntityContext;
 import org.apache.pekko.cluster.sharding.typed.javadsl.EntityRef;
 import org.apache.pekko.cluster.sharding.typed.javadsl.EntityTypeKey;
+import com.xs.net.message.RpcMessageRegistry;
+import com.xs.net.message.RpcMessageSpec;
 import com.xs.net.message.MessageAble;
 import com.xs.net.message.RpcMessage;
 import com.xs.net.message.pb.NetMessage;
+import io.micrometer.core.instrument.Metrics;
 
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +24,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -31,6 +36,7 @@ public class AkkaKit {
 
     private static final Map<Class<?>, EntityTypeKey<?>> ENTITY_TYPE_KEYS = new ConcurrentHashMap<>();
     private static final Map<Class<?>, Method> CREATE_METHODS = new ConcurrentHashMap<>();
+    private static final String METRIC_ROUTING_REJECTED = "xs.rpc.routing.rejected";
     private static volatile ClusterSharding clusterSharding;
 
     public static void setClusterSharding(ClusterSharding sharding) {
@@ -46,20 +52,74 @@ public class AkkaKit {
     }
 
     public static void tell(Class<?> actorCmdClass, Object message, String entityId) {
-        tellToRole(actorCmdClass, message, entityId);
+        tell(MessageAble.registry(), actorCmdClass, message, entityId);
+    }
+
+    public static void tell(
+            RpcMessageRegistry registry,
+            Class<?> actorCmdClass,
+            Object message,
+            String entityId
+    ) {
+        tellToRole(registry, actorCmdClass, message, entityId);
     }
 
     public static void tellRpc(Class<?> roleClass, RpcMessage message, String entityId) {
-        tellToRole(roleClass, message, entityId);
+        tell(MessageAble.registry(), roleClass, message, entityId);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static void tellToRole(Class<?> roleClass, Object message, String entityId) {
+    private static void tellToRole(
+            RpcMessageRegistry registry,
+            Class<?> roleClass,
+            Object message,
+            String entityId
+    ) {
+        Objects.requireNonNull(registry, "registry");
+        Objects.requireNonNull(roleClass, "roleClass");
+        Objects.requireNonNull(message, "message");
+        Objects.requireNonNull(entityId, "entityId");
+        RpcMessageSpec<? extends MessageLite> spec = findSpec(registry, message);
+        if (spec == null) {
+            throw rejectRouting("unknown_rpc", "No RPC definition for message type "
+                    + message.getClass().getName());
+        }
+        if (!roleClass.equals(spec.roleClass())) {
+            throw rejectRouting("role_mismatch", "RPC " + spec.rpcNum() + " belongs to role "
+                    + (spec.roleClass() == null ? "null" : spec.roleClass().getName())
+                    + ", but was sent to " + roleClass.getName());
+        }
+        if (message instanceof RpcMessage rpcMessage
+                && (rpcMessage.payload() == null || !spec.messageClass().isInstance(rpcMessage.payload()))) {
+            throw rejectRouting("payload_type_mismatch", "RPC " + spec.rpcNum()
+                    + " payload type does not match " + spec.messageClass().getName());
+        }
         EntityRef entityRef = getClusterSharding().entityRefFor(entityTypeKey((Class) roleClass), entityId);
         // Entity placement can change at runtime. Always use the protocol envelope so a local
         // sender cannot accidentally deliver a non-serializable DTO to a remote shard.
-        Object deliveredMessage = message instanceof NetMessage ? message : MessageAble.toNetMessage(message);
+        Object deliveredMessage = message instanceof NetMessage
+                ? message
+                : MessageAble.toNetMessage(message, registry);
         entityRef.tell(deliveredMessage);
+    }
+
+    private static RpcMessageSpec<? extends MessageLite> findSpec(
+            RpcMessageRegistry registry,
+            Object message
+    ) {
+        if (message instanceof NetMessage netMessage) {
+            return registry.find(netMessage.getRpcNum());
+        }
+        if (message instanceof RpcMessage rpcMessage) {
+            return registry.find(rpcMessage.rpcNum());
+        }
+        return registry.findByDtoClass(message.getClass());
+    }
+
+    private static IllegalArgumentException rejectRouting(String reason, String message) {
+        Metrics.counter(METRIC_ROUTING_REJECTED, "reason", reason).increment();
+        log.warn("Rejecting RPC route: reason={}, message={}", reason, message);
+        return new IllegalArgumentException(message);
     }
 
     public static <T> void entityRefForClusterSharding(ClusterSharding sharding, String roles, Class<T> actorCmdClass) {

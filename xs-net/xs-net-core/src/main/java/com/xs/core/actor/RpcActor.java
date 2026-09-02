@@ -10,8 +10,13 @@ import com.xs.net.message.MessageAble;
 import com.xs.net.message.RpcMessageRegistry;
 import com.xs.net.message.RpcMessageSpec;
 import com.xs.net.message.pb.NetMessage;
+import io.micrometer.core.instrument.Metrics;
+
+import java.util.Objects;
 
 public abstract class RpcActor<M> extends AbstractBehavior<M> {
+
+    private static final String METRIC_ENVELOPE_DROPPED = "xs.rpc.actor.envelope.dropped";
 
     private final String entityId;
     private final RpcMessageRegistry registry;
@@ -22,8 +27,8 @@ public abstract class RpcActor<M> extends AbstractBehavior<M> {
 
     protected RpcActor(ActorContext<M> context, String entityId, RpcMessageRegistry registry) {
         super(context);
-        this.entityId = entityId;
-        this.registry = registry;
+        this.entityId = Objects.requireNonNull(entityId, "entityId");
+        this.registry = Objects.requireNonNull(registry, "registry");
     }
 
     protected final String entityId() {
@@ -35,7 +40,7 @@ public abstract class RpcActor<M> extends AbstractBehavior<M> {
     }
 
     protected final void sendRpc(Class<?> roleClass, Object message, String targetEntityId) {
-        AkkaKit.tell(roleClass, message, targetEntityId);
+        AkkaKit.tell(registry, roleClass, message, targetEntityId);
     }
 
     /**
@@ -51,13 +56,40 @@ public abstract class RpcActor<M> extends AbstractBehavior<M> {
 
     @SuppressWarnings("unchecked")
     private Behavior<M> onNetMessage(NetMessage envelope) {
+        int rpcNum = envelope.getRpcNum();
+        RpcMessageSpec<?> spec = registry.find(rpcNum);
+        if (spec == null) {
+            recordDroppedEnvelope(rpcNum, "unknown", "unknown_rpc", null);
+            return this;
+        }
         try {
-            Object decoded = MessageAble.toActionMessage(envelope);
+            Object decoded = MessageAble.toActionMessage(envelope, registry);
             getContext().getSelf().tell((M) decoded);
         } catch (Exception exception) {
-            getContext().getLog().warn("Dropping invalid RPC envelope for entity {}", entityId, exception);
+            recordDroppedEnvelope(rpcNum, spec.messageClass().getName(), "decode_failure", exception);
         }
         return this;
+    }
+
+    private void recordDroppedEnvelope(
+            int rpcNum,
+            String messageType,
+            String reason,
+            Exception exception
+    ) {
+        Metrics.counter(METRIC_ENVELOPE_DROPPED, "reason", reason).increment();
+        getContext().getLog().warn(
+                "Dropping RPC envelope: entityId={}, rpcNum={}, messageType={}, reason={}, "
+                        + "errorType={}, errorMessage={}",
+                entityId,
+                rpcNum,
+                messageType,
+                reason,
+                exception == null ? "none" : exception.getClass().getName(),
+                exception == null ? "none" : exception.getMessage());
+        if (exception != null && getContext().getLog().isDebugEnabled()) {
+            getContext().getLog().debug("RPC envelope decode failure", exception);
+        }
     }
 
     private static RpcMessageRegistry requireRegistry() {

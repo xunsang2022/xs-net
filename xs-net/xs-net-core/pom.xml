@@ -45,9 +45,20 @@
             <artifactId>pekko-cluster-sharding-typed_2.13</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.apache.pekko</groupId>
+            <artifactId>pekko-actor-testkit-typed_2.13</artifactId>
+            <version>${pekko.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>com.xs</groupId>
             <artifactId>xs-net-message</artifactId>
             <version>0.0.1</version>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <version>${micrometer.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -59,6 +70,12 @@
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <version>4.13.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>5.20.0</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

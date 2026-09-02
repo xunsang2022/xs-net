@@ -1,6 +1,7 @@
 package com.xs.net.message;
 
 import com.google.protobuf.ByteString;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.MessageLite;
 import com.xs.net.message.pb.NetMessage;
 import com.xs.net.message.serializer.NetMessageSerializer;
@@ -68,6 +69,73 @@ public class MessageAbleTest extends TestCase {
         assertEquals(business, rpc.payload());
     }
 
+    public void testExplicitRegistryOverridesGlobalRegistry() throws Exception {
+        int explicitRpc = TEST_RPC + 1;
+        RpcMessageSpec<NetMessage> explicitSpec = new RpcMessageSpec<>(
+                explicitRpc,
+                NetMessage.class,
+                NetMessage.getDefaultInstance().getParserForType(),
+                TestActionMessage.class,
+                null,
+                RpcMessageDirection.INTERNAL,
+                false,
+                false,
+                false,
+                new RpcPayloadCodec<TestActionMessage, NetMessage>() {
+                    @Override
+                    public NetMessage encode(TestActionMessage dto) {
+                        return dto.payload();
+                    }
+
+                    @Override
+                    public TestActionMessage decode(NetMessage payload) {
+                        return new TestActionMessage(payload);
+                    }
+                },
+                null
+        );
+        RpcMessageRegistry explicitRegistry = registryFor(explicitSpec);
+        NetMessage payload = NetMessage.newBuilder()
+                .setRpcNum(2000)
+                .setData(ByteString.copyFrom(new byte[]{9, 8, 7}))
+                .build();
+        NetMessage envelope = NetMessage.newBuilder()
+                .setRpcNum(explicitRpc)
+                .setData(ByteString.copyFrom(payload.toByteArray()))
+                .build();
+
+        Object decoded = MessageAble.toActionMessage(envelope, explicitRegistry);
+        assertTrue(decoded instanceof TestActionMessage);
+
+        NetMessage encoded = MessageAble.toNetMessage(decoded, explicitRegistry);
+        assertEquals(explicitRpc, encoded.getRpcNum());
+        assertEquals(payload, NetMessage.parseFrom(encoded.getData()));
+    }
+
+    public void testUnknownRpcIsRejected() {
+        try {
+            MessageAble.toActionMessage(NetMessage.newBuilder().setRpcNum(9999).build(), MessageAble.registry());
+            fail("unknown rpc must be rejected");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Unknown rpc number"));
+        } catch (InvalidProtocolBufferException unexpected) {
+            fail("unknown rpc should fail before payload parsing");
+        }
+    }
+
+    public void testMalformedPayloadIsRejected() {
+        NetMessage malformed = NetMessage.newBuilder()
+                .setRpcNum(TEST_RPC)
+                .setData(ByteString.copyFrom(new byte[]{0x08}))
+                .build();
+        try {
+            MessageAble.toActionMessage(malformed, MessageAble.registry());
+            fail("malformed payload must be rejected");
+        } catch (InvalidProtocolBufferException expected) {
+            assertTrue(expected.getMessage() != null);
+        }
+    }
+
     public void testSerializerRoundTrip() throws Exception {
         NetMessage business = NetMessage.newBuilder()
                 .setRpcNum(2000)
@@ -99,5 +167,27 @@ public class MessageAbleTest extends TestCase {
         public MessageLite payload() {
             return payload;
         }
+    }
+
+    private record TestActionMessage(NetMessage payload) {
+    }
+
+    private static RpcMessageRegistry registryFor(RpcMessageSpec<NetMessage> spec) {
+        return new RpcMessageRegistry() {
+            @Override
+            public RpcMessageSpec<? extends MessageLite> find(int rpcNum) {
+                return rpcNum == spec.rpcNum() ? spec : null;
+            }
+
+            @Override
+            public RpcMessageSpec<? extends MessageLite> findByClass(Class<? extends MessageLite> messageClass) {
+                return spec.messageClass().equals(messageClass) ? spec : null;
+            }
+
+            @Override
+            public List<RpcMessageSpec<? extends MessageLite>> all() {
+                return List.of(spec);
+            }
+        };
     }
 }

@@ -7,6 +7,7 @@ import com.xs.net.message.pb.NetMessage;
 import lombok.experimental.UtilityClass;
 
 import java.nio.ByteBuffer;
+import java.util.Objects;
 
 @UtilityClass
 public class MessageAble {
@@ -45,23 +46,47 @@ public class MessageAble {
 
     /// net dto -> action message dto
     public static Object toActionMessage(NetMessage netMessage) throws InvalidProtocolBufferException {
+        return toActionMessage(netMessage, requireRegistry(), envelopeFactory);
+    }
+
+    /// net dto -> action message dto, using the supplied registry
+    public static Object toActionMessage(
+            NetMessage netMessage,
+            RpcMessageRegistry messageRegistry
+    ) throws InvalidProtocolBufferException {
+        return toActionMessage(netMessage, messageRegistry, null);
+    }
+
+    private static Object toActionMessage(
+            NetMessage netMessage,
+            RpcMessageRegistry messageRegistry,
+            RpcEnvelopeFactory messageEnvelopeFactory
+    ) throws InvalidProtocolBufferException {
+        Objects.requireNonNull(netMessage, "netMessage");
+        RpcMessageRegistry registry = requireRegistry(messageRegistry);
         int rpcNum = netMessage.getRpcNum();
-        RpcMessageSpec<? extends MessageLite> spec = requireRegistry().find(rpcNum);
+        RpcMessageSpec<? extends MessageLite> spec = registry.find(rpcNum);
         if (spec == null) {
             throw new IllegalArgumentException("Unknown rpc number: " + rpcNum);
         }
         MessageLite payload = spec.parser().parseFrom(netMessage.getData());
-        if (envelopeFactory == null) {
+        if (messageEnvelopeFactory == null) {
             return spec.decode(payload);
         }
-        return envelopeFactory.create(rpcNum, payload);
+        return messageEnvelopeFactory.create(rpcNum, payload);
     }
 
     public static NetMessage toNetMessage(Object message) {
+        return toNetMessage(message, requireRegistry());
+    }
+
+    public static NetMessage toNetMessage(Object message, RpcMessageRegistry messageRegistry) {
+        Objects.requireNonNull(message, "message");
+        RpcMessageRegistry registry = requireRegistry(messageRegistry);
         if (message instanceof RpcMessage rpcMessage) {
-            return toNetMessage(rpcMessage);
+            return toNetMessage(rpcMessage, registry);
         }
-        RpcMessageSpec<? extends MessageLite> spec = requireRegistry().findByDtoClass(message.getClass());
+        RpcMessageSpec<? extends MessageLite> spec = registry.findByDtoClass(message.getClass());
         if (spec == null) {
             throw new IllegalArgumentException("Unknown RPC DTO: " + message.getClass().getName());
         }
@@ -73,6 +98,20 @@ public class MessageAble {
 
     /// action message dto -> net message dto
     public static NetMessage toNetMessage(RpcMessage message) {
+        return toNetMessage(message, requireRegistry());
+    }
+
+    public static NetMessage toNetMessage(RpcMessage message, RpcMessageRegistry messageRegistry) {
+        Objects.requireNonNull(message, "message");
+        RpcMessageRegistry registry = requireRegistry(messageRegistry);
+        RpcMessageSpec<? extends MessageLite> spec = registry.find(message.rpcNum());
+        if (spec == null) {
+            throw new IllegalArgumentException("Unknown rpc number: " + message.rpcNum());
+        }
+        if (message.payload() == null || !spec.messageClass().isInstance(message.payload())) {
+            throw new IllegalArgumentException("Unexpected payload type for rpc number " + message.rpcNum()
+                    + ": " + (message.payload() == null ? "null" : message.payload().getClass().getName()));
+        }
         byte[] data = message.payload().toByteArray();
         return NetMessage.newBuilder()
                 .setRpcNum(message.rpcNum())
@@ -108,6 +147,10 @@ public class MessageAble {
             throw new IllegalStateException("RpcMessageRegistry has not been initialized");
         }
         return value;
+    }
+
+    private static RpcMessageRegistry requireRegistry(RpcMessageRegistry value) {
+        return Objects.requireNonNull(value, "messageRegistry");
     }
 
     private static RpcEnvelopeFactory requireFactory() {
