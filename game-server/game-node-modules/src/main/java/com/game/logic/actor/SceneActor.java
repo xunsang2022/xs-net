@@ -7,6 +7,7 @@ import com.game.message.scene.PlayerSceneChanged;
 import com.game.message.scene.SceneJoinCommand;
 import com.game.message.scene.SceneLeaveCommand;
 import com.xs.core.actor.RpcActor;
+import com.xs.core.actor.node.ActorDispatcher;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.ActorContext;
@@ -14,6 +15,7 @@ import org.apache.pekko.actor.typed.javadsl.Behaviors;
 import org.apache.pekko.actor.typed.javadsl.Receive;
 
 @Slf4j
+@ActorDispatcher("pekko.actor.battle-dispatcher")
 public final class SceneActor extends RpcActor<SceneMessage> {
 
     private final SceneMembership membership = new SceneMembership();

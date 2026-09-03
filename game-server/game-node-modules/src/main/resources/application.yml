@@ -9,6 +9,9 @@ game:
     database: 0
   storage:
     sync-interval-ms: 1000
+  io:
+    redis-threads: 16
+    db-threads: 8
   logging:
     level: INFO
   management:

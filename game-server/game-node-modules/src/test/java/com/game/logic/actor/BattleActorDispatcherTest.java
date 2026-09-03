@@ -14,4 +14,15 @@ class BattleActorDispatcherTest {
         assertNotNull(dispatcher);
         assertEquals("pekko.actor.battle-dispatcher", dispatcher.value());
     }
+
+    @Test
+    void keepsRealtimeSceneAndPlayerActorsOnTheirDedicatedDispatchers() {
+        ActorDispatcher scene = SceneActor.class.getAnnotation(ActorDispatcher.class);
+        ActorDispatcher player = PlayerActor.class.getAnnotation(ActorDispatcher.class);
+
+        assertNotNull(scene);
+        assertNotNull(player);
+        assertEquals("pekko.actor.battle-dispatcher", scene.value());
+        assertEquals("pekko.actor.player-dispatcher", player.value());
+    }
 }

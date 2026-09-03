@@ -1,6 +1,7 @@
 package com.game.logic.actor;
 
 import com.game.logic.context.LogicContext;
+import com.game.logic.redis.RedisStore;
 import com.game.message.actor.logic.GMMessage;
 import com.game.message.actor.logic.PlayerMessage;
 import com.game.message.management.GmKickPlayerCommand;
@@ -13,6 +14,8 @@ import org.apache.pekko.actor.typed.javadsl.Behaviors;
 import org.apache.pekko.actor.typed.javadsl.Receive;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.RejectedExecutionException;
 
 @Slf4j
 public final class GMActor extends RpcActor<GMMessage> {
@@ -29,29 +32,51 @@ public final class GMActor extends RpcActor<GMMessage> {
     public Receive<GMMessage> createReceive() {
         return newRpcReceiveBuilder()
                 .onMessage(GmKickPlayerRequest.class, this::onKickPlayer)
+                .onMessage(AuditResult.class, this::onAuditResult)
                 .build();
     }
 
     private Behavior<GMMessage> onKickPlayer(GmKickPlayerRequest request) {
-        if (!audit(request)) {
+        RedisStore store;
+        try {
+            store = LogicContext.getRedisStore();
+        } catch (RuntimeException exception) {
+            getContext().getSelf().tell(new AuditResult(request, false, exception));
+            return this;
+        }
+        CompletableFuture<Boolean> future;
+        try {
+            future = CompletableFuture.supplyAsync(() -> audit(store, request), LogicContext.getRedisIoExecutor());
+        } catch (RejectedExecutionException exception) {
+            getContext().getSelf().tell(new AuditResult(request, false, exception));
+            return this;
+        }
+        getContext().pipeToSelf(future, (success, error) -> new AuditResult(request, success, error));
+        return this;
+    }
+
+    private Behavior<GMMessage> onAuditResult(AuditResult result) {
+        if (result.error != null || !Boolean.TRUE.equals(result.success)) {
+            log.error("GM kick rejected because audit persistence failed: requestId={}, playerId={}",
+                    result.request.requestId(), result.request.playerId(), result.error);
             return this;
         }
         sendRpc(
                 PlayerMessage.class,
                 new GmKickPlayerCommand(
-                        request.requestId(),
-                        request.operator(),
-                        request.reason(),
-                        request.issuedAt()),
-                String.valueOf(request.playerId()));
+                        result.request.requestId(),
+                        result.request.operator(),
+                        result.request.reason(),
+                        result.request.issuedAt()),
+                String.valueOf(result.request.playerId()));
         log.info("GM kick accepted: requestId={}, playerId={}, operator={}",
-                request.requestId(), request.playerId(), request.operator());
+                result.request.requestId(), result.request.playerId(), result.request.operator());
         return this;
     }
 
-    private boolean audit(GmKickPlayerRequest request) {
+    private boolean audit(RedisStore store, GmKickPlayerRequest request) {
         try {
-            LogicContext.getRedisStore().writeLog(Map.of(
+            store.writeLog(Map.of(
                     "level", "INFO",
                     "playerId", String.valueOf(request.playerId()),
                     "content", "gm_kick requestId=" + request.requestId()
@@ -63,6 +88,18 @@ public final class GMActor extends RpcActor<GMMessage> {
             log.error("GM kick rejected because audit persistence failed: requestId={}, playerId={}",
                     request.requestId(), request.playerId(), exception);
             return false;
+        }
+    }
+
+    private static final class AuditResult implements GMMessage {
+        private final GmKickPlayerRequest request;
+        private final Boolean success;
+        private final Throwable error;
+
+        private AuditResult(GmKickPlayerRequest request, Boolean success, Throwable error) {
+            this.request = request;
+            this.success = success;
+            this.error = error;
         }
     }
 }

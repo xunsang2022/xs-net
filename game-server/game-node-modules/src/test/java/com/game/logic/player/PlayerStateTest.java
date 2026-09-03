@@ -75,4 +75,19 @@ class PlayerStateTest {
         PlayerState state = new PlayerState();
         assertThrows(IllegalArgumentException.class, () -> state.fieldValue("unknown"));
     }
+
+    @Test
+    void clearDirtyMatchingKeepsFieldsChangedWhileIoWasInFlight() {
+        PlayerState state = new PlayerState();
+        state.setName("before");
+        state.setOnline(true);
+        state.markDirty(PlayerState.FIELD_NAME);
+        state.markDirty(PlayerState.FIELD_ONLINE);
+
+        Map<String, String> persisted = state.toHash(state.getDirtyFields());
+        state.setName("after");
+        state.clearDirtyMatching(persisted);
+
+        assertEquals(List.of(PlayerState.FIELD_NAME), state.getDirtyFields());
+    }
 }

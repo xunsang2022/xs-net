@@ -4,6 +4,7 @@ import org.apache.pekko.actor.typed.ActorSystem;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.Behaviors;
 import com.game.logic.context.LogicContext;
+import com.game.logic.context.LogicIoExecutors;
 import com.game.logic.context.LogicMetrics;
 import com.game.logic.config.LogbackLevelUpdater;
 import com.game.logic.config.LogicRuntimeConfiguration;
@@ -97,9 +98,14 @@ public final class GameLogicApplication {
         redisTemplate.afterPropertiesSet();
 
         RedisStore redisStore = new RedisStore(redisTemplate);
+        LogicIoExecutors ioExecutors = LogicIoExecutors.fixed(
+                parseInt("game.io.redis-threads", "REDIS_IO_THREADS", "16"),
+                parseInt("game.io.db-threads", "DB_IO_THREADS", "8"));
         LogicContext.setConnectionFactory(connectionFactory);
         LogicContext.setRedisTemplate(redisTemplate);
         LogicContext.setRedisStore(redisStore);
+        LogicContext.setRedisIoExecutor(ioExecutors.redisIoExecutor());
+        LogicContext.setDbIoExecutor(ioExecutors.dbIoExecutor());
         LogicContext.setSyncIntervalMs(parseLong("game.storage.sync-interval-ms", "SYNC_INTERVAL_MS", DEFAULT_SYNC_INTERVAL_MS));
 
         HikariConfig hikariConfig = new HikariConfig();
@@ -155,7 +161,10 @@ public final class GameLogicApplication {
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             system.terminate();
+            system.getWhenTerminated().toCompletableFuture().join();
             logConsumer.stop();
+            ioExecutors.close();
+            dbSyncEngine.flush();
             dbSyncEngine.stop();
             if (runtimeConfiguration != null) {
                 runtimeConfiguration.close();

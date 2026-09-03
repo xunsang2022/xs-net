@@ -45,14 +45,21 @@ public class RedisStore {
     }
 
     public boolean create(String playerId, PlayerState state) {
-        redis.opsForHash().putAll(playerKey(playerId), state.toHash());
+        return create(playerId, state.toHash());
+    }
+
+    public boolean create(String playerId, Map<String, String> fields) {
+        redis.opsForHash().putAll(playerKey(playerId), fields);
         redis.opsForSet().add(PLAYER_IDX_KEY, playerId);
         redis.opsForSet().add(PLAYER_ONLINE_KEY, playerId);
         return true;
     }
 
     public boolean flushDirty(String playerId, PlayerState state) {
-        Map<String, String> dirty = state.toHash(state.getDirtyFields());
+        return flushDirty(playerId, state.toHash(state.getDirtyFields()));
+    }
+
+    public boolean flushDirty(String playerId, Map<String, String> dirty) {
         if (dirty.isEmpty()) {
             return true;
         }
@@ -61,7 +68,11 @@ public class RedisStore {
     }
 
     public boolean destroy(String playerId, PlayerState state) {
-        redis.opsForHash().putAll(playerKey(playerId), state.toHash());
+        return destroy(playerId, state.toHash());
+    }
+
+    public boolean destroy(String playerId, Map<String, String> fields) {
+        redis.opsForHash().putAll(playerKey(playerId), fields);
         redis.opsForSet().remove(PLAYER_ONLINE_KEY, playerId);
         return true;
     }

@@ -7,6 +7,8 @@ import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
+import java.util.concurrent.ExecutorService;
+
 /**
  * Static wiring point for the non-Spring-Boot logic node startup flow.
  */
@@ -19,6 +21,8 @@ public final class LogicContext {
     private static volatile LogConsumer logConsumer;
     private static volatile MeterRegistry meterRegistry;
     private static volatile LogicMetrics logicMetrics;
+    private static volatile ExecutorService redisIoExecutor;
+    private static volatile ExecutorService dbIoExecutor;
     private static volatile long syncIntervalMs = 1000L;
 
     private LogicContext() {
@@ -82,6 +86,30 @@ public final class LogicContext {
             throw new IllegalStateException("RedisStore has not been initialized");
         }
         return store;
+    }
+
+    public static void setRedisIoExecutor(ExecutorService executor) {
+        redisIoExecutor = executor;
+    }
+
+    public static ExecutorService getRedisIoExecutor() {
+        ExecutorService executor = redisIoExecutor;
+        if (executor == null) {
+            throw new IllegalStateException("Redis IO executor has not been initialized");
+        }
+        return executor;
+    }
+
+    public static void setDbIoExecutor(ExecutorService executor) {
+        dbIoExecutor = executor;
+    }
+
+    public static ExecutorService getDbIoExecutor() {
+        ExecutorService executor = dbIoExecutor;
+        if (executor == null) {
+            throw new IllegalStateException("DB IO executor has not been initialized");
+        }
+        return executor;
     }
 
     public static void setSyncIntervalMs(long intervalMs) {

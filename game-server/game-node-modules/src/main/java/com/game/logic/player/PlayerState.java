@@ -10,6 +10,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Objects;
 
 /**
  * Player runtime state stored in Redis hash {@code player:{playerId}}.
@@ -57,6 +58,22 @@ public class PlayerState {
 
     public void clearDirty() {
         dirtyFields.clear();
+    }
+
+    public void clearDirty(Collection<String> fields) {
+        dirtyFields.removeAll(Objects.requireNonNull(fields, "fields"));
+    }
+
+    /**
+     * Clears only fields that still contain the value persisted by an asynchronous write.
+     * A newer actor message may have changed a field while the write was in flight.
+     */
+    public void clearDirtyMatching(Map<String, String> persistedFields) {
+        Objects.requireNonNull(persistedFields, "persistedFields").forEach((field, value) -> {
+            if (Objects.equals(fieldValue(field), value)) {
+                dirtyFields.remove(field);
+            }
+        });
     }
 
     public void incrementVersion() {
