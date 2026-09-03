@@ -26,3 +26,4 @@ xs-net-sdk-typescript/generated/
 xs-net-sdk-typescript/dist/
 xs-net-sdk-cpp/generated/
 node_modules/
+/docs/
