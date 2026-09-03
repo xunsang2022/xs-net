@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package game.message;
+
+option java_multiple_files = true;
+option java_package = "com.game.protocol.pb";
+
+// BattleCreateCommand = 3010
+message BattleCreateCommand {
+  optional string battle_id = 1;
+}
+
+// BattleJoinCommand = 3011
+message BattleJoinCommand {
+  optional int64 player_id = 1;
+}
+
+// BattleLeaveCommand = 3012
+message BattleLeaveCommand {
+  optional int64 player_id = 1;
+}
+
+// BattleInputCommand = 3013
+message BattleInputCommand {
+  optional int64 player_id = 1;
+  optional int64 client_sequence = 2;
+  optional int32 direction_x = 3;
+  optional int32 direction_y = 4;
+}
+
+// BattleEndCommand = 3014
+message BattleEndCommand {
+  optional string reason = 1;
+}

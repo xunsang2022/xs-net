@@ -14,6 +14,9 @@ class PekkoConfigurationTest {
         Config cluster = ConfigFactory.parseResources("application-cluster.conf").resolve();
 
         assertEquals("cluster", defaults.getString("pekko.actor.provider"));
+        assertEquals("thread-pool-executor", defaults.getString("pekko.actor.battle-dispatcher.executor"));
+        assertEquals(8, defaults.getInt("pekko.actor.battle-dispatcher.thread-pool-executor.fixed-pool-size"));
+        assertEquals(1, defaults.getInt("pekko.actor.battle-dispatcher.throughput"));
         assertEquals("org.apache.pekko.cluster.ddata.DurableStore$None$",
                 defaults.getString("pekko.distributed-data.durable.store"));
         assertEquals("pekko://game-system@gateway-1:2001",

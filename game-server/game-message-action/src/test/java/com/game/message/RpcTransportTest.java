@@ -2,6 +2,11 @@ package com.game.message;
 
 import com.game.message.s2c.LogoutResponse;
 import com.game.message.c2s.PlayerEnterCommand;
+import com.game.message.battle.BattleCreateCommand;
+import com.game.message.battle.BattleEndCommand;
+import com.game.message.battle.BattleInputCommand;
+import com.game.message.battle.BattleJoinCommand;
+import com.game.message.battle.BattleLeaveCommand;
 import com.game.message.management.GmKickPlayerCommand;
 import com.game.message.management.GmKickPlayerRequest;
 import com.game.message.rpc.GameRpcMessages;
@@ -52,6 +57,16 @@ public class RpcTransportTest {
         assertEquals(new SceneLeaveCommand(42L), transport(new SceneLeaveCommand(42L)));
         assertEquals(new PlayerSceneChanged("scene-1", true),
                 transport(new PlayerSceneChanged("scene-1", true)));
+    }
+
+    @Test
+    public void battleMessagesTransportBetweenNodes() throws Exception {
+        assertEquals(new BattleCreateCommand("battle-1"), transport(new BattleCreateCommand("battle-1")));
+        assertEquals(new BattleJoinCommand(42L), transport(new BattleJoinCommand(42L)));
+        assertEquals(new BattleLeaveCommand(42L), transport(new BattleLeaveCommand(42L)));
+        assertEquals(new BattleInputCommand(42L, 7L, -1, 1),
+                transport(new BattleInputCommand(42L, 7L, -1, 1)));
+        assertEquals(new BattleEndCommand("finished"), transport(new BattleEndCommand("finished")));
     }
 
     private static Object transport(Object message) throws Exception {

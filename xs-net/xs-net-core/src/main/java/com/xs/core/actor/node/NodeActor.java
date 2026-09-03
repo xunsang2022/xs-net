@@ -83,7 +83,14 @@ public class NodeActor extends AbstractBehavior<Command> {
             }
             Roles annotation = messageInterface.getAnnotation(Roles.class);
             if (annotation != null && roles.contains(annotation.value())) {
-                AkkaKit.initClusterSharding(sharding, messageInterface, actorClass, annotation.value());
+                ActorDispatcher dispatcher = actorClass.getAnnotation(ActorDispatcher.class);
+                AkkaKit.initClusterSharding(
+                        sharding,
+                        messageInterface,
+                        actorClass,
+                        annotation.value(),
+                        dispatcher == null ? AkkaKit.ENTITY_DISPATCHER : dispatcher.value()
+                );
             }
         }
     }

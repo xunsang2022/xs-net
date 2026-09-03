@@ -132,13 +132,24 @@ public class AkkaKit {
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     public static void initClusterSharding(ClusterSharding sharding, Class<?> actorCmdClass, Class<?> actorClass, String roles) {
+        initClusterSharding(sharding, actorCmdClass, actorClass, roles, ENTITY_DISPATCHER);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    public static void initClusterSharding(
+            ClusterSharding sharding,
+            Class<?> actorCmdClass,
+            Class<?> actorClass,
+            String roles,
+            String dispatcher
+    ) {
         EntityTypeKey<?> typeKey = entityTypeKey(actorCmdClass);
         // 分片实体（PlayerMessage / S2C 通道）统一使用大容量专用调度器，
         // 实体 Actor 会做阻塞式 Redis 访问，默认 32 线程 fork-join 在高并发下成瓶颈。
         sharding.init(Entity.of(typeKey, entityContext -> createEntityContext(entityContext, actorClass))
                 .withRole(roles)
-                .withEntityProps(Props.empty().withDispatcherFromConfig(ENTITY_DISPATCHER)));
-        log.info("初始化集群 Actor 实例 {} {}", actorCmdClass.getSimpleName(), roles);
+                .withEntityProps(Props.empty().withDispatcherFromConfig(Objects.requireNonNull(dispatcher, "dispatcher"))));
+        log.info("初始化集群 Actor 实例 {} {} dispatcher={}", actorCmdClass.getSimpleName(), roles, dispatcher);
     }
 
     @SuppressWarnings("unchecked")

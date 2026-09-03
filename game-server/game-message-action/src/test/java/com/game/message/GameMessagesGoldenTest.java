@@ -82,7 +82,11 @@ public class GameMessagesGoldenTest {
             assertNotNull(spec.messageClass());
             assertNotNull(spec.parser());
         }
-        assertEquals(Set.of(999, 1000, 1001, 1002, 1003, 2100, 2101, 3003, 3004, 3005, 3006, 3007, 3008), rpcNums);
+        assertEquals(Set.of(
+                999, 1000, 1001, 1002, 1003, 2100, 2101,
+                3003, 3004, 3005, 3006, 3007, 3008,
+                3010, 3011, 3012, 3013, 3014
+        ), rpcNums);
         assertNotNull(GameRpcMessages.INSTANCE.find(1000));
         assertEquals(1003, GameRpcMessages.INSTANCE.find(1003).rpcNum());
     }
@@ -102,6 +106,8 @@ public class GameMessagesGoldenTest {
         assertEquals(RpcRoute.RPC_PLAYER_ENTER_COMMAND, RpcRoute.forNumber(3003));
         assertEquals(RpcRoute.RPC_CS_GM_KICK_PLAYER, RpcRoute.forNumber(3004));
         assertEquals(RpcRoute.RPC_PLAYER_SCENE_CHANGED, RpcRoute.forNumber(3008));
+        assertEquals(RpcRoute.RPC_BATTLE_CREATE_COMMAND, RpcRoute.forNumber(3010));
+        assertEquals(RpcRoute.RPC_BATTLE_INPUT_COMMAND, RpcRoute.forNumber(3013));
     }
 
     @Test
