@@ -1,6 +1,7 @@
 package com.game.gateway.netty;
 
 import com.xs.net.message.pb.NetMessage;
+import com.xs.net.message.TransportKind;
 import io.netty.channel.Channel;
 import lombok.extern.slf4j.Slf4j;
 
@@ -35,6 +36,16 @@ public final class TcpClientEndpoint implements ClientEndpoint {
         if (channel != null) {
             channel.close();
         }
+    }
+
+    @Override
+    public String sessionId() {
+        return channelId();
+    }
+
+    @Override
+    public TransportKind kind() {
+        return TransportKind.TCP;
     }
 
     private String channelId() {

@@ -9,6 +9,7 @@ import com.game.gateway.netty.ClientEndpoint;
 import com.game.message.actor.S2C;
 import com.xs.core.actor.RpcActor;
 import com.xs.net.message.MessageAble;
+import com.xs.net.message.RequestContext;
 import com.xs.net.message.pb.NetMessage;
 import io.micrometer.core.instrument.Metrics;
 import lombok.extern.slf4j.Slf4j;
@@ -49,7 +50,7 @@ public class ChannelActor extends RpcActor<S2C> {
     @Override
     public Receive<S2C> createReceive() {
         return newRpcReceiveBuilder()
-                .onAnyMessage(this::onS2C)
+                .onAnyMessage(message -> contextual(message, this::onS2C))
                 .build();
     }
 
@@ -64,6 +65,10 @@ public class ChannelActor extends RpcActor<S2C> {
         try {
             S2C_ARRIVE_NANOS.set(System.nanoTime());
             NetMessage netMessage = MessageAble.toNetMessage(message);
+            RequestContext context = currentRequestContext();
+            if (context != null) {
+                netMessage = context.applyTo(netMessage.toBuilder()).build();
+            }
             endpoint.write(netMessage);
             S2C_WRITE_NANOS.set(System.nanoTime());
             Long ingressNanos = ChannelRegistry.INSTANCE.takeLoginIngress(entityId);

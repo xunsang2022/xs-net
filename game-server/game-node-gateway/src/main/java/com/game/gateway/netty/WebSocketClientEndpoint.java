@@ -1,6 +1,7 @@
 package com.game.gateway.netty;
 
 import com.xs.net.message.pb.NetMessage;
+import com.xs.net.message.TransportKind;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
@@ -29,5 +30,15 @@ public final class WebSocketClientEndpoint implements ClientEndpoint {
     @Override
     public void close() {
         channel.close();
+    }
+
+    @Override
+    public String sessionId() {
+        return channel.id().asLongText();
+    }
+
+    @Override
+    public TransportKind kind() {
+        return TransportKind.WEBSOCKET;
     }
 }

@@ -2,6 +2,7 @@ package com.game.gateway.netty;
 
 import com.game.gateway.config.UdpConfig;
 import com.xs.net.message.pb.NetMessage;
+import com.xs.net.message.TransportKind;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.socket.DatagramChannel;
 import io.netty.channel.socket.DatagramPacket;
@@ -78,6 +79,16 @@ public final class UdpSession implements ClientEndpoint {
 
     public String channelId() {
         return channelId;
+    }
+
+    @Override
+    public String sessionId() {
+        return channelId;
+    }
+
+    @Override
+    public TransportKind kind() {
+        return TransportKind.UDP;
     }
 
     public long lastActiveMs() {

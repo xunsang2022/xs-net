@@ -17,6 +17,11 @@
             <artifactId>game-comment</artifactId>
             <version>0.0.1-SNAPSHOT</version>
         </dependency>
+        <dependency>
+            <groupId>com.xs</groupId>
+            <artifactId>xs-net-transport</artifactId>
+            <version>0.0.1</version>
+        </dependency>
 
         <!-- Akka Cluster Dependencies -->
         <!-- Classic Akka API -->

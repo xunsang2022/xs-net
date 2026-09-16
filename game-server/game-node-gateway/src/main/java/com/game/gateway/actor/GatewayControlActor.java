@@ -28,7 +28,7 @@ public final class GatewayControlActor extends RpcActor<GatewayControlMessage> {
     @Override
     public Receive<GatewayControlMessage> createReceive() {
         return newRpcReceiveBuilder()
-                .onMessage(DisconnectChannelCommand.class, this::onDisconnect)
+                .onMessage(DisconnectChannelCommand.class, contextual(this::onDisconnect))
                 .build();
     }
 

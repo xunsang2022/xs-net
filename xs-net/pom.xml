@@ -17,6 +17,7 @@
         <module>xs-net-tools</module>
         <module>xs-net-message</module>
         <module>xs-net-core</module>
+        <module>xs-net-transport</module>
         <module>xs-net-rpc-maven-plugin</module>
         <module>xs-net-sdk</module>
         <module>xs-net-all</module>

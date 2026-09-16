@@ -23,6 +23,11 @@
             <artifactId>xs-net-core</artifactId>
             <version>0.0.1</version>
         </dependency>
+        <dependency>
+            <groupId>com.xs</groupId>
+            <artifactId>xs-net-transport</artifactId>
+            <version>0.0.1</version>
+        </dependency>
 
     </dependencies>
 </project>

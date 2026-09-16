@@ -2,6 +2,7 @@ package com.game.gateway.kcp;
 
 import com.game.gateway.netty.ClientEndpoint;
 import com.xs.net.message.pb.NetMessage;
+import com.xs.net.message.TransportKind;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.socket.DatagramChannel;
 import io.netty.channel.socket.DatagramPacket;
@@ -106,6 +107,16 @@ public final class KcpSession implements ClientEndpoint {
 
     public String channelId() {
         return channelId;
+    }
+
+    @Override
+    public String sessionId() {
+        return channelId;
+    }
+
+    @Override
+    public TransportKind kind() {
+        return TransportKind.UDP;
     }
 
     public long lastActiveMs() {
