@@ -57,7 +57,7 @@ public class MessageAble {
         return toActionMessage(netMessage, messageRegistry, null);
     }
 
-    private static Object toActionMessage(
+    static Object toActionMessage(
             NetMessage netMessage,
             RpcMessageRegistry messageRegistry,
             RpcEnvelopeFactory messageEnvelopeFactory
@@ -139,6 +139,13 @@ public class MessageAble {
         bb.put(data);
 
         return bytes;
+    }
+
+    public static NetMessage toNetMessage(byte[] bytes, boolean framed) throws InvalidProtocolBufferException {
+        if (!framed) {
+            return NetMessage.parseFrom(bytes);
+        }
+        return toNetMessage(bytes);
     }
 
     private static RpcMessageRegistry requireRegistry() {

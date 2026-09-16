@@ -14,6 +14,7 @@ import com.xs.net.message.RpcMessageRegistry;
 import com.xs.net.message.RpcMessageSpec;
 import com.xs.net.message.MessageAble;
 import com.xs.net.message.RpcMessage;
+import com.xs.net.message.RequestContext;
 import com.xs.net.message.pb.NetMessage;
 import io.micrometer.core.instrument.Metrics;
 
@@ -61,7 +62,17 @@ public class AkkaKit {
             Object message,
             String entityId
     ) {
-        tellToRole(registry, actorCmdClass, message, entityId);
+        tellToRole(registry, actorCmdClass, message, entityId, null);
+    }
+
+    public static void tell(
+            RpcMessageRegistry registry,
+            Class<?> actorCmdClass,
+            Object message,
+            String entityId,
+            RequestContext context
+    ) {
+        tellToRole(registry, actorCmdClass, message, entityId, context);
     }
 
     public static void tellRpc(Class<?> roleClass, RpcMessage message, String entityId) {
@@ -73,7 +84,8 @@ public class AkkaKit {
             RpcMessageRegistry registry,
             Class<?> roleClass,
             Object message,
-            String entityId
+            String entityId,
+            RequestContext context
     ) {
         Objects.requireNonNull(registry, "registry");
         Objects.requireNonNull(roleClass, "roleClass");
@@ -97,9 +109,12 @@ public class AkkaKit {
         EntityRef entityRef = getClusterSharding().entityRefFor(entityTypeKey((Class) roleClass), entityId);
         // Entity placement can change at runtime. Always use the protocol envelope so a local
         // sender cannot accidentally deliver a non-serializable DTO to a remote shard.
-        Object deliveredMessage = message instanceof NetMessage
-                ? message
+        NetMessage deliveredMessage = message instanceof NetMessage netMessage
+                ? netMessage
                 : MessageAble.toNetMessage(message, registry);
+        if (context != null) {
+            deliveredMessage = context.applyTo(deliveredMessage.toBuilder()).build();
+        }
         entityRef.tell(deliveredMessage);
     }
 

@@ -1,9 +1,7 @@
 package com.xs.net.message.serializer;
 
 import org.apache.pekko.serialization.Serializer;
-import com.xs.net.message.MessageAble;
 import com.xs.net.message.pb.NetMessage;
-import lombok.SneakyThrows;
 import scala.Option;
 
 /// 网络消息序列化
@@ -12,16 +10,20 @@ public class NetMessageSerializer implements Serializer {
     public NetMessageSerializer() {
     }
 
-    @SneakyThrows
-    private Object toMsg(byte[] csByte) {
-        NetMessage s_r_cs = MessageAble.toNetMessage(csByte);
-        return MessageAble.toActionMessage(s_r_cs);
+    private NetMessage toMsg(byte[] bytes) {
+        try {
+            return NetMessage.parseFrom(bytes);
+        } catch (Exception exception) {
+            throw new IllegalArgumentException("Invalid NetMessage payload", exception);
+        }
     }
 
-    @SneakyThrows
     @Override
     public byte[] toBinary(Object arg0) {
-        return MessageAble.toNetByteMsg((NetMessage) arg0);
+        if (!(arg0 instanceof NetMessage message)) {
+            throw new IllegalArgumentException("NetMessageSerializer accepts NetMessage only");
+        }
+        return message.toByteArray();
     }
 
     @Override

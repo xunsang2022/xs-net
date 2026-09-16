@@ -12,4 +12,11 @@ message NetMessage {
   int32 session_id = 4;
   int32 user_id = 5;
   string user_ip = 6;
+  string trace_id = 7;
+  int64 deadline_epoch_ms = 8;
+  uint32 hop_count = 9;
+  string player_id = 10;
+  string channel_id = 11;
+  string source_node = 12;
+  uint32 schema_version = 13;
 }

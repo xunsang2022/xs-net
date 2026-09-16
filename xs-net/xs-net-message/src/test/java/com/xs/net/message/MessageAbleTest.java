@@ -144,9 +144,9 @@ public class MessageAbleTest extends TestCase {
         NetMessage envelope = MessageAble.toNetMessage(new TestRpcMessage(TEST_RPC, business));
         NetMessageSerializer serializer = new NetMessageSerializer();
 
-        Object action = serializer.fromBinary(serializer.toBinary(envelope));
-        assertTrue(action instanceof RpcMessage);
-        assertEquals(business, ((RpcMessage) action).payload());
+        Object decoded = serializer.fromBinary(serializer.toBinary(envelope));
+        assertTrue(decoded instanceof NetMessage);
+        assertEquals(envelope, decoded);
     }
 
     private static final class TestRpcMessage implements RpcMessage {

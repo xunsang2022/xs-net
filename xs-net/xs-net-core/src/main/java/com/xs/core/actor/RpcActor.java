@@ -7,12 +7,20 @@ import org.apache.pekko.actor.typed.javadsl.ReceiveBuilder;
 import com.google.protobuf.MessageLite;
 import com.xs.core.akka.AkkaKit;
 import com.xs.net.message.MessageAble;
+import com.xs.net.message.RequestContext;
+import com.xs.net.message.RequestContextHolder;
+import com.xs.net.message.RpcDelivery;
 import com.xs.net.message.RpcMessageRegistry;
 import com.xs.net.message.RpcMessageSpec;
+import com.xs.net.message.RpcRuntime;
 import com.xs.net.message.pb.NetMessage;
 import io.micrometer.core.instrument.Metrics;
 
 import java.util.Objects;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Map;
+import org.apache.pekko.japi.function.Function;
 
 public abstract class RpcActor<M> extends AbstractBehavior<M> {
 
@@ -20,6 +28,9 @@ public abstract class RpcActor<M> extends AbstractBehavior<M> {
 
     private final String entityId;
     private final RpcMessageRegistry registry;
+    private final RpcRuntime runtime;
+    private final Map<Object, RequestContext> deliveryContexts =
+            Collections.synchronizedMap(new IdentityHashMap<>());
 
     protected RpcActor(ActorContext<M> context, String entityId) {
         this(context, entityId, requireRegistry());
@@ -29,6 +40,7 @@ public abstract class RpcActor<M> extends AbstractBehavior<M> {
         super(context);
         this.entityId = Objects.requireNonNull(entityId, "entityId");
         this.registry = Objects.requireNonNull(registry, "registry");
+        this.runtime = new RpcRuntime(registry);
     }
 
     protected final String entityId() {
@@ -39,8 +51,38 @@ public abstract class RpcActor<M> extends AbstractBehavior<M> {
         return registry;
     }
 
+    protected final RequestContext currentRequestContext() {
+        return RequestContextHolder.current();
+    }
+
+    protected final <T extends M> Function<T, Behavior<M>> contextual(Function<T, Behavior<M>> handler) {
+        return message -> {
+            RequestContext context = deliveryContexts.remove(message);
+            return RequestContextHolder.call(context, () -> {
+                try {
+                    return handler.apply(message);
+                } catch (Exception exception) {
+                    throw new RuntimeException(exception);
+                }
+            });
+        };
+    }
+
+    protected final Behavior<M> contextual(M message, Function<M, Behavior<M>> handler) {
+        RequestContext context = deliveryContexts.remove(message);
+        return RequestContextHolder.call(context, () -> {
+            try {
+                return handler.apply(message);
+            } catch (Exception exception) {
+                throw new RuntimeException(exception);
+            }
+        });
+    }
+
     protected final void sendRpc(Class<?> roleClass, Object message, String targetEntityId) {
-        AkkaKit.tell(registry, roleClass, message, targetEntityId);
+        RequestContext context = currentRequestContext();
+        AkkaKit.tell(registry, roleClass, message, targetEntityId,
+                context == null ? null : context.nextHop(null));
     }
 
     /**
@@ -63,8 +105,13 @@ public abstract class RpcActor<M> extends AbstractBehavior<M> {
             return this;
         }
         try {
-            Object decoded = MessageAble.toActionMessage(envelope, registry);
-            getContext().getSelf().tell((M) decoded);
+            RpcDelivery<Object> delivery = runtime.decodeDelivery(envelope);
+            if (delivery.context().expired()) {
+                recordDroppedEnvelope(rpcNum, spec.messageClass().getName(), "deadline_expired", null);
+                return this;
+            }
+            deliveryContexts.put(delivery.message(), delivery.context());
+            getContext().getSelf().tell((M) delivery.message());
         } catch (Exception exception) {
             recordDroppedEnvelope(rpcNum, spec.messageClass().getName(), "decode_failure", exception);
         }
