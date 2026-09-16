@@ -109,6 +109,8 @@ class RpcSourceScannerTest {
         assertTrue(java.nio.file.Files.isRegularFile(target.resolve("proto/comment.proto")));
         assertTrue(java.nio.file.Files.isRegularFile(target.resolve("proto/PlayerMessages.proto")));
         assertTrue(java.nio.file.Files.isRegularFile(target.resolve("proto/rpc_routes.proto")));
+        assertTrue(java.nio.file.Files.isRegularFile(target.resolve("proto/rpc_routes.md")));
+        assertTrue(java.nio.file.Files.isRegularFile(target.resolve("proto/rpc_protocol_validation.txt")));
     }
 
     @Test

@@ -4,16 +4,18 @@ import com.google.protobuf.MessageLite;
 import com.xs.net.message.RpcMessageRegistry;
 import com.xs.net.message.RpcMessageRegistryBuilder;
 import com.xs.net.message.RpcMessageSpec;
+import com.xs.net.message.RpcRouteRegistry;
 
 public final class GameRpcMessages {
     public static final RpcMessageRegistry INSTANCE = registry();
+    public static final RpcRouteRegistry ROUTES = RpcRouteRegistry.from(INSTANCE);
 
     private GameRpcMessages() {}
 
     private static RpcMessageRegistry registry() {
         RpcMessageRegistryBuilder builder = new RpcMessageRegistryBuilder();
 #foreach($message in ${messages})
-        builder.register(new RpcMessageSpec<>(${message.number}, ${protoJavaPackage}.${message.name}.class, ${protoJavaPackage}.${message.name}.getDefaultInstance().getParserForType(), ${message.dtoType}.class, ${message.roleClass}, com.xs.net.message.RpcMessageDirection.${message.direction}, ${message.publicVisible}, ${message.isRequest}, ${message.channelRoutingRequired}, GeneratedRpcCodec.${message.codecName}(), ${message.handler}));
+        builder.register(new RpcMessageSpec<>(${message.number}, ${protoJavaPackage}.${message.name}.class, ${protoJavaPackage}.${message.name}.getDefaultInstance().getParserForType(), ${message.dtoType}.class, ${message.roleClass}, com.xs.net.message.RpcMessageDirection.${message.direction}, ${message.publicVisible}, ${message.playerRoutingRequired}, ${message.channelRoutingRequired}, GeneratedRpcCodec.${message.codecName}(), ${message.handler}));
 #end
         return builder.build();
     }

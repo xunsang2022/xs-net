@@ -13,21 +13,26 @@ if ($env:IDEA_MAVEN_HOME) {
     }
 }
 if (-not $mvn) {
-    $jetbrainsRoot = 'C:\Program Files\JetBrains'
-    if (Test-Path -LiteralPath $jetbrainsRoot) {
-        $ideaDirs = Get-ChildItem -LiteralPath $jetbrainsRoot -Directory -Filter 'IntelliJ IDEA*' |
-            Sort-Object Name -Descending
-        foreach ($dir in $ideaDirs) {
-            $candidate = Join-Path $dir.FullName 'plugins\maven\lib\maven3\bin\mvn.cmd'
-            if (Test-Path -LiteralPath $candidate) {
-                $mvn = $candidate
+    $jetbrainsRoots = @('C:\Program Files\JetBrains', 'F:\Program Files\JetBrains')
+    foreach ($jetbrainsRoot in $jetbrainsRoots) {
+        if (Test-Path -LiteralPath $jetbrainsRoot) {
+            $ideaDirs = Get-ChildItem -LiteralPath $jetbrainsRoot -Directory -Filter 'IntelliJ IDEA*' |
+                Sort-Object Name -Descending
+            foreach ($dir in $ideaDirs) {
+                $candidate = Join-Path $dir.FullName 'plugins\maven\lib\maven3\bin\mvn.cmd'
+                if (Test-Path -LiteralPath $candidate) {
+                    $mvn = $candidate
+                    break
+                }
+            }
+            if ($mvn) {
                 break
             }
         }
     }
 }
 if (-not $mvn) {
-    throw "IDEA bundled Maven not found. Set IDEA_MAVEN_HOME to the Maven home (e.g. C:\Program Files\JetBrains\IntelliJ IDEA 2026.1.4\plugins\maven\lib\maven3)."
+    throw "IDEA bundled Maven not found. Set IDEA_MAVEN_HOME to the Maven home (for example IntelliJ IDEA plugins\maven\lib\maven3)."
 }
 
 # ---- 2. 定位 JDK 21（优先扫描用户 .jdks 目录，其次回退到 JAVA_HOME） ----
