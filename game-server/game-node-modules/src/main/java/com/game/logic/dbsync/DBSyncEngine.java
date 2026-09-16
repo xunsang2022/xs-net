@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -29,7 +30,10 @@ public class DBSyncEngine {
 
     private final JdbcTemplate jdbcTemplate;
     private final DBSyncConfig config;
-    private final ConcurrentHashMap<Long, DirtyRecord> dirty = new ConcurrentHashMap<>();
+    private final DirtyStateBuffer dirty;
+    private final ConcurrentHashMap<Long, Integer> retryAttempts = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Long, Long> nextRetryNanos = new ConcurrentHashMap<>();
+    private final Set<Long> terminalFailures = ConcurrentHashMap.newKeySet();
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     private ScheduledExecutorService scheduler;
@@ -38,6 +42,7 @@ public class DBSyncEngine {
     public DBSyncEngine(JdbcTemplate jdbcTemplate, DBSyncConfig config) {
         this.jdbcTemplate = jdbcTemplate;
         this.config = config;
+        this.dirty = new DirtyStateBuffer(config.getMaxDirtyRecords(), config.getMaxDirtyBytes());
     }
 
     /**
@@ -86,19 +91,15 @@ public class DBSyncEngine {
      * 脏记录数达到 maxDirtyRecords 时拒绝新提交并返回 false，防止失败持续时内存无限增长。
      */
     public boolean submit(Long playerId, Map<String, String> fields, long version) {
-        if (dirty.size() >= config.getMaxDirtyRecords()) {
-            log.error("DBSyncEngine dirty map full (maxDirtyRecords={}), reject submit playerId={}",
-                    config.getMaxDirtyRecords(), playerId);
+        DirtyStateBuffer.SubmitResult result = dirty.submit(playerId, fields, version);
+        if (result == DirtyStateBuffer.SubmitResult.REJECTED_CAPACITY) {
+            log.error("DBSyncEngine buffer full, reject new player state: playerId={}, records={}, bytes={}",
+                    playerId, dirty.size(), dirty.bytes());
             return false;
         }
-        dirty.compute(playerId, (k, existing) -> {
-            if (existing == null) {
-                return new DirtyRecord(playerId, new LinkedHashMap<>(fields), version);
-            }
-            Map<String, String> merged = new LinkedHashMap<>(existing.fields());
-            merged.putAll(fields);
-            return new DirtyRecord(playerId, merged, version);
-        });
+        nextRetryNanos.remove(playerId);
+        retryAttempts.remove(playerId);
+        terminalFailures.remove(playerId);
         return true;
     }
 
@@ -107,6 +108,10 @@ public class DBSyncEngine {
      */
     public int dirtySize() {
         return dirty.size();
+    }
+
+    public long dirtyBytes() {
+        return dirty.bytes();
     }
 
     /**
@@ -136,11 +141,15 @@ public class DBSyncEngine {
      * 未 start() 时（如单元测试）同步执行。
      */
     public void flush() {
-        if (dirty.isEmpty()) {
+        if (dirty.size() == 0) {
             return;
         }
         long startNanos = System.nanoTime();
-        List<DirtyRecord> snapshot = new ArrayList<>(dirty.values());
+        long now = System.nanoTime();
+        List<DirtyRecord> snapshot = dirty.snapshot(config.getMaxDirtyRecords()).stream()
+                .filter(record -> !terminalFailures.contains(record.playerId()))
+                .filter(record -> nextRetryNanos.getOrDefault(record.playerId(), 0L) <= now)
+                .toList();
         List<List<DirtyRecord>> shards = shard(snapshot, config.getFlushConcurrency());
         if (flushPool == null) {
             for (List<DirtyRecord> shard : shards) {
@@ -182,7 +191,10 @@ public class DBSyncEngine {
                 DirtyRecord r = shard.get(i);
                 // results[i] > 0 表示插入或更新成功；== 0 表示乐观锁冲突（WHERE version 不匹配），保留重试
                 if (results[i] > 0) {
-                    dirty.computeIfPresent(r.playerId(), (k, cur) -> cur.version() == r.version() ? null : cur);
+                    dirty.removeIfVersion(r.playerId(), r.version());
+                    retryAttempts.remove(r.playerId());
+                    nextRetryNanos.remove(r.playerId());
+                    terminalFailures.remove(r.playerId());
                 }
             }
         } catch (Exception e) {
@@ -190,6 +202,22 @@ public class DBSyncEngine {
             LogicMetrics metrics = LogicContext.getLogicMetricsOrNull();
             if (metrics != null) {
                 metrics.recordFlushFailure();
+            }
+            long now = System.nanoTime();
+            for (DirtyRecord record : shard) {
+                int attempts = retryAttempts.merge(record.playerId(), 1, Integer::sum);
+                long multiplier = 1L << Math.min(attempts - 1, 10);
+                long delayMs = Math.min(60_000L, config.getRetryBackoffMs() * multiplier);
+                nextRetryNanos.put(record.playerId(), now + TimeUnit.MILLISECONDS.toNanos(delayMs));
+                if (attempts >= config.getMaxRetryAttempts()) {
+                    terminalFailures.add(record.playerId());
+                    LogicMetrics logicMetrics = LogicContext.getLogicMetricsOrNull();
+                    if (logicMetrics != null) {
+                        logicMetrics.recordRetryExhausted();
+                    }
+                    log.error("DBSyncEngine record exceeded retry threshold: playerId={}, attempts={}",
+                            record.playerId(), attempts);
+                }
             }
         }
     }

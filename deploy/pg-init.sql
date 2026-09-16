@@ -13,12 +13,16 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS log_events (
     id          BIGSERIAL PRIMARY KEY,
-    player_id   BIGINT       NOT NULL,
+    source_stream_id VARCHAR(64) NOT NULL,
+    player_id   BIGINT,
     type        VARCHAR(32)  NOT NULL,
     level       VARCHAR(16)  NOT NULL,
     message     TEXT,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE log_events ADD COLUMN IF NOT EXISTS source_stream_id VARCHAR(64);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_log_events_source_stream_id ON log_events (source_stream_id);
 
 CREATE INDEX IF NOT EXISTS idx_log_events_player_created ON log_events (player_id, created_at DESC);
 

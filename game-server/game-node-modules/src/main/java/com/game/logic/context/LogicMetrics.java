@@ -17,6 +17,7 @@ public final class LogicMetrics {
 
     private final Timer flushTimer;
     private final Counter flushFailureCounter;
+    private final Counter retryExhaustedCounter;
     private final Timer loginRedisLoadHitTimer;
     private final Timer loginRedisLoadMissTimer;
     private final Timer loginRedisLoadFailureTimer;
@@ -31,6 +32,9 @@ public final class LogicMetrics {
                 .register(registry);
         this.flushFailureCounter = Counter.builder("dbsync.flush.failures")
                 .description("DBSyncEngine flush 分片失败次数")
+                .register(registry);
+        this.retryExhaustedCounter = Counter.builder("dbsync.retry.exhausted")
+                .description("DBSyncEngine records that reached the retry limit")
                 .register(registry);
         this.loginRedisLoadHitTimer = Timer.builder("login.redis.load.duration")
                 .tag("cache", "hit")
@@ -53,6 +57,9 @@ public final class LogicMetrics {
         Gauge.builder("dbsync.dirty.size", dbSyncEngine, DBSyncEngine::dirtySize)
                 .description("当前待同步脏记录数")
                 .register(registry);
+        Gauge.builder("dbsync.dirty.bytes", dbSyncEngine, DBSyncEngine::dirtyBytes)
+                .description("当前待同步脏记录估算字节数")
+                .register(registry);
     }
 
     /** 上报一次 flush 耗时（纳秒）。 */
@@ -63,6 +70,10 @@ public final class LogicMetrics {
     /** 上报一次 flush 分片失败。 */
     public void recordFlushFailure() {
         flushFailureCounter.increment();
+    }
+
+    public void recordRetryExhausted() {
+        retryExhaustedCounter.increment();
     }
 
     public void recordLoginRedisLoad(long durationNanos, boolean cacheHit) {
