@@ -31,7 +31,7 @@ public final class GMActor extends RpcActor<GMMessage> {
     @Override
     public Receive<GMMessage> createReceive() {
         return newRpcReceiveBuilder()
-                .onMessage(GmKickPlayerRequest.class, this::onKickPlayer)
+                .onMessage(GmKickPlayerRequest.class, contextual(this::onKickPlayer))
                 .onMessage(AuditResult.class, this::onAuditResult)
                 .build();
     }

@@ -53,11 +53,11 @@ public final class BattleActor extends RpcActor<BattleMessage> {
     @Override
     public Receive<BattleMessage> createReceive() {
         return newRpcReceiveBuilder()
-                .onMessage(BattleCreateCommand.class, this::onCreate)
-                .onMessage(BattleJoinCommand.class, this::onJoin)
-                .onMessage(BattleLeaveCommand.class, this::onLeave)
-                .onMessage(BattleInputCommand.class, this::onInput)
-                .onMessage(BattleEndCommand.class, this::onEnd)
+                .onMessage(BattleCreateCommand.class, contextual(this::onCreate))
+                .onMessage(BattleJoinCommand.class, contextual(this::onJoin))
+                .onMessage(BattleLeaveCommand.class, contextual(this::onLeave))
+                .onMessage(BattleInputCommand.class, contextual(this::onInput))
+                .onMessage(BattleEndCommand.class, contextual(this::onEnd))
                 .onMessage(Tick.class, message -> onTick())
                 .build();
     }

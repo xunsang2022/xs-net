@@ -81,10 +81,10 @@ public class PlayerActor extends RpcActor<PlayerMessage> {
     @Override
     public Receive<PlayerMessage> createReceive() {
         return newRpcReceiveBuilder()
-                .onMessage(PlayerEnterCommand.class, this::onPlayerEnterMessage)
-                .onMessage(LogoutRequest.class, this::onLogoutMessage)
-                .onMessage(GmKickPlayerCommand.class, this::onGmKickPlayer)
-                .onMessage(PlayerSceneChanged.class, this::onSceneChanged)
+                .onMessage(PlayerEnterCommand.class, contextual(this::onPlayerEnterMessage))
+                .onMessage(LogoutRequest.class, contextual(this::onLogoutMessage))
+                .onMessage(GmKickPlayerCommand.class, contextual(this::onGmKickPlayer))
+                .onMessage(PlayerSceneChanged.class, contextual(this::onSceneChanged))
                 .onMessage(FlushDirty.class, this::onFlushDirty)
                 .onMessage(LoadTimeout.class, this::onLoadTimeout)
                 .onMessage(CacheLoadResult.class, this::onCacheLoadResult)

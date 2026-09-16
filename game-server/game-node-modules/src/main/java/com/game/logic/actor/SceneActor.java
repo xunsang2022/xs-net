@@ -31,8 +31,8 @@ public final class SceneActor extends RpcActor<SceneMessage> {
     @Override
     public Receive<SceneMessage> createReceive() {
         return newRpcReceiveBuilder()
-                .onMessage(SceneJoinCommand.class, this::onJoin)
-                .onMessage(SceneLeaveCommand.class, this::onLeave)
+                .onMessage(SceneJoinCommand.class, contextual(this::onJoin))
+                .onMessage(SceneLeaveCommand.class, contextual(this::onLeave))
                 .build();
     }
 
