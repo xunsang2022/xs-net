@@ -2,7 +2,8 @@ param(
     [ValidateSet('All', 'Unity', 'TypeScript', 'Cocos', 'Cpp')]
     [string]$Only = 'All',
     [string]$Protoc = $env:PROTOC,
-    [string]$TsProtoPlugin = $env:TS_PROTO_PLUGIN
+    [string]$TsProtoPlugin = $env:TS_PROTO_PLUGIN,
+    [string]$OutputRoot = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -13,7 +14,11 @@ $sdkModule = Join-Path $repoRoot 'xs-net\xs-net-sdk'
 $canonicalProto = Join-Path $sdkModule 'target\generated-proto'
 $frameworkProto = Join-Path $repoRoot 'xs-net\xs-net-message\src\main\proto'
 $templateRoot = Join-Path $sdkModule 'src\main\sdk'
-$codeRoot = Join-Path $sdkModule 'target\code'
+$codeRoot = if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
+    Join-Path $sdkModule 'target\code'
+} else {
+    [System.IO.Path]::GetFullPath($OutputRoot)
+}
 $unityTemplate = Join-Path $templateRoot 'unity'
 $typescriptTemplate = Join-Path $templateRoot 'typescript'
 $cocosTemplate = Join-Path $templateRoot 'cocos'

@@ -49,6 +49,12 @@ target/code/unity  target/code/typescript  target/code/cocos  target/code/cpp
 .\scripts\Generate-Sdks.ps1 -Only Cpp
 ```
 
+如需将产物输出到指定目录，可使用 `-OutputRoot`：
+
+```powershell
+.\scripts\Generate-Sdks.ps1 -Only Cocos -OutputRoot 'C:\Users\XOS\Documents\sdk'
+```
+
 ## 模板和产物边界
 
 | 语言 | 手写模板 | 生成结果 |
