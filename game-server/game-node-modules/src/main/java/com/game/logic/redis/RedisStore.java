@@ -4,6 +4,7 @@ import com.game.logic.enums.LogLevel;
 import com.game.logic.enums.LogType;
 import com.game.logic.player.PlayerState;
 import com.game.protocol.pb.LogRecordCommand;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
@@ -12,9 +13,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * Redis access layer for logic node actor state and log events.
- */
+/** Logic 节点 Actor 状态和日志事件的 Redis 访问层。 */
 @RequiredArgsConstructor
 public class RedisStore {
 
@@ -23,6 +22,8 @@ public class RedisStore {
     public static final String PLAYER_ONLINE_KEY = "player:online";
     public static final String LOG_EVENTS_KEY = "log:events";
 
+    /** 由 Logic 启动流程装配的 Redis 模板。 */
+    @NonNull
     private final StringRedisTemplate redis;
 
     public static String playerKey(String playerId) {

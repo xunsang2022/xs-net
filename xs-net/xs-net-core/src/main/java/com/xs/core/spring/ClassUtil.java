@@ -10,6 +10,7 @@ import java.lang.reflect.TypeVariable;
 import java.util.HashMap;
 import java.util.Map;
 
+/** 负责从 Actor 泛型层级和接口中解析消息类型。 */
 @Slf4j
 @UtilityClass
 public class ClassUtil {

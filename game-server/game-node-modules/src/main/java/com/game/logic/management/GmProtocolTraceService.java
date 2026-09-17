@@ -1,5 +1,6 @@
 package com.game.logic.management;
 
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 import java.util.concurrent.Semaphore;
@@ -11,7 +12,11 @@ public final class GmProtocolTraceService {
     private static final int MIN_TIMEOUT_MS = 1_000;
     private static final int MAX_TIMEOUT_MS = 30_000;
 
+    /** 把 RPC 编号解析为 Logic Actor 处理目标。 */
+    @NonNull
     private final ProtocolTraceTargetResolver targetResolver;
+    /** 执行 Arthas trace 的客户端。 */
+    @NonNull
     private final ArthasTraceClient traceClient;
     private final Semaphore activeTrace = new Semaphore(1);
 

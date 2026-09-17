@@ -8,7 +8,11 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Supplier;
 
-/** Thread-scoped view of the context while an Actor handler is executing. */
+/**
+ * Actor 处理期间的线程级请求上下文。
+ *
+ * <p>进入处理函数时同步写入 MDC，退出时恢复原上下文，避免线程池复用造成 traceId 串线。</p>
+ */
 @UtilityClass
 public class RequestContextHolder {
     private static final ThreadLocal<RequestContext> CURRENT = new ThreadLocal<>();

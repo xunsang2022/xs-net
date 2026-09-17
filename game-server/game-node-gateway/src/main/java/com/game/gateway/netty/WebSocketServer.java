@@ -11,16 +11,27 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-/** Separate WebSocket listener; TCP and UDP Gateway listeners remain unchanged. */
+/**
+ * 独立 WebSocket 监听器。
+ *
+ * <p>WebSocket 与 TCP、UDP 共用认证和路由模型，但拥有独立的监听端口及事件循环资源。</p>
+ */
 @Slf4j
 @RequiredArgsConstructor
 public final class WebSocketServer {
 
+    /** 复用网关 Netty 线程配置。 */
+    @NonNull
     private final NettyConfig nettyConfig;
+    /** WebSocket 专属端口和路径配置。 */
+    @NonNull
     private final WebSocketConfig webSocketConfig;
+    /** 握手认证使用的 JWT 工具。 */
+    @NonNull
     private final JwtUtil jwtUtil;
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;

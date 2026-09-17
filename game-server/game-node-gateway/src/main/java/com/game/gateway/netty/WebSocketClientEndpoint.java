@@ -5,12 +5,15 @@ import com.xs.net.message.TransportKind;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
-/** WebSocket endpoint where every binary frame is a raw NetMessage protobuf body. */
+/** WebSocket 下行端点，每个二进制帧直接承载 NetMessage Protobuf 数据。 */
 @RequiredArgsConstructor
 public final class WebSocketClientEndpoint implements ClientEndpoint {
 
+    /** 当前 WebSocket 连接。 */
+    @NonNull
     private final Channel channel;
 
     @Override

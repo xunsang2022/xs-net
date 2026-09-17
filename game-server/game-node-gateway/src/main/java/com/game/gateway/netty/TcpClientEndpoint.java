@@ -3,6 +3,7 @@ package com.game.gateway.netty;
 import com.xs.net.message.pb.NetMessage;
 import com.xs.net.message.TransportKind;
 import io.netty.channel.Channel;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -13,6 +14,8 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public final class TcpClientEndpoint implements ClientEndpoint {
 
+    /** Netty TCP 连接；由 Lombok 生成的构造器保证该依赖不为空。 */
+    @NonNull
     private final Channel channel;
 
     @Override

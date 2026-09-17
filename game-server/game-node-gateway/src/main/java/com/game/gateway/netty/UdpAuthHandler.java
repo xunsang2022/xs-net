@@ -9,6 +9,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.DatagramChannel;
 import io.netty.channel.socket.DatagramPacket;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -31,8 +32,14 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
     private static final String METRIC_AUTH_FAILURE = "gateway.udp.auth.failure";
     private static final String METRIC_C2S_MESSAGES = "gateway.udp.c2s.messages";
 
+    /** UDP 握手验签器。 */
+    @NonNull
     private final JwtUtil jwtUtil;
+    /** UDP 会话、帧长度及线程池配置。 */
+    @NonNull
     private final UdpConfig config;
+    /** 脱离 Netty EventLoop 后处理验签和消息路由的业务线程池。 */
+    @NonNull
     private final ExecutorService businessExecutor;
     private final ConcurrentMap<InetSocketAddress, UdpSession> sessions = new ConcurrentHashMap<>();
     private final GatewayMessageRouter router = new GatewayMessageRouter();

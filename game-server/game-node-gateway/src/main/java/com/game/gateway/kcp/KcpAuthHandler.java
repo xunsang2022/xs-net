@@ -9,6 +9,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.DatagramChannel;
 import io.netty.channel.socket.DatagramPacket;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -34,8 +35,14 @@ public class KcpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
     private static final String METRIC_AUTH_FAILURE = "gateway.kcp.auth.failure";
     private static final String METRIC_C2S_MESSAGES = "gateway.kcp.c2s.messages";
 
+    /** KCP 握手验签器。 */
+    @NonNull
     private final JwtUtil jwtUtil;
+    /** KCP 窗口、超时及帧限制配置。 */
+    @NonNull
     private final KcpConfig config;
+    /** KCP 数据包的业务处理线程池。 */
+    @NonNull
     private final ExecutorService businessExecutor;
     private final GatewayMessageRouter router = new GatewayMessageRouter();
     private final Map<InetSocketAddress, KcpSession> sessions = new ConcurrentHashMap<>();

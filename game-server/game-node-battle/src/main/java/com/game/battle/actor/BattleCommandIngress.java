@@ -11,9 +11,15 @@ import com.xs.net.message.pb.NetMessage;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
-/** Fast role-specific delivery path for locally active battles. */
+/**
+ * 战斗消息快速入口。
+ *
+ * <p>本入口只负责把消息转交给专用战斗执行器；战斗状态、Tick 和高频输入不会在
+ * Pekko Actor mailbox 中排队执行，从而避免单场战斗拖垮 Actor 邮箱。</p>
+ */
 @RequiredArgsConstructor
 public final class BattleCommandIngress implements RpcDeliveryInterceptor {
+    /** 战斗服唯一持有的执行器池，负责按 battleId 串行化状态修改。 */
     @NonNull
     private final BattleExecutorPool pool;
 

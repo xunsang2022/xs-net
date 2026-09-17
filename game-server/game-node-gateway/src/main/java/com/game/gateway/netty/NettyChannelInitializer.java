@@ -8,6 +8,7 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.concurrent.EventExecutorGroup;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 import java.util.concurrent.TimeUnit;
@@ -26,8 +27,14 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class NettyChannelInitializer extends ChannelInitializer<SocketChannel> {
 
+    /** JWT 认证工具。 */
+    @NonNull
     private final JwtUtil jwtUtil;
+    /** 承载验签、解码和 RPC 投递的业务线程组，不能使用 Netty EventLoop 阻塞执行。 */
+    @NonNull
     private final EventExecutorGroup businessExecutor;
+    /** TCP 帧、空闲检测和认证超时配置。 */
+    @NonNull
     private final NettyConfig config;
 
     @Override

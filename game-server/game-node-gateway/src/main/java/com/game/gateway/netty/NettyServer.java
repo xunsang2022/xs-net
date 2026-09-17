@@ -11,6 +11,7 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -29,7 +30,11 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class NettyServer {
 
+    /** TCP 监听和线程模型配置。 */
+    @NonNull
     private final NettyConfig config;
+    /** JWT 验签组件，由认证处理器复用。 */
+    @NonNull
     private final JwtUtil jwtUtil;
 
     private EventLoopGroup bossGroup;

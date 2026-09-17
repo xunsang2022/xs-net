@@ -6,7 +6,11 @@ import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Centralized route metadata access; gateway code does not perform DTO reflection. */
+/**
+ * 集中管理路由字段提取逻辑。
+ *
+ * <p>Gateway 只调用本类提供的提取器，不再自行反射猜测 DTO 中的 playerId 或 channelId。</p>
+ */
 @UtilityClass
 public class RouteValueExtractors {
     private static final Map<MethodKey, Method> METHODS = new ConcurrentHashMap<>();

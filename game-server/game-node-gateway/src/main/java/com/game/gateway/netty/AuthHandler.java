@@ -9,6 +9,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.channel.EventLoop;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -31,7 +32,11 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
     private static final String METRIC_CONN_REJECTED = "gateway.connection.rejected";
     private static final String METRIC_C2S_MESSAGES = "gateway.c2s.messages";
 
+    /** JWT 验签组件。 */
+    @NonNull
     private final JwtUtil jwtUtil;
+    /** 认证超时、帧限制和背压配置。 */
+    @NonNull
     private final NettyConfig config;
     private final GatewayMessageRouter router = new GatewayMessageRouter();
 

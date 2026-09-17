@@ -9,6 +9,7 @@ import com.game.message.actor.logic.SceneMessage;
 import com.xs.core.actor.node.Roles;
 import com.xs.net.message.RpcMessageRegistry;
 import com.xs.net.message.RpcMessageSpec;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.pekko.actor.typed.Behavior;
 
@@ -17,7 +18,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-/** Resolves an external RPC number to the Logic actor method that handles it. */
+/** 根据外部 RPC 编号解析 Logic Actor 处理方法。 */
 @RequiredArgsConstructor
 public final class ProtocolTraceTargetResolver {
 
@@ -28,6 +29,8 @@ public final class ProtocolTraceTargetResolver {
             GMMessage.class, GMActor.class
     );
 
+    /** 启动阶段生成的只读 RPC 注册表。 */
+    @NonNull
     private final RpcMessageRegistry registry;
 
     public ProtocolTraceTarget resolve(int protocolNumber) {

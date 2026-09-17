@@ -9,6 +9,7 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.DatagramChannel;
 import io.netty.channel.socket.nio.NioDatagramChannel;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -26,7 +27,11 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class UdpServer {
 
+    /** UDP 端口、可靠层和线程池配置。 */
+    @NonNull
     private final UdpConfig config;
+    /** UDP 握手阶段复用的 JWT 验签器。 */
+    @NonNull
     private final JwtUtil jwtUtil;
 
     private EventLoopGroup group;

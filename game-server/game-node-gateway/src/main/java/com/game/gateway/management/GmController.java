@@ -3,6 +3,7 @@ package com.game.gateway.management;
 import com.game.message.actor.logic.GMMessage;
 import com.game.message.management.GmKickPlayerRequest;
 import com.xs.core.akka.AkkaKit;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +26,8 @@ public final class GmController {
     private static final int MAX_REASON_LENGTH = 256;
     private static final int MAX_OPERATOR_LENGTH = 64;
 
+    /** 由 Spring 注入的管理令牌校验器，不能为空。 */
+    @NonNull
     private final ManagementTokenVerifier tokenVerifier;
 
     @PostMapping("/kick")
