@@ -89,12 +89,6 @@
                             <protoOutputDirectory>${project.basedir}/src/main/proto</protoOutputDirectory>
                         </configuration>
                     </execution>
-                    <execution>
-                        <id>export-unity-sdk</id>
-                        <goals>
-                            <goal>export-unity-sdk</goal>
-                        </goals>
-                    </execution>
                 </executions>
             </plugin>
             <plugin>
