@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('All', 'Unity', 'TypeScript', 'Cpp')]
+    [ValidateSet('All', 'Unity', 'TypeScript', 'Cocos', 'Cpp')]
     [string]$Only = 'All',
     [string]$Protoc = $env:PROTOC,
     [string]$TsProtoPlugin = $env:TS_PROTO_PLUGIN
@@ -16,13 +16,15 @@ $templateRoot = Join-Path $sdkModule 'src\main\sdk'
 $codeRoot = Join-Path $sdkModule 'target\code'
 $unityTemplate = Join-Path $templateRoot 'unity'
 $typescriptTemplate = Join-Path $templateRoot 'typescript'
+$cocosTemplate = Join-Path $templateRoot 'cocos'
 $cppTemplate = Join-Path $templateRoot 'cpp'
 $unityRoot = Join-Path $codeRoot 'unity'
 $typescriptRoot = Join-Path $codeRoot 'typescript'
+$cocosRoot = Join-Path $codeRoot 'cocos'
 $cppRoot = Join-Path $codeRoot 'cpp'
 
 $selected = switch ($Only) {
-    'All' { @('Unity', 'TypeScript', 'Cpp') }
+    'All' { @('Unity', 'TypeScript', 'Cocos', 'Cpp') }
     default { @($Only) }
 }
 
@@ -163,6 +165,47 @@ function Clear-GeneratedFiles {
         Remove-Item -Force
 }
 
+function Copy-CocosTypeScriptRuntime {
+    param(
+        [Parameter(Mandatory = $true)][string]$Output
+    )
+
+    $source = Join-Path $typescriptTemplate 'src'
+    $target = Join-Path $Output 'src'
+    Get-ChildItem -LiteralPath $source -Filter '*.ts' -File |
+        Where-Object { $_.Name -notin @('index.ts', 'node-transport.ts', 'kcp-udp-transport.ts') } |
+        ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $target $_.Name) -Force
+    }
+}
+
+function Generate-TypeScriptSdk {
+    param(
+        [Parameter(Mandatory = $true)][string]$Template,
+        [Parameter(Mandatory = $true)][string]$Output,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [switch]$Cocos
+    )
+
+    Reset-SdkOutput -Template $Template -Output $Output
+    if ($Cocos) {
+        Copy-CocosTypeScriptRuntime -Output $Output
+    }
+
+    $typescriptProto = Join-Path $Output 'proto'
+    $typescriptGenerated = Join-Path $Output 'generated'
+    Copy-ProtoSet -Target $typescriptProto
+    Clear-GeneratedFiles -Directory $typescriptGenerated -Extensions @('.ts')
+    $plugin = Resolve-TsProtoPlugin
+    $arguments = @(
+        "--proto_path=$canonicalProto",
+        "--plugin=protoc-gen-ts_proto=$plugin",
+        "--ts_proto_out=$typescriptGenerated",
+        '--ts_proto_opt=esModuleInterop=true,forceLong=number,useOptionals=messages,outputServices=generic-definitions'
+    ) + @($protoFiles | ForEach-Object { $_.FullName })
+    Invoke-LoggedProcess -FilePath $protoc -ArgumentList $arguments -Name $Name -WorkingDirectory $canonicalProto
+}
+
 $protoc = Resolve-Protoc
 
 $mavenArgs = @('-f', $mavenProject, '-pl', 'xs-net-sdk', '-am', 'generate-sources', '-DskipTests')
@@ -186,19 +229,11 @@ if ($selected -contains 'Unity') {
 }
 
 if ($selected -contains 'TypeScript') {
-    Reset-SdkOutput -Template $typescriptTemplate -Output $typescriptRoot
-    $typescriptProto = Join-Path $typescriptRoot 'proto'
-    $typescriptGenerated = Join-Path $typescriptRoot 'generated'
-    Copy-ProtoSet -Target $typescriptProto
-    Clear-GeneratedFiles -Directory $typescriptGenerated -Extensions @('.ts')
-    $plugin = Resolve-TsProtoPlugin
-    $arguments = @(
-        "--proto_path=$canonicalProto",
-        "--plugin=protoc-gen-ts_proto=$plugin",
-        "--ts_proto_out=$typescriptGenerated",
-        '--ts_proto_opt=esModuleInterop=true,forceLong=number,useOptionals=messages,outputServices=generic-definitions'
-    ) + @($protoFiles | ForEach-Object { $_.FullName })
-    Invoke-LoggedProcess -FilePath $protoc -ArgumentList $arguments -Name 'typescript' -WorkingDirectory $canonicalProto
+    Generate-TypeScriptSdk -Template $typescriptTemplate -Output $typescriptRoot -Name 'typescript'
+}
+
+if ($selected -contains 'Cocos') {
+    Generate-TypeScriptSdk -Template $cocosTemplate -Output $cocosRoot -Name 'cocos' -Cocos
 }
 
 if ($selected -contains 'Cpp') {

@@ -2,7 +2,7 @@
 
 ## 设计原则
 
-XS-NET 参考 io-net 的生成方式，不把 Unity、TypeScript、C++ 维护成仓库根目录下的三个独立 SDK 工程。SDK 生成能力属于 `xs-net/xs-net-sdk` 模块：
+XS-NET 参考 io-net 的生成方式，不把 Unity、TypeScript、Cocos Creator、C++ 维护成仓库根目录下的四个独立 SDK 工程。SDK 生成能力属于 `xs-net/xs-net-sdk` 模块：
 
 ```text
 xs-net/xs-net-sdk/
@@ -11,6 +11,7 @@ xs-net/xs-net-sdk/
 └── target/code/            # 本地生成结果，不提交
     ├── unity/
     ├── typescript/
+    ├── cocos/
     └── cpp/
 ```
 
@@ -28,7 +29,7 @@ xs-net/xs-net-sdk/target/generated-proto
         ↓
       protoc
    ↙      ↓       ↘
-target/code/unity  target/code/typescript  target/code/cpp
+target/code/unity  target/code/typescript  target/code/cocos  target/code/cpp
 ```
 
 仓库根目录的唯一入口是：
@@ -37,13 +38,14 @@ target/code/unity  target/code/typescript  target/code/cpp
 .\scripts\Generate-Sdks.ps1
 ```
 
-脚本会生成业务 RPC Proto，合并 `xs-net-message` 的框架 Proto，然后复制运行时模板并生成三种语言的客户端代码。
+脚本会生成业务 RPC Proto，合并 `xs-net-message` 的框架 Proto，然后复制运行时模板并生成 Unity、TypeScript、Cocos Creator 和 C++ 客户端代码。
 
 只生成一种语言：
 
 ```powershell
 .\scripts\Generate-Sdks.ps1 -Only Unity
 .\scripts\Generate-Sdks.ps1 -Only TypeScript
+.\scripts\Generate-Sdks.ps1 -Only Cocos
 .\scripts\Generate-Sdks.ps1 -Only Cpp
 ```
 
@@ -53,12 +55,14 @@ target/code/unity  target/code/typescript  target/code/cpp
 |---|---|---|
 | Unity | `xs-net/xs-net-sdk/src/main/sdk/unity/` | `xs-net/xs-net-sdk/target/code/unity/` |
 | TypeScript | `xs-net/xs-net-sdk/src/main/sdk/typescript/` | `xs-net/xs-net-sdk/target/code/typescript/` |
+| Cocos Creator | `xs-net/xs-net-sdk/src/main/sdk/cocos/` | `xs-net/xs-net-sdk/target/code/cocos/` |
 | C++ | `xs-net/xs-net-sdk/src/main/sdk/cpp/` | `xs-net/xs-net-sdk/target/code/cpp/` |
 
 生成后的目录可以直接交给对应客户端工程：
 
 - Unity 导入 `target/code/unity/package.json`；
 - TypeScript 在 `target/code/typescript` 中执行 `npm install` 后构建或发布；
+- Cocos Creator 使用 `target/code/cocos` 中的 TypeScript、`generated` 和 `proto` 目录；该目标不包含 Node.js TCP/UDP 依赖；
 - C++ 在 `target/code/cpp` 中执行 CMake 配置和构建。
 
 Unity 的 `Runtime/Networking/NetMessage.cs` 是手写运行时，因此 Unity 生成阶段不输出 `net_message.proto` 的 C# 类型；TypeScript 和 C++ 会生成框架 Proto 类型。
@@ -91,7 +95,7 @@ RPC 源码扫描器
 target/code 下的客户端产物
 ```
 
-两者共同点是：服务端模型是唯一协议来源，生成结果属于 `target`，客户端语言不是三个独立的服务端工程。当前差异是 io-net 还会生成高层 Action、广播、监听器和示例 API，而 XS-NET 目前主要生成 Protobuf 消息类型，并复用各语言的手写网络运行时。
+两者共同点是：服务端模型是唯一协议来源，生成结果属于 `target`，客户端语言不是四个独立的服务端工程。当前差异是 io-net 还会生成高层 Action、广播、监听器和示例 API，而 XS-NET 目前主要生成 Protobuf 消息类型，并复用各语言的手写网络运行时。Cocos Creator 目标复用 TypeScript 的协议代码，并额外提供 `CocosWebSocketTransport`。
 
 ## 工具要求
 

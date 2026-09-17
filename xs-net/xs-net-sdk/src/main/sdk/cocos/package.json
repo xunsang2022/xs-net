@@ -1,0 +1,29 @@
+{
+  "name": "@xs-net/game-sdk-cocos",
+  "version": "0.0.1",
+  "description": "Cocos Creator TypeScript client SDK for XS Net",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "files": ["dist", "proto", "README.md"],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "protobufjs": "^7.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "ts-proto": "^2.7.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}
