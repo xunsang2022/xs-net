@@ -8,14 +8,14 @@ XS-NET 参考 io-net 的生成方式，不把 Unity、TypeScript、Cocos Creator
 xs-net/xs-net-sdk/
 ├── src/main/java/          # Maven 生成插件配置
 ├── src/main/sdk/           # 客户端运行时模板和构建模板
-└── target/code/            # 本地生成结果，不提交
+└── target/code/            # 默认生成结果；也可输出到指定目录
     ├── unity/
     ├── typescript/
     ├── cocos/
     └── cpp/
 ```
 
-`src/main/sdk` 只存手写运行时、测试和构建描述；协议文件、Protobuf 代码和 TypeScript/C++ 构建目录均由生成流程写入 `target/code`。
+`src/main/sdk` 只存手写运行时、测试和构建描述；协议文件、Protobuf 代码和 TypeScript/C++ 构建目录均由生成流程写入输出目录。默认输出目录为 `F:\project\xs-net\xs-net\xs-net-sdk`。
 
 ## 生成链路
 
@@ -29,7 +29,7 @@ xs-net/xs-net-sdk/target/generated-proto
         ↓
       protoc
    ↙      ↓       ↘
-target/code/unity  target/code/typescript  target/code/cocos  target/code/cpp
+F:/project/xs-net/xs-net/xs-net-sdk/unity  F:/project/xs-net/xs-net/xs-net-sdk/typescript  F:/project/xs-net/xs-net/xs-net-sdk/cocos  F:/project/xs-net/xs-net/xs-net-sdk/cpp
 ```
 
 仓库根目录的唯一入口是：
@@ -59,17 +59,17 @@ target/code/unity  target/code/typescript  target/code/cocos  target/code/cpp
 
 | 语言 | 手写模板 | 生成结果 |
 |---|---|---|
-| Unity | `xs-net/xs-net-sdk/src/main/sdk/unity/` | `xs-net/xs-net-sdk/target/code/unity/` |
-| TypeScript | `xs-net/xs-net-sdk/src/main/sdk/typescript/` | `xs-net/xs-net-sdk/target/code/typescript/` |
-| Cocos Creator | `xs-net/xs-net-sdk/src/main/sdk/cocos/` | `xs-net/xs-net-sdk/target/code/cocos/` |
-| C++ | `xs-net/xs-net-sdk/src/main/sdk/cpp/` | `xs-net/xs-net-sdk/target/code/cpp/` |
+| Unity | `xs-net/xs-net-sdk/src/main/sdk/unity/` | `F:\project\xs-net\xs-net\xs-net-sdk\unity\` |
+| TypeScript | `xs-net/xs-net-sdk/src/main/sdk/typescript/` | `F:\project\xs-net\xs-net\xs-net-sdk\typescript\` |
+| Cocos Creator | `xs-net/xs-net-sdk/src/main/sdk/cocos/` | `F:\project\xs-net\xs-net\xs-net-sdk\cocos\` |
+| C++ | `xs-net/xs-net-sdk/src/main/sdk/cpp/` | `F:\project\xs-net\xs-net\xs-net-sdk\cpp\` |
 
 生成后的目录可以直接交给对应客户端工程：
 
-- Unity 导入 `target/code/unity/package.json`；
-- TypeScript 在 `target/code/typescript` 中执行 `npm install` 后构建或发布；
-- Cocos Creator 使用 `target/code/cocos` 中的 TypeScript、`generated` 和 `proto` 目录；该目标不包含 Node.js TCP/UDP 依赖；
-- C++ 在 `target/code/cpp` 中执行 CMake 配置和构建。
+- Unity 导入 `F:\project\xs-net\xs-net\xs-net-sdk\unity\package.json`；
+- TypeScript 在 `F:\project\xs-net\xs-net\xs-net-sdk\typescript` 中执行 `npm install` 后构建或发布；
+- Cocos Creator 使用 `F:\project\xs-net\xs-net\xs-net-sdk\cocos` 中的 TypeScript、`generated` 和 `proto` 目录；该目标不包含 Node.js TCP/UDP 依赖；
+- C++ 在 `F:\project\xs-net\xs-net\xs-net-sdk\cpp` 中执行 CMake 配置和构建。
 
 Unity 的 `Runtime/Networking/NetMessage.cs` 是手写运行时，因此 Unity 生成阶段不输出 `net_message.proto` 的 C# 类型；TypeScript 和 C++ 会生成框架 Proto 类型。
 

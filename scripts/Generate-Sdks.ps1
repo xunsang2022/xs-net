@@ -3,7 +3,7 @@ param(
     [string]$Only = 'All',
     [string]$Protoc = $env:PROTOC,
     [string]$TsProtoPlugin = $env:TS_PROTO_PLUGIN,
-    [string]$OutputRoot = ''
+    [string]$OutputRoot = 'F:\project\xs-net\xs-net\xs-net-sdk'
 )
 
 $ErrorActionPreference = 'Stop'

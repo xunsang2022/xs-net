@@ -1,6 +1,6 @@
 # XS-NET Cocos Creator SDK
 
-这是面向 Cocos Creator 的 TypeScript SDK 模板。执行仓库根目录的生成脚本后，完整产物位于 `xs-net/xs-net-sdk/target/code/cocos`。
+这是面向 Cocos Creator 的 TypeScript SDK 模板。执行仓库根目录的生成脚本后，完整产物默认位于 `F:\project\xs-net\xs-net\xs-net-sdk\cocos`。
 
 ```powershell
 .\scripts\Generate-Sdks.ps1 -Only Cocos
