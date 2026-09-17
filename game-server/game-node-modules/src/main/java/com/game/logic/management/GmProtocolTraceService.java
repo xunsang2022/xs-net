@@ -1,7 +1,10 @@
 package com.game.logic.management;
 
+import lombok.RequiredArgsConstructor;
+
 import java.util.concurrent.Semaphore;
 
+@RequiredArgsConstructor
 public final class GmProtocolTraceService {
 
     public static final int DEFAULT_TIMEOUT_MS = 10_000;
@@ -11,11 +14,6 @@ public final class GmProtocolTraceService {
     private final ProtocolTraceTargetResolver targetResolver;
     private final ArthasTraceClient traceClient;
     private final Semaphore activeTrace = new Semaphore(1);
-
-    public GmProtocolTraceService(ProtocolTraceTargetResolver targetResolver, ArthasTraceClient traceClient) {
-        this.targetResolver = targetResolver;
-        this.traceClient = traceClient;
-    }
 
     public TraceResult trace(int protocolNumber, Integer requestedTimeoutMs) {
         int timeoutMs = normalizeTimeout(requestedTimeoutMs);

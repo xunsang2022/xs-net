@@ -8,6 +8,7 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.concurrent.EventExecutorGroup;
+import lombok.RequiredArgsConstructor;
 
 import java.util.concurrent.TimeUnit;
 
@@ -22,17 +23,12 @@ import java.util.concurrent.TimeUnit;
  *       CPU 密集逻辑移出 I/O 线程，避免阻塞事件循环。</li>
  * </ul>
  */
+@RequiredArgsConstructor
 public class NettyChannelInitializer extends ChannelInitializer<SocketChannel> {
 
     private final JwtUtil jwtUtil;
     private final EventExecutorGroup businessExecutor;
     private final NettyConfig config;
-
-    public NettyChannelInitializer(JwtUtil jwtUtil, EventExecutorGroup businessExecutor, NettyConfig config) {
-        this.jwtUtil = jwtUtil;
-        this.businessExecutor = businessExecutor;
-        this.config = config;
-    }
 
     @Override
     protected void initChannel(SocketChannel ch) {

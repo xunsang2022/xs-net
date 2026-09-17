@@ -8,6 +8,7 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.DatagramChannel;
 import io.netty.channel.socket.nio.NioDatagramChannel;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.ExecutorService;
@@ -22,6 +23,7 @@ import java.util.concurrent.TimeUnit;
  * start()/stop() 由其生命周期所有方调用。</p>
  */
 @Slf4j
+@RequiredArgsConstructor
 public class KcpServer {
 
     private final KcpConfig config;
@@ -32,11 +34,6 @@ public class KcpServer {
     private ScheduledExecutorService scheduler;
     private ExecutorService businessExecutor;
     private KcpAuthHandler authHandler;
-
-    public KcpServer(KcpConfig config, JwtUtil jwtUtil) {
-        this.config = config;
-        this.jwtUtil = jwtUtil;
-    }
 
     public void start() throws InterruptedException {
         group = new NioEventLoopGroup(config.resolveThreads());

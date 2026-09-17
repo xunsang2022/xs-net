@@ -11,6 +11,7 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -25,6 +26,7 @@ import lombok.extern.slf4j.Slf4j;
  * </ul>
  */
 @Slf4j
+@RequiredArgsConstructor
 public class NettyServer {
 
     private final NettyConfig config;
@@ -34,11 +36,6 @@ public class NettyServer {
     private EventLoopGroup workerGroup;
     private EventExecutorGroup businessGroup;
     private Channel serverChannel;
-
-    public NettyServer(NettyConfig config, JwtUtil jwtUtil) {
-        this.config = config;
-        this.jwtUtil = jwtUtil;
-    }
 
     public void start() throws InterruptedException {
         bossGroup = new NioEventLoopGroup(config.resolveThreads(config.getBossThreads()));

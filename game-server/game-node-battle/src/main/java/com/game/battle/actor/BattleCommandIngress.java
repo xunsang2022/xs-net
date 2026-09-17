@@ -8,16 +8,14 @@ import com.xs.net.message.MessageAble;
 import com.xs.net.message.RequestContext;
 import com.xs.net.message.RpcMessageRegistry;
 import com.xs.net.message.pb.NetMessage;
-
-import java.util.Objects;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
 /** Fast role-specific delivery path for locally active battles. */
+@RequiredArgsConstructor
 public final class BattleCommandIngress implements RpcDeliveryInterceptor {
+    @NonNull
     private final BattleExecutorPool pool;
-
-    public BattleCommandIngress(BattleExecutorPool pool) {
-        this.pool = Objects.requireNonNull(pool, "pool");
-    }
 
     public BattleExecutorPool pool() {
         return pool;

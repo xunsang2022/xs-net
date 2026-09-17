@@ -9,6 +9,7 @@ import com.game.message.actor.logic.SceneMessage;
 import com.xs.core.actor.node.Roles;
 import com.xs.net.message.RpcMessageRegistry;
 import com.xs.net.message.RpcMessageSpec;
+import lombok.RequiredArgsConstructor;
 import org.apache.pekko.actor.typed.Behavior;
 
 import java.lang.reflect.Method;
@@ -17,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 /** Resolves an external RPC number to the Logic actor method that handles it. */
+@RequiredArgsConstructor
 public final class ProtocolTraceTargetResolver {
 
     private static final Map<Integer, Integer> PROTOCOL_ALIASES = Map.of(1000, 3003);
@@ -27,10 +29,6 @@ public final class ProtocolTraceTargetResolver {
     );
 
     private final RpcMessageRegistry registry;
-
-    public ProtocolTraceTargetResolver(RpcMessageRegistry registry) {
-        this.registry = registry;
-    }
 
     public ProtocolTraceTarget resolve(int protocolNumber) {
         int effectiveProtocolNumber = PROTOCOL_ALIASES.getOrDefault(protocolNumber, protocolNumber);

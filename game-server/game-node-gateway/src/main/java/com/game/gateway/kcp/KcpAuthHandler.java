@@ -9,6 +9,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.DatagramChannel;
 import io.netty.channel.socket.DatagramPacket;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.InetSocketAddress;
@@ -26,6 +27,7 @@ import java.util.concurrent.ExecutorService;
  * sessions ConcurrentHashMap + synchronized(session) 串行 + 指标计数（gateway.kcp.*）。</p>
  */
 @Slf4j
+@RequiredArgsConstructor
 public class KcpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> {
 
     private static final String METRIC_AUTH_SUCCESS = "gateway.kcp.auth.success";
@@ -37,12 +39,6 @@ public class KcpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
     private final ExecutorService businessExecutor;
     private final GatewayMessageRouter router = new GatewayMessageRouter();
     private final Map<InetSocketAddress, KcpSession> sessions = new ConcurrentHashMap<>();
-
-    public KcpAuthHandler(JwtUtil jwtUtil, KcpConfig config, ExecutorService businessExecutor) {
-        this.jwtUtil = jwtUtil;
-        this.config = config;
-        this.businessExecutor = businessExecutor;
-    }
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, DatagramPacket packet) {

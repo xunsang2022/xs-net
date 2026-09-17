@@ -1,15 +1,15 @@
 package com.xs.net.message;
 
+import lombok.experimental.UtilityClass;
+
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** Centralized route metadata access; gateway code does not perform DTO reflection. */
-public final class RouteValueExtractors {
+@UtilityClass
+public class RouteValueExtractors {
     private static final Map<MethodKey, Method> METHODS = new ConcurrentHashMap<>();
-
-    private RouteValueExtractors() {
-    }
 
     public static RouteValueExtractor playerId() {
         return message -> invoke(message, "playerId");

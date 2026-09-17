@@ -1,6 +1,7 @@
 package com.xs.net.message;
 
 import io.micrometer.core.instrument.Metrics;
+import lombok.experimental.UtilityClass;
 import org.slf4j.MDC;
 
 import java.util.HashMap;
@@ -8,11 +9,9 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 /** Thread-scoped view of the context while an Actor handler is executing. */
-public final class RequestContextHolder {
+@UtilityClass
+public class RequestContextHolder {
     private static final ThreadLocal<RequestContext> CURRENT = new ThreadLocal<>();
-
-    private RequestContextHolder() {
-    }
 
     public static RequestContext current() {
         return CURRENT.get();

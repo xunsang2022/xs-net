@@ -5,15 +5,13 @@ import com.xs.net.message.TransportKind;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
+import lombok.RequiredArgsConstructor;
 
 /** WebSocket endpoint where every binary frame is a raw NetMessage protobuf body. */
+@RequiredArgsConstructor
 public final class WebSocketClientEndpoint implements ClientEndpoint {
 
     private final Channel channel;
-
-    public WebSocketClientEndpoint(Channel channel) {
-        this.channel = channel;
-    }
 
     @Override
     public void write(NetMessage message) {

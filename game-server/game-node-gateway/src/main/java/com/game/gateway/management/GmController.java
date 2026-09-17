@@ -3,6 +3,7 @@ package com.game.gateway.management;
 import com.game.message.actor.logic.GMMessage;
 import com.game.message.management.GmKickPlayerRequest;
 import com.xs.core.akka.AkkaKit;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,6 +17,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/admin/gm")
+@RequiredArgsConstructor
 public final class GmController {
 
     private static final String TOKEN_HEADER = "X-GM-Token";
@@ -24,10 +26,6 @@ public final class GmController {
     private static final int MAX_OPERATOR_LENGTH = 64;
 
     private final ManagementTokenVerifier tokenVerifier;
-
-    public GmController(ManagementTokenVerifier tokenVerifier) {
-        this.tokenVerifier = tokenVerifier;
-    }
 
     @PostMapping("/kick")
     public ResponseEntity<Map<String, String>> kick(

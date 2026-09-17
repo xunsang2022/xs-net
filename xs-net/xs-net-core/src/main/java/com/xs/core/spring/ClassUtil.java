@@ -1,6 +1,7 @@
 package com.xs.core.spring;
 
 import org.apache.pekko.actor.typed.javadsl.AbstractBehavior;
+import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.ParameterizedType;
@@ -10,9 +11,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
-public final class ClassUtil {
-    private ClassUtil() {
-    }
+@UtilityClass
+public class ClassUtil {
 
     public static Class<?> findMessageInterface(Class<?> actorClass) {
         Class<?> messageClass = extractMessageTypeFromGenerics(actorClass);

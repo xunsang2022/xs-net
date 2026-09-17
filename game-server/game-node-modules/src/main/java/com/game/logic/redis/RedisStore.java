@@ -4,6 +4,7 @@ import com.game.logic.enums.LogLevel;
 import com.game.logic.enums.LogType;
 import com.game.logic.player.PlayerState;
 import com.game.protocol.pb.LogRecordCommand;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.util.Base64;
@@ -14,6 +15,7 @@ import java.util.Map;
 /**
  * Redis access layer for logic node actor state and log events.
  */
+@RequiredArgsConstructor
 public class RedisStore {
 
     public static final String PLAYER_KEY_PREFIX = "player:";
@@ -22,10 +24,6 @@ public class RedisStore {
     public static final String LOG_EVENTS_KEY = "log:events";
 
     private final StringRedisTemplate redis;
-
-    public RedisStore(StringRedisTemplate redis) {
-        this.redis = redis;
-    }
 
     public static String playerKey(String playerId) {
         return PLAYER_KEY_PREFIX + playerId;

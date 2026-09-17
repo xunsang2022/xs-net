@@ -9,6 +9,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.DatagramChannel;
 import io.netty.channel.socket.DatagramPacket;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.InetSocketAddress;
@@ -23,6 +24,7 @@ import java.util.concurrent.ExecutorService;
  * {@link UdpSession#receive} 走可靠层，DATA 消息解码后路由到 Logic 的 PlayerActor。</p>
  */
 @Slf4j
+@RequiredArgsConstructor
 public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> {
 
     private static final String METRIC_AUTH_SUCCESS = "gateway.udp.auth.success";
@@ -34,12 +36,6 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
     private final ExecutorService businessExecutor;
     private final ConcurrentMap<InetSocketAddress, UdpSession> sessions = new ConcurrentHashMap<>();
     private final GatewayMessageRouter router = new GatewayMessageRouter();
-
-    public UdpAuthHandler(JwtUtil jwtUtil, UdpConfig config, ExecutorService businessExecutor) {
-        this.jwtUtil = jwtUtil;
-        this.config = config;
-        this.businessExecutor = businessExecutor;
-    }
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, DatagramPacket packet) {

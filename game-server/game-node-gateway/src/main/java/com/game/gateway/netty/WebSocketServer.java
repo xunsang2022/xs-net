@@ -11,10 +11,12 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /** Separate WebSocket listener; TCP and UDP Gateway listeners remain unchanged. */
 @Slf4j
+@RequiredArgsConstructor
 public final class WebSocketServer {
 
     private final NettyConfig nettyConfig;
@@ -24,12 +26,6 @@ public final class WebSocketServer {
     private EventLoopGroup workerGroup;
     private EventExecutorGroup businessGroup;
     private Channel channel;
-
-    public WebSocketServer(NettyConfig nettyConfig, WebSocketConfig webSocketConfig, JwtUtil jwtUtil) {
-        this.nettyConfig = nettyConfig;
-        this.webSocketConfig = webSocketConfig;
-        this.jwtUtil = jwtUtil;
-    }
 
     public void start() throws InterruptedException {
         bossGroup = new NioEventLoopGroup(nettyConfig.resolveThreads(nettyConfig.getBossThreads()));

@@ -9,6 +9,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.channel.EventLoop;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.charset.StandardCharsets;
@@ -22,6 +23,7 @@ import java.util.concurrent.TimeUnit;
  * 游戏消息帧为 NetMessage 信封（rpcNum + payload），解码后路由到 Logic 的 PlayerActor。
  */
 @Slf4j
+@RequiredArgsConstructor
 public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
 
     private static final String METRIC_AUTH_SUCCESS = "gateway.auth.success";
@@ -36,11 +38,6 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
     private boolean authenticated;
     private String channelId;
     private ScheduledFuture<?> authTimeoutTask;
-
-    public AuthHandler(JwtUtil jwtUtil, NettyConfig config) {
-        this.jwtUtil = jwtUtil;
-        this.config = config;
-    }
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {

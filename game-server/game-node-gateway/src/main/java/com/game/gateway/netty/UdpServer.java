@@ -9,6 +9,7 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.DatagramChannel;
 import io.netty.channel.socket.nio.NioDatagramChannel;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.ExecutorService;
@@ -22,6 +23,7 @@ import java.util.concurrent.TimeUnit;
  * 后台定时线程负责在途包重传与空闲会话清理。</p>
  */
 @Slf4j
+@RequiredArgsConstructor
 public class UdpServer {
 
     private final UdpConfig config;
@@ -32,11 +34,6 @@ public class UdpServer {
     private ScheduledExecutorService scheduler;
     private ExecutorService businessExecutor;
     private UdpAuthHandler authHandler;
-
-    public UdpServer(UdpConfig config, JwtUtil jwtUtil) {
-        this.config = config;
-        this.jwtUtil = jwtUtil;
-    }
 
     public void start() throws InterruptedException {
         group = new NioEventLoopGroup(config.resolveThreads());
