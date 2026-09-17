@@ -184,6 +184,20 @@ function Copy-CocosTypeScriptRuntime {
     }
 }
 
+function Convert-CocosLocalImports {
+    param(
+        [Parameter(Mandatory = $true)][string]$Output
+    )
+
+    Get-ChildItem -LiteralPath $Output -Filter '*.ts' -File -Recurse | ForEach-Object {
+        $content = [System.IO.File]::ReadAllText($_.FullName)
+        $converted = $content.Replace('.js"', '"').Replace(".js'", "'")
+        if ($converted -ne $content) {
+            [System.IO.File]::WriteAllText($_.FullName, $converted, [System.Text.UTF8Encoding]::new($false))
+        }
+    }
+}
+
 function Generate-TypeScriptSdk {
     param(
         [Parameter(Mandatory = $true)][string]$Template,
@@ -209,6 +223,9 @@ function Generate-TypeScriptSdk {
         '--ts_proto_opt=esModuleInterop=true,forceLong=number,useOptionals=messages,outputServices=generic-definitions'
     ) + @($protoFiles | ForEach-Object { $_.FullName })
     Invoke-LoggedProcess -FilePath $protoc -ArgumentList $arguments -Name $Name -WorkingDirectory $canonicalProto
+    if ($Cocos) {
+        Convert-CocosLocalImports -Output $Output
+    }
 }
 
 $protoc = Resolve-Protoc

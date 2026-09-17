@@ -37,7 +37,7 @@ export function tryReadTcpFrame(buffer: Uint8Array): { body: Uint8Array; rest: U
 }
 
 export function encodeUdpPacket(type: number, seq: number, ack: number, payload?: Uint8Array): Uint8Array {
-  const body = payload ?? new Uint8Array();
+  const body = payload ?? new Uint8Array(0);
   if (body.length > MAX_FRAME_LENGTH - UDP_HEADER_LENGTH) throw new RangeError("UDP payload is too large");
   const result = new Uint8Array(UDP_HEADER_LENGTH + body.length);
   result[0] = 0x58;
