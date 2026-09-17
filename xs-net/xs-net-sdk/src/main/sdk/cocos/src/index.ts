@@ -6,6 +6,7 @@ export * from "./kcp.js";
 export * from "./reliable-udp.js";
 export * from "./transport.js";
 export * from "./net-message.js";
+export * from "./sdk-test-panel-protocol.js";
 export { CSLogin, CSLogReport, LogRecordCommand, SCLogReport } from "../generated/comment.js";
 export { CSGmKickPlayer } from "../generated/GMMessages.js";
 export {

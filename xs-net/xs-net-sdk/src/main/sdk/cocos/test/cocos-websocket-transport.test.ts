@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CocosWebSocketTransport } from "../src/cocos-websocket-transport.js";
+import { CocosWebSocketTransport } from "../src/cocos-websocket-transport";
 
 describe("CocosWebSocketTransport", () => {
   it("sends the JWT and game payload as binary data", async () => {

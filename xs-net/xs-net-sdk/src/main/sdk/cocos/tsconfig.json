@@ -14,5 +14,5 @@
     "noUncheckedIndexedAccess": true
   },
   "include": ["src/**/*.ts", "generated/**/*.ts"],
-  "exclude": ["dist", "generated"]
+  "exclude": ["dist", "generated", "src/sdk-test-panel.ts"]
 }
