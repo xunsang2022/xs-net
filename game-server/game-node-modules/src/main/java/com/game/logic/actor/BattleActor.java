@@ -14,40 +14,22 @@ import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.ActorContext;
 import org.apache.pekko.actor.typed.javadsl.Behaviors;
 import org.apache.pekko.actor.typed.javadsl.Receive;
-import org.apache.pekko.actor.typed.javadsl.TimerScheduler;
-
-import java.time.Duration;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
-@ActorDispatcher("pekko.actor.battle-dispatcher")
 public final class BattleActor extends RpcActor<BattleMessage> {
-
-    private static final Object TICK_KEY = new Object();
-    private static final Duration TICK_INTERVAL = Duration.ofNanos(1_000_000_000L / 60L);
-    private static final int MAX_PLAYERS = 100;
-    private static final long TICK_BUDGET_NANOS = 16_666_667L;
-    private static final String METRIC_TICK_DURATION = "battle.tick.duration";
-    private static final String METRIC_TICK_OVERRUN = "battle.tick.overrun";
-    private static final String METRIC_INPUT_REJECTED = "battle.input.rejected";
-
-    private final TimerScheduler<BattleMessage> timers;
-    private final BattleState state;
+    private final BattleCommandIngress ingress;
 
     private BattleActor(
             ActorContext<BattleMessage> context,
-            String battleId,
-            TimerScheduler<BattleMessage> timers
+            String battleId
     ) {
         super(context, battleId);
-        this.timers = timers;
-        this.state = new BattleState(battleId, MAX_PLAYERS);
+        this.ingress = com.game.logic.context.LogicContext.getBattleCommandIngress();
     }
 
     public static Behavior<BattleMessage> create(String battleId) {
-        return Behaviors.withTimers(timers ->
-                Behaviors.setup(context -> new BattleActor(context, battleId, timers)));
+        return Behaviors.setup(context -> new BattleActor(context, battleId));
     }
 
     @Override
@@ -58,7 +40,6 @@ public final class BattleActor extends RpcActor<BattleMessage> {
                 .onMessage(BattleLeaveCommand.class, contextual(this::onLeave))
                 .onMessage(BattleInputCommand.class, contextual(this::onInput))
                 .onMessage(BattleEndCommand.class, contextual(this::onEnd))
-                .onMessage(Tick.class, message -> onTick())
                 .build();
     }
 
@@ -68,60 +49,28 @@ public final class BattleActor extends RpcActor<BattleMessage> {
             log.warn("Battle creation rejected: entityId={}, commandBattleId={}", entityId(), command.battleId());
             return this;
         }
-        if (state.create()) {
-            timers.startTimerAtFixedRate(TICK_KEY, new Tick(), TICK_INTERVAL);
-        }
+        ingress.activate(entityId());
+        ingress.submit(entityId(), command, currentRequestContext());
         return this;
     }
 
     private Behavior<BattleMessage> onJoin(BattleJoinCommand command) {
-        String reason = state.join(command.playerId());
-        if (reason != null) {
-            recordInputRejected(reason);
-        }
+        ingress.submit(entityId(), command, currentRequestContext());
         return this;
     }
 
     private Behavior<BattleMessage> onLeave(BattleLeaveCommand command) {
-        if (state.leave(command.playerId()) && state.isEmpty()) {
-            timers.cancel(TICK_KEY);
-            return Behaviors.stopped();
-        }
+        ingress.submit(entityId(), command, currentRequestContext());
         return this;
     }
 
     private Behavior<BattleMessage> onInput(BattleInputCommand command) {
-        String reason = state.acceptInput(command);
-        if (reason != null) {
-            recordInputRejected(reason);
-        }
+        ingress.submit(entityId(), command, currentRequestContext());
         return this;
     }
 
     private Behavior<BattleMessage> onEnd(BattleEndCommand command) {
-        if (state.end()) {
-            timers.cancel(TICK_KEY);
-            log.info("Battle ended: battleId={}, reason={}, frame={}", entityId(), command.reason(), state.frameNumber());
-            return Behaviors.stopped();
-        }
+        ingress.submit(entityId(), command, currentRequestContext());
         return this;
-    }
-
-    private Behavior<BattleMessage> onTick() {
-        long started = System.nanoTime();
-        state.tick();
-        long elapsed = System.nanoTime() - started;
-        Metrics.timer(METRIC_TICK_DURATION).record(elapsed, TimeUnit.NANOSECONDS);
-        if (elapsed > TICK_BUDGET_NANOS) {
-            Metrics.counter(METRIC_TICK_OVERRUN).increment();
-        }
-        return this;
-    }
-
-    private void recordInputRejected(String reason) {
-        Metrics.counter(METRIC_INPUT_REJECTED, "reason", reason).increment();
-    }
-
-    private static final class Tick implements BattleMessage {
     }
 }

@@ -2,6 +2,8 @@ package com.game.logic.context;
 
 import com.game.logic.dbsync.DBSyncEngine;
 import com.game.logic.dbsync.LogConsumer;
+import com.game.logic.actor.BattleCommandIngress;
+import com.game.logic.actor.BattleExecutorPool;
 import com.game.logic.redis.RedisStore;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -23,6 +25,8 @@ public final class LogicContext {
     private static volatile LogicMetrics logicMetrics;
     private static volatile ExecutorService redisIoExecutor;
     private static volatile ExecutorService dbIoExecutor;
+    private static volatile BattleExecutorPool battleExecutorPool;
+    private static volatile BattleCommandIngress battleCommandIngress;
     private static volatile long syncIntervalMs = 1000L;
 
     private LogicContext() {
@@ -110,6 +114,30 @@ public final class LogicContext {
             throw new IllegalStateException("DB IO executor has not been initialized");
         }
         return executor;
+    }
+
+    public static void setBattleExecutorPool(BattleExecutorPool pool) {
+        battleExecutorPool = pool;
+    }
+
+    public static BattleExecutorPool getBattleExecutorPool() {
+        BattleExecutorPool pool = battleExecutorPool;
+        if (pool == null) {
+            throw new IllegalStateException("Battle executor pool has not been initialized");
+        }
+        return pool;
+    }
+
+    public static void setBattleCommandIngress(BattleCommandIngress ingress) {
+        battleCommandIngress = ingress;
+    }
+
+    public static BattleCommandIngress getBattleCommandIngress() {
+        BattleCommandIngress ingress = battleCommandIngress;
+        if (ingress == null) {
+            throw new IllegalStateException("Battle command ingress has not been initialized");
+        }
+        return ingress;
     }
 
     public static void setSyncIntervalMs(long intervalMs) {

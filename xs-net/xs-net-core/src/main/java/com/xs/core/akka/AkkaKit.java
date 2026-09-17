@@ -37,6 +37,7 @@ public class AkkaKit {
 
     private static final Map<Class<?>, EntityTypeKey<?>> ENTITY_TYPE_KEYS = new ConcurrentHashMap<>();
     private static final Map<Class<?>, Method> CREATE_METHODS = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, RpcDeliveryInterceptor> DELIVERY_INTERCEPTORS = new ConcurrentHashMap<>();
     private static final String METRIC_ROUTING_REJECTED = "xs.rpc.routing.rejected";
     private static volatile ClusterSharding clusterSharding;
 
@@ -50,6 +51,17 @@ public class AkkaKit {
             throw new IllegalStateException("ClusterSharding has not been initialized");
         }
         return sharding;
+    }
+
+    public static void registerDeliveryInterceptor(Class<?> roleClass, RpcDeliveryInterceptor interceptor) {
+        DELIVERY_INTERCEPTORS.put(Objects.requireNonNull(roleClass, "roleClass"),
+                Objects.requireNonNull(interceptor, "interceptor"));
+    }
+
+    public static void unregisterDeliveryInterceptor(Class<?> roleClass) {
+        if (roleClass != null) {
+            DELIVERY_INTERCEPTORS.remove(roleClass);
+        }
     }
 
     public static void tell(Class<?> actorCmdClass, Object message, String entityId) {
@@ -105,6 +117,10 @@ public class AkkaKit {
                 && (rpcMessage.payload() == null || !spec.messageClass().isInstance(rpcMessage.payload()))) {
             throw rejectRouting("payload_type_mismatch", "RPC " + spec.rpcNum()
                     + " payload type does not match " + spec.messageClass().getName());
+        }
+        RpcDeliveryInterceptor interceptor = DELIVERY_INTERCEPTORS.get(roleClass);
+        if (interceptor != null && interceptor.intercept(registry, roleClass, message, entityId, context)) {
+            return;
         }
         EntityRef entityRef = getClusterSharding().entityRefFor(entityTypeKey((Class) roleClass), entityId);
         // Entity placement can change at runtime. Always use the protocol envelope so a local

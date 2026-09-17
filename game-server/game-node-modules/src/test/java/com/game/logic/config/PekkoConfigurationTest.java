@@ -14,9 +14,9 @@ class PekkoConfigurationTest {
         Config cluster = ConfigFactory.parseResources("application-cluster.conf").resolve();
 
         assertEquals("cluster", defaults.getString("pekko.actor.provider"));
-        assertEquals("thread-pool-executor", defaults.getString("pekko.actor.battle-dispatcher.executor"));
-        assertEquals(8, defaults.getInt("pekko.actor.battle-dispatcher.thread-pool-executor.fixed-pool-size"));
-        assertEquals(1, defaults.getInt("pekko.actor.battle-dispatcher.throughput"));
+        assertEquals("thread-pool-executor", defaults.getString("pekko.actor.scene-dispatcher.executor"));
+        assertEquals(8, defaults.getInt("pekko.actor.scene-dispatcher.thread-pool-executor.fixed-pool-size"));
+        assertEquals(1, defaults.getInt("pekko.actor.scene-dispatcher.throughput"));
         assertEquals("thread-pool-executor", defaults.getString("pekko.actor.player-dispatcher.executor"));
         assertEquals(8, defaults.getInt("pekko.actor.player-dispatcher.thread-pool-executor.fixed-pool-size"));
         assertEquals(1, defaults.getInt("pekko.actor.player-dispatcher.throughput"));

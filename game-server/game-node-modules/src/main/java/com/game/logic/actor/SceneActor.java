@@ -15,7 +15,7 @@ import org.apache.pekko.actor.typed.javadsl.Behaviors;
 import org.apache.pekko.actor.typed.javadsl.Receive;
 
 @Slf4j
-@ActorDispatcher("pekko.actor.battle-dispatcher")
+@ActorDispatcher("pekko.actor.scene-dispatcher")
 public final class SceneActor extends RpcActor<SceneMessage> {
 
     private final SceneMembership membership = new SceneMembership();

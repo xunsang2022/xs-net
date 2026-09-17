@@ -4,15 +4,14 @@ import com.xs.core.actor.node.ActorDispatcher;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class BattleActorDispatcherTest {
 
     @Test
-    void declaresDedicatedBattleDispatcher() {
+    void battleActorDoesNotDeclareAnActorDispatcher() {
         ActorDispatcher dispatcher = BattleActor.class.getAnnotation(ActorDispatcher.class);
-        assertNotNull(dispatcher);
-        assertEquals("pekko.actor.battle-dispatcher", dispatcher.value());
+        assertNull(dispatcher);
     }
 
     @Test
@@ -20,9 +19,7 @@ class BattleActorDispatcherTest {
         ActorDispatcher scene = SceneActor.class.getAnnotation(ActorDispatcher.class);
         ActorDispatcher player = PlayerActor.class.getAnnotation(ActorDispatcher.class);
 
-        assertNotNull(scene);
-        assertNotNull(player);
-        assertEquals("pekko.actor.battle-dispatcher", scene.value());
+        assertEquals("pekko.actor.scene-dispatcher", scene.value());
         assertEquals("pekko.actor.player-dispatcher", player.value());
     }
 }
