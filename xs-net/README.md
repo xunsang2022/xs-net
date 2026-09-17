@@ -32,7 +32,7 @@ xs-net/
 
 ### SDK 与插件
 
-`xs-net-rpc-maven-plugin` 根据 RPC 协议生成相关产物；`xs-net-sdk` 负责 SDK 打包。游戏侧的 Protobuf 协议位于 `game-server/game-message-action`，Unity 产物位于 `xs-net-sdk-unity`。
+`xs-net-rpc-maven-plugin` 根据 RPC 协议生成相关产物；`xs-net-sdk` 负责统一生成客户端代码。游戏侧的 Protobuf 协议位于 `game-server/game-message-action`，SDK 模板位于 `xs-net/xs-net-sdk/src/main/sdk`，生成结果位于 `xs-net/xs-net-sdk/target/code`。
 
 ## 使用的核心类型
 

@@ -21,9 +21,6 @@ __pycache__/
 [Bb]in/
 [Oo]bj/
 
-# Generated multi-client SDK sources
-xs-net-sdk-typescript/generated/
-xs-net-sdk-typescript/dist/
-xs-net-sdk-cpp/generated/
+# Generated multi-client SDK sources are under xs-net/xs-net-sdk/target/code/
 node_modules/
 /docs/

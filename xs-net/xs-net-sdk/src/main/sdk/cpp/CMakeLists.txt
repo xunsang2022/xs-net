@@ -12,7 +12,7 @@ find_path(ASIO_INCLUDE_DIR asio.hpp REQUIRED)
 
 file(GLOB XSNET_GENERATED_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/generated/*.cc")
 if(NOT XSNET_GENERATED_SOURCES)
-    message(FATAL_ERROR "Generated protobuf sources are missing. Run scripts/Generate-Sdk.ps1 first.")
+    message(FATAL_ERROR "Generated protobuf sources are missing. Run .\\scripts\\Generate-Sdks.ps1 -Only Cpp from the repository root first.")
 endif()
 
 add_library(xs_net_sdk_cpp

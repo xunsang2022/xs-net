@@ -16,12 +16,6 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <!-- Unity C# SDK 生成选项：可被依赖的 xs-net-sdk 生成逻辑读取/覆盖 -->
-        <unity.sdk.namespace>Game.Message</unity.sdk.namespace>
-        <unity.sdk.package.name>com.xs.game.sdk</unity.sdk.package.name>
-        <unity.sdk.package.version>0.0.1</unity.sdk.package.version>
-        <unity.sdk.package.displayName>XS Net Game SDK</unity.sdk.package.displayName>
-        <unity.sdk.package.description>Generated C# SDK for Unity</unity.sdk.package.description>
     </properties>
 
     <dependencies>
@@ -45,14 +39,6 @@
             <artifactId>xs-net-core</artifactId>
             <version>0.0.1</version>
         </dependency>
-        <!-- 导入 xs-net-sdk：读取其 Unity C# SDK 生成选项，可配合 -Pgenerate-unity-sdk 激活 -->
-        <dependency>
-            <groupId>com.xs</groupId>
-            <artifactId>xs-net-sdk</artifactId>
-            <version>0.0.1</version>
-            <type>pom</type>
-            <scope>provided</scope>
-        </dependency>
     </dependencies>
     <build>
         <plugins>
@@ -60,20 +46,6 @@
                 <groupId>com.xs</groupId>
                 <artifactId>xs-net-rpc-maven-plugin</artifactId>
                 <version>0.0.6</version>
-                <!--
-                  插件级配置：无论从 IDEA Maven 面板的 goal 节点(default-cli)
-                  还是 execution 节点调用，导出参数都会生效。
-                -->
-                <configuration>
-                    <generatedProtoDirectory>${project.basedir}/src/main/proto</generatedProtoDirectory>
-                    <!-- 默认导出到仓库根目录下的 xs-net-sdk-unity；可在 src/main/resources/sdk-export.properties 中覆盖 -->
-                    <outputDirectory>${project.basedir}/../../xs-net-sdk-unity</outputDirectory>
-                    <csharpNamespace>${unity.sdk.namespace}</csharpNamespace>
-                    <packageName>${unity.sdk.package.name}</packageName>
-                    <packageVersion>${unity.sdk.package.version}</packageVersion>
-                    <packageDisplayName>${unity.sdk.package.displayName}</packageDisplayName>
-                    <packageDescription>${unity.sdk.package.description}</packageDescription>
-                </configuration>
                 <executions>
                     <execution>
                         <id>generate-rpc</id>

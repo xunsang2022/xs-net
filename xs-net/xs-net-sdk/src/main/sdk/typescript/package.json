@@ -13,11 +13,9 @@
   },
   "files": ["dist", "proto", "README.md"],
   "scripts": {
-    "sync-proto": "node scripts/sync-proto.mjs",
-    "generate": "npm run sync-proto && node scripts/generate-proto.mjs",
-    "typecheck": "npm run generate && tsc --noEmit",
-    "build": "npm run generate && tsc",
-    "test": "npm run generate && vitest run"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "test": "vitest run"
   },
   "dependencies": {
     "protobufjs": "^7.4.0"

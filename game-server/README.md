@@ -118,4 +118,4 @@ Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:9090/admin/gm/trace' -Head
 
 ## 测试客户端
 
-原 `game-client` 模块已移除。登录压测使用 `xs-net-sdk-unity/LoadTest/XsNet.LoadTest.csproj`，它直接复用 Unity Runtime 的 TCP/UDP 协议实现；先启动服务端，再执行该控制台工程完成联调与压测。
+原 `game-client` 模块已移除。登录压测使用 `xs-net/xs-net-sdk/target/code/unity/LoadTest/XsNet.LoadTest.csproj`，它直接复用统一生成的 Unity Runtime TCP/UDP 协议实现；先执行 SDK 生成，再启动服务端并运行该控制台工程完成联调与压测。

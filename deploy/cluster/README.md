@@ -16,9 +16,9 @@ stable seeds; `logic-2` validates cross-node shard placement and rebalancing.
 The initial verification sequence is:
 
 1. Confirm all `up` metrics targets in Prometheus at `http://localhost:9091`.
-2. Build the load-test project with `dotnet build xs-net-sdk-unity/LoadTest/XsNet.LoadTest.csproj`.
+2. Generate the SDK with `./scripts/Generate-Sdks.ps1 -Only Unity`, then build `xs-net/xs-net-sdk/target/code/unity/LoadTest/XsNet.LoadTest.csproj`.
 3. Run the login load test against Gateway 1, then repeat through Gateway 2:
-   `dotnet run --project xs-net-sdk-unity/LoadTest/XsNet.LoadTest.csproj -- --host 127.0.0.1 --protocol tcp --port 8082 --count 1000 --concurrency 200 --secret "$env:JWT_SECRET"`
+   `dotnet run --project xs-net/xs-net-sdk/target/code/unity/LoadTest/XsNet.LoadTest.csproj -- --host 127.0.0.1 --protocol tcp --port 8082 --count 1000 --concurrency 200 --secret "$env:JWT_SECRET"`
 4. Repeat with `--protocol udp --port 2002`, then compare throughput and p99 latency with `docs/登录压测报告.md`.
 5. Stop `logic-2`, observe shard recovery and `dbsync_*` metrics, then restore it.
 

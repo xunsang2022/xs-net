@@ -5,14 +5,10 @@ The C++ SDK targets C++17 and uses Standalone Asio plus Protobuf. It implements 
 ## Generate Protocol Sources
 
 ```powershell
-./scripts/Generate-Sdk.ps1 -Protoc protoc
+From the repository root, run `.\scripts\Generate-Sdks.ps1 -Only Cpp -Protoc protoc`.
 ```
 
-The command copies all game and framework `.proto` files into `proto/` and writes C++ output to the ignored `generated/` directory. Alternatively run Maven from the repository root:
-
-```powershell
-./mvnw.cmd -pl xs-net/xs-net-sdk -Pgenerate-cpp-sdk generate-sources
-```
+The command copies all game and framework `.proto` files into `target/code/cpp/proto/` and writes C++ output to the ignored `target/code/cpp/generated/` directory.
 
 ## Build
 
@@ -24,4 +20,4 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-`generated/` and `build/` are local build artifacts and are not committed.
+`target/code/cpp/generated/` and `target/code/cpp/build/` are local build artifacts and are not committed.

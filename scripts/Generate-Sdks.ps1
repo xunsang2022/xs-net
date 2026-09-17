@@ -12,9 +12,14 @@ $mavenProject = Join-Path $repoRoot 'xs-net\pom.xml'
 $sdkModule = Join-Path $repoRoot 'xs-net\xs-net-sdk'
 $canonicalProto = Join-Path $sdkModule 'target\generated-proto'
 $frameworkProto = Join-Path $repoRoot 'xs-net\xs-net-message\src\main\proto'
-$unityRoot = Join-Path $repoRoot 'xs-net-sdk-unity'
-$typescriptRoot = Join-Path $repoRoot 'xs-net-sdk-typescript'
-$cppRoot = Join-Path $repoRoot 'xs-net-sdk-cpp'
+$templateRoot = Join-Path $sdkModule 'src\main\sdk'
+$codeRoot = Join-Path $sdkModule 'target\code'
+$unityTemplate = Join-Path $templateRoot 'unity'
+$typescriptTemplate = Join-Path $templateRoot 'typescript'
+$cppTemplate = Join-Path $templateRoot 'cpp'
+$unityRoot = Join-Path $codeRoot 'unity'
+$typescriptRoot = Join-Path $codeRoot 'typescript'
+$cppRoot = Join-Path $codeRoot 'cpp'
 
 $selected = switch ($Only) {
     'All' { @('Unity', 'TypeScript', 'Cpp') }
@@ -49,12 +54,17 @@ function Resolve-TsProtoPlugin {
         return (Resolve-Path -LiteralPath $TsProtoPlugin).Path
     }
 
-    $defaultPlugin = Join-Path $typescriptRoot 'node_modules\.bin\protoc-gen-ts_proto.cmd'
-    if (Test-Path -LiteralPath $defaultPlugin -PathType Leaf) {
-        return (Resolve-Path -LiteralPath $defaultPlugin).Path
+    $pluginCandidates = @(
+        (Join-Path $typescriptTemplate 'node_modules\.bin\protoc-gen-ts_proto.cmd'),
+        (Join-Path $typescriptRoot 'node_modules\.bin\protoc-gen-ts_proto.cmd')
+    )
+    foreach ($candidate in $pluginCandidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
     }
 
-    throw 'protoc-gen-ts_proto was not found. Run npm install in xs-net-sdk-typescript or pass -TsProtoPlugin <path>.'
+    throw 'protoc-gen-ts_proto was not found. Run npm install in xs-net/xs-net-sdk/src/main/sdk/typescript or pass -TsProtoPlugin <path>.'
 }
 
 function Invoke-LoggedProcess {
@@ -91,6 +101,26 @@ function Copy-ProtoSet {
         Where-Object { $Exclude -notcontains $_.Name } |
         Sort-Object Name | ForEach-Object {
         Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $Target $_.Name) -Force
+    }
+}
+
+function Reset-SdkOutput {
+    param(
+        [Parameter(Mandatory = $true)][string]$Template,
+        [Parameter(Mandatory = $true)][string]$Output
+    )
+
+    if (-not (Test-Path -LiteralPath $Template -PathType Container)) {
+        throw "SDK template directory was not found: $Template"
+    }
+    if (Test-Path -LiteralPath $Output -PathType Container) {
+        [System.IO.Directory]::Delete((Resolve-Path -LiteralPath $Output).Path, $true)
+    }
+    New-Item -ItemType Directory -Force -Path $Output | Out-Null
+    Get-ChildItem -LiteralPath $Template -Force |
+        Where-Object { $_.Name -ne 'node_modules' } |
+        ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $Output $_.Name) -Recurse -Force
     }
 }
 
@@ -142,6 +172,7 @@ Merge-FrameworkProto
 $protoFiles = Get-ProtoFiles
 
 if ($selected -contains 'Unity') {
+    Reset-SdkOutput -Template $unityTemplate -Output $unityRoot
     $unityRuntime = Join-Path $unityRoot 'Runtime'
     $unityProtoFiles = @($protoFiles | Where-Object { $_.Name -ne 'net_message.proto' })
     Copy-ProtoSet -Target (Join-Path $unityRoot 'proto') -Exclude @('net_message.proto')
@@ -155,6 +186,7 @@ if ($selected -contains 'Unity') {
 }
 
 if ($selected -contains 'TypeScript') {
+    Reset-SdkOutput -Template $typescriptTemplate -Output $typescriptRoot
     $typescriptProto = Join-Path $typescriptRoot 'proto'
     $typescriptGenerated = Join-Path $typescriptRoot 'generated'
     Copy-ProtoSet -Target $typescriptProto
@@ -170,6 +202,7 @@ if ($selected -contains 'TypeScript') {
 }
 
 if ($selected -contains 'Cpp') {
+    Reset-SdkOutput -Template $cppTemplate -Output $cppRoot
     $cppProto = Join-Path $cppRoot 'proto'
     $cppGenerated = Join-Path $cppRoot 'generated'
     Copy-ProtoSet -Target $cppProto

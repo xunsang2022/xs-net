@@ -1,6 +1,6 @@
 # XS Net TypeScript SDK
 
-This package provides the client runtime for Node.js and modern browsers. Run `npm run generate` after installing dependencies to copy every server `.proto` definition and generate `generated/` with `ts-proto`.
+This package is the TypeScript runtime template used by the XS-NET SDK generator. The generated package is written to `xs-net/xs-net-sdk/target/code/typescript`; run the repository-level SDK generator before building or publishing it.
 
 ```ts
 import { CSLogin, GameClient, SCLogin, TcpTransport } from "@xs-net/game-sdk-typescript";
@@ -13,4 +13,4 @@ client.send(1000, CSLogin.encode(CSLogin.create({ playerId: "1001", playerName: 
 
 Node clients may use `TcpTransport` or `UdpTransport`. Browser clients must use `WebSocketTransport` and connect to the Gateway WebSocket endpoint, for example `ws://127.0.0.1:8083/game`.
 
-`generated/` is build output and is intentionally ignored by Git. The protocol source is copied from `game-server/game-message-action/src/main/proto` and `xs-net/xs-net-message/src/main/proto`.
+The protocol source and `generated/` files are build output and are intentionally not stored in this template. They are produced from the server RPC model and `xs-net-message` by `scripts/Generate-Sdks.ps1`.

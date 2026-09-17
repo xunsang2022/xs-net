@@ -17,7 +17,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$project = Join-Path $repoRoot 'xs-net-sdk-unity\LoadTest\XsNet.LoadTest.csproj'
+$project = Join-Path $repoRoot 'xs-net\xs-net-sdk\target\code\unity\LoadTest\XsNet.LoadTest.csproj'
 $targetPort = if ($Port -gt 0) { $Port } elseif ($Protocol -eq 'udp') { 2002 } else { 8082 }
 $logRoot = Join-Path $repoRoot '.log'
 New-Item -ItemType Directory -Path $logRoot -Force | Out-Null

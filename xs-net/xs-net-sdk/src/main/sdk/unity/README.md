@@ -5,17 +5,13 @@
 ## 目录结构
 
 ```text
-xs-net-sdk-unity/
+xs-net/xs-net-sdk/target/code/unity/
 ├── package.json            # UPM 包元数据（导入入口）
 ├── README.md
-├── proto/                  # 协议源文件（.proto）
-│   ├── comment.proto
-│   ├── PlayerMessages.proto
-│   └── rpc_routes.proto
 └── Runtime/                # C# 代码（命名空间 Game.Message）
-    ├── Comment.cs          # 自动生成（protoc）
-    ├── PlayerMessages.cs   # 自动生成（protoc）
-    ├── RpcRoutes.cs        # 自动生成（protoc）
+    ├── Comment.cs          # 生成后出现
+    ├── PlayerMessages.cs   # 生成后出现
+    ├── RpcRoutes.cs        # 生成后出现
     └── Networking/         # 手写网络层（不会被重新导出清除）
         ├── Frame.cs              # 帧协议：UDP 15 字节头 / TCP 4 字节长度前缀（大端）
         ├── NetMessage.cs         # 消息信封（对应服务端 net_message.proto）
@@ -31,8 +27,9 @@ xs-net-sdk-unity/
 ## 导入 Unity
 
 1. `Window → Package Manager → + → Add package from disk...`
-2. 选择本目录下的 `package.json`
-3. 工程必须同时引入 `Google.Protobuf`（3.25.5）运行时，否则报 `The type or namespace name 'Google' could not be found`
+2. 运行 `.\scripts\Generate-Sdks.ps1 -Only Unity`
+3. 选择 `xs-net/xs-net-sdk/target/code/unity/package.json`
+4. 工程必须同时引入 `Google.Protobuf`（3.25.5）运行时，否则报 `The type or namespace name 'Google' could not be found`
 
 ## 消息路由表
 
@@ -217,5 +214,5 @@ client.Disconnect();
 
 ## 说明
 
-- `Runtime/` 下 `Comment.cs`、`PlayerMessages.cs`、`RpcRoutes.cs` 与 `proto/*.proto` 均为自动生成，**不要手动修改**；服务端协议变更后重新执行 `xs-rpc:export-unity-sdk` 即可刷新。
+- `Runtime/` 下 `Comment.cs`、`PlayerMessages.cs`、`RpcRoutes.cs` 与 `proto/*.proto` 均为自动生成，**不要手动修改**；服务端协议变更后重新执行仓库根目录的 `.\scripts\Generate-Sdks.ps1 -Only Unity` 即可刷新。
 - `Runtime/Networking/` 为**手写网络层**，重新导出时不会被清除；如需修改请直接编辑该目录文件。

@@ -7,7 +7,7 @@
 需要安装 .NET 8 SDK：
 
 ```powershell
-dotnet build xs-net-sdk-unity/LoadTest/XsNet.LoadTest.csproj
+dotnet build xs-net/xs-net-sdk/target/code/unity/LoadTest/XsNet.LoadTest.csproj
 ```
 
 ## TCP 登录压测
@@ -16,14 +16,14 @@ dotnet build xs-net-sdk-unity/LoadTest/XsNet.LoadTest.csproj
 
 ```powershell
 $env:JWT_SECRET = "本地配置中的 JWT 密钥"
-dotnet run --project xs-net-sdk-unity/LoadTest/XsNet.LoadTest.csproj -- --host 127.0.0.1 --protocol tcp --port 8082 --count 1000 --concurrency 200 --secret $env:JWT_SECRET
+dotnet run --project xs-net/xs-net-sdk/target/code/unity/LoadTest/XsNet.LoadTest.csproj -- --host 127.0.0.1 --protocol tcp --port 8082 --count 1000 --concurrency 200 --secret $env:JWT_SECRET
 ```
 
 ## UDP 登录压测
 
 ```powershell
 $env:JWT_SECRET = "本地配置中的 JWT 密钥"
-dotnet run --project xs-net-sdk-unity/LoadTest/XsNet.LoadTest.csproj -- --host 127.0.0.1 --protocol udp --port 2002 --count 1000 --concurrency 200 --secret $env:JWT_SECRET
+dotnet run --project xs-net/xs-net-sdk/target/code/unity/LoadTest/XsNet.LoadTest.csproj -- --host 127.0.0.1 --protocol udp --port 2002 --count 1000 --concurrency 200 --secret $env:JWT_SECRET
 ```
 
 可选参数：
