@@ -20,3 +20,4 @@
 |3012|com.game.message.battle.BattleLeaveCommand|INTERNAL|com.game.message.actor.logic.BattleMessage|no|yes|no||
 |3013|com.game.message.battle.BattleInputCommand|INTERNAL|com.game.message.actor.logic.BattleMessage|no|yes|no||
 |3014|com.game.message.battle.BattleEndCommand|INTERNAL|com.game.message.actor.logic.BattleMessage|no|no|no||
+|3015|com.game.message.battle.BattleAttackCommand|INTERNAL|com.game.message.actor.logic.BattleMessage|no|no|no||

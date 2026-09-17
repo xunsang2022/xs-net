@@ -1,11 +1,17 @@
 package com.game.battle.actor;
 
+import com.game.message.battle.BattleAttackCommand;
 import com.game.message.battle.BattleInputCommand;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 final class BattleState {
+
+    /** 新加入玩家的基础属性，后续可由角色或装备系统覆盖。 */
+    static final int DEFAULT_ATTACK = 20;
+    static final int DEFAULT_DEFENSE = 5;
+    static final int DEFAULT_MAX_HP = 100;
 
     private final String battleId;
     private final int maxPlayers;
@@ -41,7 +47,7 @@ final class BattleState {
         if (participants.size() >= maxPlayers) {
             return "capacity_exceeded";
         }
-        participants.put(playerId, new ParticipantState());
+        participants.put(playerId, new ParticipantState(DEFAULT_ATTACK, DEFAULT_DEFENSE, DEFAULT_MAX_HP));
         return null;
     }
 
@@ -69,6 +75,40 @@ final class BattleState {
         return null;
     }
 
+    /**
+     * 结算一次基础攻击。
+     *
+     * <p>攻击和受击都在同一 BattleRuntime lane 内执行，因此无需额外锁保护状态。</p>
+     */
+    String attack(BattleAttackCommand command) {
+        if (ended || !created) {
+            return "battle_ended";
+        }
+        ParticipantState attacker = command.attackerPlayerId() == null
+                ? null : participants.get(command.attackerPlayerId());
+        ParticipantState target = command.targetPlayerId() == null
+                ? null : participants.get(command.targetPlayerId());
+        if (attacker == null) {
+            return "unknown_attacker";
+        }
+        if (target == null) {
+            return "unknown_target";
+        }
+        if (attacker.hp <= 0) {
+            return "attacker_defeated";
+        }
+        if (target.hp <= 0) {
+            return "target_defeated";
+        }
+        if (command.clientSequence() == null || command.clientSequence() <= attacker.lastAttackSequence) {
+            return "stale_sequence";
+        }
+        attacker.lastAttackSequence = command.clientSequence();
+        int damage = Math.max(1, attacker.attack - target.defense);
+        target.hp = Math.max(0, target.hp - damage);
+        return null;
+    }
+
     void tick() {
         if (!created || ended) {
             return;
@@ -87,7 +127,11 @@ final class BattleState {
                 participant.positionX,
                 participant.positionY,
                 participant.directionX,
-                participant.directionY
+                participant.directionY,
+                participant.attack,
+                participant.defense,
+                participant.hp,
+                participant.maxHp
         )));
         lastSnapshot = new BattleSnapshot(frameNumber, Map.copyOf(snapshot));
     }
@@ -116,7 +160,11 @@ final class BattleState {
                 participant.positionX,
                 participant.positionY,
                 participant.directionX,
-                participant.directionY
+                participant.directionY,
+                participant.attack,
+                participant.defense,
+                participant.hp,
+                participant.maxHp
         );
     }
 
@@ -142,7 +190,11 @@ final class BattleState {
             int positionX,
             int positionY,
             int directionX,
-            int directionY
+            int directionY,
+            int attack,
+            int defense,
+            int hp,
+            int maxHp
     ) {
     }
 
@@ -151,9 +203,21 @@ final class BattleState {
 
     private static final class ParticipantState {
         private long lastClientSequence;
+        private long lastAttackSequence;
         private int directionX;
         private int directionY;
         private int positionX;
         private int positionY;
+        private final int attack;
+        private final int defense;
+        private final int maxHp;
+        private int hp;
+
+        private ParticipantState(int attack, int defense, int maxHp) {
+            this.attack = attack;
+            this.defense = defense;
+            this.maxHp = maxHp;
+            this.hp = maxHp;
+        }
     }
 }

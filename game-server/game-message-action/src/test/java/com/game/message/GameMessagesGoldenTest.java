@@ -85,7 +85,7 @@ public class GameMessagesGoldenTest {
         assertEquals(Set.of(
                 999, 1000, 1001, 1002, 1003, 2100, 2101,
                 3003, 3004, 3005, 3006, 3007, 3008,
-                3010, 3011, 3012, 3013, 3014
+                3010, 3011, 3012, 3013, 3014, 3015
         ), rpcNums);
         assertNotNull(GameRpcMessages.INSTANCE.find(1000));
         assertEquals(1003, GameRpcMessages.INSTANCE.find(1003).rpcNum());

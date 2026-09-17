@@ -1,6 +1,7 @@
 package com.game.battle.actor;
 
 import com.game.message.actor.logic.BattleMessage;
+import com.game.message.battle.BattleAttackCommand;
 import com.game.message.battle.BattleCreateCommand;
 import com.game.message.battle.BattleEndCommand;
 import com.game.message.battle.BattleInputCommand;
@@ -40,6 +41,7 @@ public final class BattleActor extends RpcActor<BattleMessage> {
                 .onMessage(BattleJoinCommand.class, contextual(this::onJoin))
                 .onMessage(BattleLeaveCommand.class, contextual(this::onLeave))
                 .onMessage(BattleInputCommand.class, contextual(this::onInput))
+                .onMessage(BattleAttackCommand.class, contextual(this::onAttack))
                 .onMessage(BattleEndCommand.class, contextual(this::onEnd))
                 .build();
     }
@@ -66,6 +68,11 @@ public final class BattleActor extends RpcActor<BattleMessage> {
     }
 
     private Behavior<BattleMessage> onInput(BattleInputCommand command) {
+        ingress.submit(entityId(), command, currentRequestContext());
+        return this;
+    }
+
+    private Behavior<BattleMessage> onAttack(BattleAttackCommand command) {
         ingress.submit(entityId(), command, currentRequestContext());
         return this;
     }

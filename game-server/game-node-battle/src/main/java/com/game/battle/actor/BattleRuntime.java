@@ -1,5 +1,6 @@
 package com.game.battle.actor;
 
+import com.game.message.battle.BattleAttackCommand;
 import com.game.message.battle.BattleCreateCommand;
 import com.game.message.battle.BattleEndCommand;
 import com.game.message.battle.BattleInputCommand;
@@ -259,6 +260,11 @@ public final class BattleRuntime implements AutoCloseable {
             }
         } else if (command instanceof BattleJoinCommand join) {
             state.join(join.playerId());
+        } else if (command instanceof BattleAttackCommand attack) {
+            String reason = state.attack(attack);
+            if (reason != null) {
+                record("battle.attack.rejected", envelope.context(), attack.attackerPlayerId(), reason);
+            }
         } else if (command instanceof BattleLeaveCommand leave) {
             if (state.leave(leave.playerId()) && state.isEmpty()) {
                 close();

@@ -32,3 +32,10 @@ message BattleInputCommand {
 message BattleEndCommand {
   optional string reason = 1;
 }
+
+// BattleAttackCommand = 3015
+message BattleAttackCommand {
+  optional int64 attacker_player_id = 1;
+  optional int64 target_player_id = 2;
+  optional int64 client_sequence = 3;
+}

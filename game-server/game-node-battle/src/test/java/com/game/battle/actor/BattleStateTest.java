@@ -1,5 +1,6 @@
 package com.game.battle.actor;
 
+import com.game.message.battle.BattleAttackCommand;
 import com.game.message.battle.BattleInputCommand;
 import org.junit.jupiter.api.Test;
 
@@ -44,6 +45,35 @@ class BattleStateTest {
         assertEquals(0, player.positionX());
         assertEquals(1, player.positionY());
         assertEquals(2L, player.lastClientSequence());
+    }
+
+    @Test
+    void appliesBaseAttackAgainstDefenseAndExposesHealthInSnapshot() {
+        BattleState state = createdState();
+        assertNull(state.join(42L));
+        assertNull(state.join(43L));
+
+        BattleState.ParticipantSnapshot attacker = state.participant(42L);
+        assertEquals(BattleState.DEFAULT_ATTACK, attacker.attack());
+        assertEquals(BattleState.DEFAULT_DEFENSE, attacker.defense());
+        assertEquals(BattleState.DEFAULT_MAX_HP, attacker.hp());
+        assertEquals(BattleState.DEFAULT_MAX_HP, attacker.maxHp());
+
+        assertNull(state.attack(new BattleAttackCommand(42L, 43L, 1L)));
+        BattleState.ParticipantSnapshot target = state.participant(43L);
+        assertEquals(BattleState.DEFAULT_MAX_HP
+                        - (BattleState.DEFAULT_ATTACK - BattleState.DEFAULT_DEFENSE),
+                target.hp());
+        assertEquals("stale_sequence", state.attack(new BattleAttackCommand(42L, 43L, 1L)));
+    }
+
+    @Test
+    void rejectsAttacksFromUnknownOrDefeatedParticipants() {
+        BattleState state = createdState();
+        assertNull(state.join(42L));
+
+        assertEquals("unknown_target", state.attack(new BattleAttackCommand(42L, 43L, 1L)));
+        assertEquals("unknown_attacker", state.attack(new BattleAttackCommand(43L, 42L, 1L)));
     }
 
     @Test
