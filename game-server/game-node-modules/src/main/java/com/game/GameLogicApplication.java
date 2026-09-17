@@ -3,9 +3,6 @@ package com.game;
 import org.apache.pekko.actor.typed.ActorSystem;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.Behaviors;
-import com.game.logic.actor.BattleCommandIngress;
-import com.game.logic.actor.BattleExecutorConfig;
-import com.game.logic.actor.BattleExecutorPool;
 import com.game.logic.context.LogicContext;
 import com.game.logic.context.LogicIoExecutors;
 import com.game.logic.context.LogicMetrics;
@@ -19,10 +16,8 @@ import com.game.logic.metrics.LogicPrometheusServer;
 import com.game.logic.management.GmProtocolTraceService;
 import com.game.logic.management.ProcessArthasTraceClient;
 import com.game.logic.management.ProtocolTraceTargetResolver;
-import com.game.message.actor.logic.BattleMessage;
 import com.game.message.rpc.GameRpcMessages;
 import com.xs.core.actor.node.NodeActor;
-import com.xs.core.akka.AkkaKit;
 import com.xs.core.config.GameFrameworkProperties;
 import com.xs.net.message.MessageAble;
 import com.zaxxer.hikari.HikariConfig;
@@ -138,17 +133,6 @@ public final class GameLogicApplication {
         LogicContext.setLogicMetrics(logicMetrics);
 
         MessageAble.initialize(GameRpcMessages.INSTANCE);
-        BattleExecutorConfig battleConfig = new BattleExecutorConfig(
-                parseInt("game.battle.executor.pool-size", "BATTLE_EXECUTOR_POOL", "8"),
-                parseInt("game.battle.executor.control-queue-capacity", "BATTLE_CONTROL_QUEUE_CAPACITY", "256"),
-                parseInt("game.battle.executor.max-inputs-per-drain", "BATTLE_MAX_INPUTS_PER_DRAIN", "512"),
-                parseInt("game.battle.executor.shutdown-timeout-ms", "BATTLE_SHUTDOWN_TIMEOUT_MS", "2000"),
-                parseInt("game.battle.tick-hz", "BATTLE_TICK_HZ", "60"));
-        BattleExecutorPool battleExecutorPool = new BattleExecutorPool(battleConfig);
-        BattleCommandIngress battleCommandIngress = new BattleCommandIngress(battleExecutorPool);
-        LogicContext.setBattleExecutorPool(battleExecutorPool);
-        LogicContext.setBattleCommandIngress(battleCommandIngress);
-        AkkaKit.registerDeliveryInterceptor(BattleMessage.class, battleCommandIngress);
         GmProtocolTraceService traceService = new GmProtocolTraceService(
                 new ProtocolTraceTargetResolver(GameRpcMessages.INSTANCE),
                 new ProcessArthasTraceClient(
@@ -176,8 +160,6 @@ public final class GameLogicApplication {
         ActorSystem<Void> system = ActorSystem.create(guardian, "game-system");
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            AkkaKit.unregisterDeliveryInterceptor(BattleMessage.class);
-            battleExecutorPool.close();
             system.terminate();
             system.getWhenTerminated().toCompletableFuture().join();
             logConsumer.stop();

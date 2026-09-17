@@ -51,6 +51,7 @@
                             <sourceDirectories>
                                 <sourceDirectory>${project.basedir}/../../game-server/game-message-action/src/main/java</sourceDirectory>
                                 <sourceDirectory>${project.basedir}/../../game-server/game-node-modules/src/main/java</sourceDirectory>
+                                <sourceDirectory>${project.basedir}/../../game-server/game-node-battle/src/main/java</sourceDirectory>
                             </sourceDirectories>
                             <protoOutputDirectory>${project.build.directory}/generated-proto</protoOutputDirectory>
                             <javaOutputDirectory>${project.build.directory}/generated-sources/rpc</javaOutputDirectory>

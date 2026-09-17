@@ -1,4 +1,4 @@
-package com.game.logic.actor;
+package com.game.battle.actor;
 
 public record BattleExecutorConfig(
         int poolSize,

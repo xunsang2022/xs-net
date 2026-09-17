@@ -36,6 +36,7 @@
         <module>game-message-action</module>
         <module>game-node-gateway</module>
         <module>game-node-login</module>
+        <module>game-node-battle</module>
         <module>game-node-modules</module>
     </modules>
 

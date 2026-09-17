@@ -1,4 +1,4 @@
-package com.game.logic.actor;
+package com.game.battle.actor;
 
 import com.game.message.actor.logic.BattleMessage;
 import com.game.message.battle.BattleCreateCommand;

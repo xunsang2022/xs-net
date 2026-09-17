@@ -1,4 +1,4 @@
-package com.game.logic.actor;
+package com.game.battle.actor;
 
 import com.game.message.actor.logic.BattleMessage;
 import com.game.message.battle.BattleCreateCommand;
@@ -17,6 +17,7 @@ import org.apache.pekko.actor.typed.javadsl.Receive;
 import java.util.Objects;
 
 @Slf4j
+@ActorDispatcher("pekko.actor.battle-control-dispatcher")
 public final class BattleActor extends RpcActor<BattleMessage> {
     private final BattleCommandIngress ingress;
 
@@ -25,7 +26,7 @@ public final class BattleActor extends RpcActor<BattleMessage> {
             String battleId
     ) {
         super(context, battleId);
-        this.ingress = com.game.logic.context.LogicContext.getBattleCommandIngress();
+        this.ingress = BattleServiceContext.getBattleCommandIngress();
     }
 
     public static Behavior<BattleMessage> create(String battleId) {
