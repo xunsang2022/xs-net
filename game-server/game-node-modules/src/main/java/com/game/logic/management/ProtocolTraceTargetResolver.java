@@ -1,8 +1,8 @@
 package com.game.logic.management;
 
-import com.game.logic.actor.GMActor;
-import com.game.logic.actor.PlayerActor;
-import com.game.logic.actor.SceneActor;
+import com.game.logic.actor.gm.GMActor;
+import com.game.logic.actor.player.core.PlayerActor;
+import com.game.logic.actor.scene.SceneActor;
 import com.game.message.actor.logic.GMMessage;
 import com.game.message.actor.logic.PlayerMessage;
 import com.game.message.actor.logic.SceneMessage;
@@ -11,11 +11,6 @@ import com.xs.net.message.RpcMessageRegistry;
 import com.xs.net.message.RpcMessageSpec;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import org.apache.pekko.actor.typed.Behavior;
-
-import java.lang.reflect.Method;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 
 /** 根据外部 RPC 编号解析 Logic Actor 处理方法。 */
@@ -56,21 +51,14 @@ public final class ProtocolTraceTargetResolver {
                 effectiveProtocolNumber,
                 spec.dtoClass(),
                 actorType,
-                findHandler(actorType, spec.dtoClass(), protocolNumber));
+                handlerMethod(actorType, spec, protocolNumber));
     }
 
-    private static String findHandler(Class<?> actorType, Class<?> messageType, int protocolNumber) {
-        List<String> handlers = Arrays.stream(actorType.getDeclaredMethods())
-                .filter(method -> method.getName().startsWith("on"))
-                .filter(method -> method.getParameterCount() == 1)
-                .filter(method -> method.getParameterTypes()[0].equals(messageType))
-                .filter(method -> Behavior.class.isAssignableFrom(method.getReturnType()))
-                .map(Method::getName)
-                .sorted()
-                .toList();
-        if (handlers.size() != 1) {
-            throw new IllegalArgumentException("Cannot resolve a unique Logic handler for protocol: " + protocolNumber);
+    /** 使用生成时已校验过的 RPC 元数据定位 Actor 或其组件中的处理方法。 */
+    private static String handlerMethod(Class<?> actorType, RpcMessageSpec<?> spec, int protocolNumber) {
+        if (spec.handler() == null || !actorType.getName().equals(spec.handler().actorType())) {
+            throw new IllegalArgumentException("Cannot resolve Logic handler for protocol: " + protocolNumber);
         }
-        return handlers.getFirst();
+        return spec.handler().methodName();
     }
 }

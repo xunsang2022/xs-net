@@ -62,6 +62,7 @@ final class RpcArtifactGenerator {
             view.put("codecName", codecName(message));
             view.put("routeName", "RPC_" + snakeCase(message.name()).toUpperCase());
             view.put("handler", handler(message));
+            view.put("handlerComponent", message.handlerComponent());
             view.put("handlerMethod", message.handlerMethod());
             view.put("actorType", message.actorType());
             view.put("fields", templateFields(message.fields()));
@@ -111,6 +112,13 @@ final class RpcArtifactGenerator {
     private String handler(MessageModel message) {
         if (message.handlerMethod() == null) {
             return "null";
+        }
+        if (message.handlerComponent() != null) {
+            return "new com.xs.net.message.RpcHandlerMetadata(\""
+                    + message.actorType() + "\", \"" + message.handlerComponent() + "\", \""
+                    + message.handlerMethod() + "\", " + message.dtoType() + ".class, "
+                    + (message.responseDtoType() == null ? "null" : message.responseDtoType() + ".class")
+                    + ")";
         }
         return "new com.xs.net.message.RpcHandlerMetadata(\""
                 + message.actorType() + "\", \"" + message.handlerMethod() + "\", "

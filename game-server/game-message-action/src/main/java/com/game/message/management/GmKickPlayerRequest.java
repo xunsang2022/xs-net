@@ -4,6 +4,7 @@ import com.game.message.actor.logic.GMMessage;
 import com.game.message.annotation.ProtoField;
 import com.game.message.annotation.Rpc;
 
+/** GM 请求审核并踢出指定玩家的管理消息。 */
 @Rpc(kind = Rpc.Kind.INTERNAL, number = 3004)
 public record GmKickPlayerRequest(
         @ProtoField(number = 1) String requestId,

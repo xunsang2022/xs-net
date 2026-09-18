@@ -114,6 +114,44 @@ class RpcSourceScannerTest {
     }
 
     @Test
+    void bindsComponentHandlerToItsOwningActor() throws Exception {
+        Path source = sourceDirectory();
+        writeString(source.resolve("sample/Actor.java"), """
+                package sample;
+                @interface ProtoField { int number(); }
+                @interface Rpc {
+                    enum Kind { MESSAGE, INTERNAL, REQUEST }
+                    Kind kind() default Kind.REQUEST;
+                    int number() default 0;
+                    int requestNumber() default 0;
+                    int responseNumber() default 0;
+                }
+                class RpcActor<T> {}
+                interface PlayerMessage {}
+                @Rpc(kind = Rpc.Kind.INTERNAL, number = 6)
+                record Enter(@ProtoField(number = 1) String playerId) implements PlayerMessage {}
+                class PlayerActor extends RpcActor<PlayerMessage> {
+                    private final PlayerLifecycle lifecycle = new PlayerLifecycle();
+                }
+                class PlayerLifecycle {
+                    private void onEnter(Enter enter) {}
+                }
+                """);
+
+        RpcModel model = new RpcSourceScanner().scan(java.util.List.of(source));
+        MessageModel message = model.messages().getFirst();
+        assertEquals("sample.PlayerActor", message.actorType());
+        assertEquals("lifecycle", message.handlerComponent());
+        assertEquals("onEnter", message.handlerMethod());
+
+        Path target = temporaryDirectory.resolve("target");
+        new RpcArtifactGenerator().generate(model, target.resolve("proto"), target.resolve("java"),
+                "game.message", "com.game.protocol.pb", "com.game.message.rpc");
+        String registry = java.nio.file.Files.readString(target.resolve("java/com/game/message/rpc/GameRpcMessages.java"));
+        assertTrue(registry.contains("new com.xs.net.message.RpcHandlerMetadata(\"sample.PlayerActor\", \"lifecycle\", \"onEnter\", sample.Enter.class, null)"));
+    }
+
+    @Test
     void rejectsDuplicateRpcNumbers() throws Exception {
         Path source = sourceDirectory();
         writeString(source.resolve("sample/Duplicate.java"), """

@@ -14,6 +14,7 @@ record MessageModel(
         Direction direction,
         boolean publicVisible,
         String actorType,
+        String handlerComponent,
         String handlerMethod,
         String responseDtoType
 ) {

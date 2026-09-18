@@ -4,6 +4,7 @@ import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.expr.AnnotationExpr;
@@ -61,43 +62,34 @@ final class RpcSourceScanner {
             }
         }
 
-        // 角色接口与 handler：凡直接继承 RpcActor<Role> 的类，按其单参数类型匹配 DTO
-        Map<ClassOrInterfaceDeclaration, ActorModel> actorByClass = new HashMap<>();
-        Map<String, MethodBinding> handlerByDto = new HashMap<>();
+        // 角色接口与 handler：Actor 自身或其持有的组件可以声明单参数 DTO 处理方法。
+        Map<String, SourceType> typesByName = new HashMap<>();
         for (CompilationUnit unit : units) {
             String packageName = unit.getPackageDeclaration().map(value -> value.getNameAsString()).orElse("");
             Map<String, String> imports = imports(unit);
             for (ClassOrInterfaceDeclaration type : unit.findAll(ClassOrInterfaceDeclaration.class)) {
-                if (type.isInterface()) {
-                    continue;
+                if (!type.isInterface()) {
+                    String typeName = packageName.isEmpty() ? type.getNameAsString()
+                            : packageName + "." + type.getNameAsString();
+                    typesByName.put(typeName, new SourceType(type, packageName, imports));
                 }
-                actor(type, packageName, imports).ifPresent(actor -> {
-                    actorByClass.put(type, actor);
-                    for (MethodDeclaration method : type.getMethods()) {
-                        if (method.getParameters().size() != 1) {
-                            continue;
-                        }
-                        String dtoType;
-                        try {
-                            dtoType = resolveType(method.getParameter(0).getTypeAsString(), packageName, imports, records);
-                        } catch (MojoFailureException exception) {
-                            // 非 DTO 方法参数（如 RpcMessage、Actor 内部类/信号），跳过
-                            continue;
-                        }
-                        String responseDtoType;
-                        try {
-                            responseDtoType = method.getType().isVoidType() ? null
-                                    : resolveType(method.getTypeAsString(), packageName, imports, records);
-                        } catch (MojoFailureException exception) {
-                            responseDtoType = null;
-                        }
-                        MethodBinding binding = new MethodBinding(
-                                actor.actorType(), actor.roleType(), method.getNameAsString(), responseDtoType);
-                        handlerByDto.merge(dtoType, binding, (current, candidate) ->
-                                preferBinding(current, candidate));
-                    }
-                });
             }
+        }
+        Map<String, MethodBinding> handlerByDto = new HashMap<>();
+        for (SourceType sourceType : typesByName.values()) {
+            actor(sourceType.declaration(), sourceType.packageName(), sourceType.imports()).ifPresent(actor -> {
+                scanHandlerMethods(sourceType, actor, null, records, handlerByDto);
+                for (FieldDeclaration field : sourceType.declaration().getFields()) {
+                    String componentTypeName = resolveReference(
+                            field.getElementType().asString(), sourceType.packageName(), sourceType.imports());
+                    SourceType componentType = typesByName.get(componentTypeName);
+                    if (componentType == null) {
+                        continue;
+                    }
+                    field.getVariables().forEach(variable -> scanHandlerMethods(
+                            componentType, actor, variable.getNameAsString(), records, handlerByDto));
+                }
+            });
         }
 
         List<MessageModel> messages = new ArrayList<>();
@@ -112,24 +104,24 @@ final class RpcSourceScanner {
                             String kind = enumAttribute(value, "kind");
                             if ("MESSAGE".equals(kind)) {
                                 messages.add(message(intAttribute(value, "number"), messageName(dtoType), dtoType,
-                                        record, downlinkRole(record, packageName, imports, roleInterfaces), Direction.HTTP_RESPONSE, true, null, null, null));
+                                        record, downlinkRole(record, packageName, imports, roleInterfaces), Direction.HTTP_RESPONSE, true, null, null, null, null));
                                 return;
                             }
                             MethodBinding binding = requireHandler(handlerByDto, dtoType, record);
                             requireRole(record, binding.roleType(), packageName, imports);
                             if ("INTERNAL".equals(kind)) {
                                 messages.add(message(intAttribute(value, "number"), messageName(dtoType), dtoType,
-                                        record, binding.roleType(), Direction.INTERNAL, false, binding.actorType(), binding.methodName(), null));
+                                        record, binding.roleType(), Direction.INTERNAL, false, binding.actorType(), binding.componentField(), binding.methodName(), null));
                                 return;
                             }
                             int requestNumber = intAttribute(value, "requestNumber");
                             int responseNumber = intAttribute(value, "responseNumber");
                             String responseDtoType = requireResponse(binding, dtoType, record);
                             messages.add(message(requestNumber, messageName(dtoType), dtoType, record,
-                                    binding.roleType(), Direction.REQUEST, true, binding.actorType(), binding.methodName(), responseDtoType));
+                                    binding.roleType(), Direction.REQUEST, true, binding.actorType(), binding.componentField(), binding.methodName(), responseDtoType));
                             messages.add(message(responseNumber, messageName(responseDtoType), responseDtoType,
                                     requireRecord(records, responseDtoType), binding.roleType(), Direction.RESPONSE, true,
-                                    null, null, null));
+                                    null, null, null, null));
                         } catch (MojoFailureException exception) {
                             throw new ScanException(exception);
                         }
@@ -198,11 +190,51 @@ final class RpcSourceScanner {
         return null;
     }
 
-    private record MethodBinding(String actorType, String roleType, String methodName, String responseDtoType) {
+    /** 扫描 Actor 或其一个字段组件中，以 RPC DTO 为唯一参数的方法。 */
+    private void scanHandlerMethods(
+            SourceType sourceType,
+            ActorModel actor,
+            String componentField,
+            Map<String, RecordDeclaration> records,
+            Map<String, MethodBinding> handlerByDto
+    ) {
+        for (MethodDeclaration method : sourceType.declaration().getMethods()) {
+            if (method.getParameters().size() != 1) {
+                continue;
+            }
+            String dtoType;
+            try {
+                dtoType = resolveType(method.getParameter(0).getTypeAsString(), sourceType.packageName(),
+                        sourceType.imports(), records);
+            } catch (MojoFailureException exception) {
+                // 非 DTO 方法参数（如 Actor 内部消息或生命周期辅助方法）不参与 RPC 路由生成。
+                continue;
+            }
+            String responseDtoType;
+            try {
+                responseDtoType = method.getType().isVoidType() ? null
+                        : resolveType(method.getTypeAsString(), sourceType.packageName(), sourceType.imports(), records);
+            } catch (MojoFailureException exception) {
+                responseDtoType = null;
+            }
+            MethodBinding binding = new MethodBinding(
+                    actor.actorType(), actor.roleType(), componentField, method.getNameAsString(), responseDtoType);
+            handlerByDto.merge(dtoType, binding, this::preferBinding);
+        }
+    }
+
+    private record MethodBinding(
+            String actorType,
+            String roleType,
+            String componentField,
+            String methodName,
+            String responseDtoType
+    ) {
     }
 
     private MessageModel message(int number, String name, String dtoType, RecordDeclaration record, String roleType,
-                                 Direction direction, boolean publicVisible, String actorType, String handlerMethod,
+                                 Direction direction, boolean publicVisible, String actorType, String handlerComponent,
+                                 String handlerMethod,
                                  String responseDtoType) throws MojoFailureException {
         if (number <= 0 || name.isBlank()) {
             throw new MojoFailureException("RPC number must be positive and name must not be blank: " + dtoType);
@@ -218,7 +250,7 @@ final class RpcSourceScanner {
         }
         fields.sort(Comparator.comparingInt(FieldModel::number));
         return new MessageModel(number, name, dtoType, List.copyOf(fields), roleType, direction, publicVisible, actorType,
-                handlerMethod, responseDtoType);
+                handlerComponent, handlerMethod, responseDtoType);
     }
 
     private void validate(List<MessageModel> messages) throws MojoFailureException {
@@ -359,6 +391,14 @@ final class RpcSourceScanner {
     }
 
     private record ActorModel(String actorType, String roleType) {
+    }
+
+    /** 保存类声明及其源文件的类型解析上下文。 */
+    private record SourceType(
+            ClassOrInterfaceDeclaration declaration,
+            String packageName,
+            Map<String, String> imports
+    ) {
     }
 
     private static final class ScanException extends RuntimeException {

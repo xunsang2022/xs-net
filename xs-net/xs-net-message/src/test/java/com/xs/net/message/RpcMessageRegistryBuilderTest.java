@@ -63,6 +63,16 @@ public class RpcMessageRegistryBuilderTest extends TestCase {
         }
     }
 
+    public void testInvokesHandlerOnActorComponent() {
+        RpcHandlerMetadata metadata = new RpcHandlerMetadata(
+                ComponentActor.class.getName(), "component", "handle", String.class, String.class);
+        try {
+            assertEquals("handled: request", metadata.invoke(new ComponentActor(), "request"));
+        } catch (Exception exception) {
+            fail(exception.getMessage());
+        }
+    }
+
     public void testRejectsDuplicateProtobufClass() {
         RpcMessageRegistryBuilder builder = new RpcMessageRegistryBuilder();
         builder.register(simpleSpec(1000));
@@ -84,6 +94,16 @@ public class RpcMessageRegistryBuilderTest extends TestCase {
 
     private static final class TestActor {
         private void handle(String request) {
+        }
+    }
+
+    private static final class ComponentActor {
+        private final Component component = new Component();
+    }
+
+    private static final class Component {
+        private String handle(String request) {
+            return "handled: " + request;
         }
     }
 }

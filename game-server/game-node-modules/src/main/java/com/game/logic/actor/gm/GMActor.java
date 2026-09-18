@@ -1,4 +1,4 @@
-package com.game.logic.actor;
+package com.game.logic.actor.gm;
 
 import com.game.logic.context.LogicContext;
 import com.game.logic.redis.RedisStore;
@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.RejectedExecutionException;
 
+/** 处理 GM 管理请求并在审计成功后向玩家 Actor 分发指令的 Actor。 */
 @Slf4j
 public final class GMActor extends RpcActor<GMMessage> {
 
@@ -91,15 +92,4 @@ public final class GMActor extends RpcActor<GMMessage> {
         }
     }
 
-    private static final class AuditResult implements GMMessage {
-        private final GmKickPlayerRequest request;
-        private final Boolean success;
-        private final Throwable error;
-
-        private AuditResult(GmKickPlayerRequest request, Boolean success, Throwable error) {
-            this.request = request;
-            this.success = success;
-            this.error = error;
-        }
-    }
 }

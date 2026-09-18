@@ -5,18 +5,32 @@ package xs.net.message;
 option java_multiple_files = true;
 option java_package = "com.xs.net.message.pb";
 
+// RPC 消息的统一封装，承载路由信息、请求上下文以及业务数据。
 message NetMessage {
+  // RPC 路由编号，用于标识要调用的 RPC 方法。
   int32 rpc_num = 1;
+  // 业务消息序列化后的 protobuf 数据。
   bytes data = 2;
+  // RPC 错误码；成功时通常为 0，具体含义由业务协议约定。
   int32 error_code = 3;
+  // 会话 ID，用于兼容旧版协议。
   int32 session_id = 4;
+  // 用户 ID，用于兼容旧版协议。
   int32 user_id = 5;
+  // 用户 IP 地址。
   string user_ip = 6;
+  // 请求链路追踪 ID，用于关联同一请求在各节点上的处理记录。
   string trace_id = 7;
+  // 请求截止时间，使用 Unix epoch 毫秒表示。
   int64 deadline_epoch_ms = 8;
+  // RPC 请求已经经过的转发跳数。
   uint32 hop_count = 9;
+  // 玩家 ID。
   string player_id = 10;
+  // 客户端连接或消息频道 ID。
   string channel_id = 11;
+  // 发起或转发该请求的源节点标识。
   string source_node = 12;
+  // 上下文协议版本，用于协议兼容和演进。
   uint32 schema_version = 13;
 }

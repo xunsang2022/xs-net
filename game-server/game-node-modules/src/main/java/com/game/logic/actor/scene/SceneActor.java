@@ -1,4 +1,4 @@
-package com.game.logic.actor;
+package com.game.logic.actor.scene;
 
 import com.game.logic.scene.SceneMembership;
 import com.game.message.actor.logic.PlayerMessage;
@@ -14,6 +14,7 @@ import org.apache.pekko.actor.typed.javadsl.ActorContext;
 import org.apache.pekko.actor.typed.javadsl.Behaviors;
 import org.apache.pekko.actor.typed.javadsl.Receive;
 
+/** 维护场景成员关系并通知玩家场景状态变化的 Actor。 */
 @Slf4j
 @ActorDispatcher("pekko.actor.scene-dispatcher")
 public final class SceneActor extends RpcActor<SceneMessage> {

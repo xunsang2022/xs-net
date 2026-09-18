@@ -4,7 +4,6 @@ import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.AbstractBehavior;
 import org.apache.pekko.actor.typed.javadsl.ActorContext;
 import org.apache.pekko.actor.typed.javadsl.ReceiveBuilder;
-import com.google.protobuf.MessageLite;
 import com.xs.core.akka.AkkaKit;
 import com.xs.net.message.MessageAble;
 import com.xs.net.message.RequestContext;
@@ -29,6 +28,7 @@ public abstract class RpcActor<M> extends AbstractBehavior<M> {
     private final String entityId;
     private final RpcMessageRegistry registry;
     private final RpcRuntime runtime;
+    protected final ActorServices<M> services;
     private final Map<Object, RequestContext> deliveryContexts =
             Collections.synchronizedMap(new IdentityHashMap<>());
 
@@ -41,6 +41,11 @@ public abstract class RpcActor<M> extends AbstractBehavior<M> {
         this.entityId = Objects.requireNonNull(entityId, "entityId");
         this.registry = Objects.requireNonNull(registry, "registry");
         this.runtime = new RpcRuntime(registry);
+        this.services = new ActorServices<>(
+                context,
+                entityId,
+                this::contextual,
+                this::sendRpc);
     }
 
     protected final String entityId() {

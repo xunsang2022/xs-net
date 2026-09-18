@@ -1,7 +1,7 @@
 package com.game.logic.management;
 
-import com.game.logic.actor.PlayerActor;
-import com.game.logic.actor.SceneActor;
+import com.game.logic.actor.player.core.PlayerActor;
+import com.game.logic.actor.scene.SceneActor;
 import com.game.message.rpc.GameRpcMessages;
 import org.junit.jupiter.api.Test;
 

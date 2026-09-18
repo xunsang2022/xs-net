@@ -6,6 +6,7 @@ import com.game.message.routing.ChannelRoutable;
 import com.game.message.routing.PlayerRoutable;
 import com.game.message.actor.logic.PlayerMessage;
 
+/** 客户端请求玩家登出并关闭当前会话的请求消息。 */
 @Rpc(
         kind = Rpc.Kind.REQUEST,
         requestNumber = 1001,

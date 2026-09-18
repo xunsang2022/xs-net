@@ -17,6 +17,8 @@
         <module name="xs-net-rpc-maven-plugin" />
         <module name="xs-net-core" />
         <module name="tool-luBan-cfg" />
+        <module name="game-node-battle" />
+        <module name="xs-net-transport" />
         <module name="game-message-action" />
       </profile>
     </annotationProcessing>
@@ -30,6 +32,7 @@
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
       <module name="game-comment" options="-parameters" />
       <module name="game-message-action" options="-parameters" />
+      <module name="game-node-battle" options="-parameters" />
       <module name="game-node-gateway" options="-parameters" />
       <module name="game-node-login" options="-parameters" />
       <module name="game-node-modules" options="-parameters" />

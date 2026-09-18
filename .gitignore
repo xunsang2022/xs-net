@@ -25,3 +25,6 @@ __pycache__/
 # Generated multi-client SDK sources are under xs-net/xs-net-sdk/target/code/
 node_modules/
 /docs/
+
+# Protobuf generated sources are kept outside target so IDE indexes survive mvn clean.
+/xs-net/xs-net-message/src/main/generated/
