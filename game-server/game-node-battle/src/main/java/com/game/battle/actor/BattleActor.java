@@ -10,16 +10,17 @@ import com.game.message.battle.BattleLeaveCommand;
 import com.xs.core.actor.RpcActor;
 import com.xs.core.actor.node.ActorDispatcher;
 import io.micrometer.core.instrument.Metrics;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.ActorContext;
 import org.apache.pekko.actor.typed.javadsl.Behaviors;
 import org.apache.pekko.actor.typed.javadsl.Receive;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.Objects;
 
-@Slf4j
 @ActorDispatcher("pekko.actor.battle-control-dispatcher")
 public final class BattleActor extends RpcActor<BattleMessage> {
+    private static final Logger log = LoggerFactory.getLogger(BattleActor.class);
     private final BattleCommandIngress ingress;
 
     private BattleActor(

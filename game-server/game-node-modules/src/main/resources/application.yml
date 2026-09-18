@@ -5,8 +5,8 @@ game:
   redis:
     host: 172.21.255.41
     port: 6379
-    password: ""
-    database: 0
+    password: "123456"
+    database: 10
   storage:
     sync-interval-ms: 1000
   io:
