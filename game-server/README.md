@@ -35,7 +35,7 @@ len (4B, big-endian, 表示后续消息体字节数) | NetMessage protobuf bytes
                                                   └─ data
 ```
 
-`NetMessage` 的 `rpcNum` 选择协议契约，`data` 是对应的 Protobuf payload。协议登记、注册和路由过程见 [../docs/消息注册与消息处理流程.md](../docs/消息注册与消息处理流程.md)。
+`NetMessage` 的 `rpcNum` 选择协议契约，`data` 是对应的 Protobuf payload。协议登记、注册和路由过程见 [../xs-net/README.md](../xs-net/README.md)。
 
 ## 配置
 

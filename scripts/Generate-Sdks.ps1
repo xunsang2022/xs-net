@@ -3,8 +3,8 @@ param(
     [string]$Only = 'All',
     [string]$Protoc = $env:PROTOC,
     [string]$TsProtoPlugin = $env:TS_PROTO_PLUGIN,
-    [string]$OutputRoot = 'F:\project\sdk-generated',
-    [string]$CocosProjectRoot = 'F:\project\sdkTest'
+    [string]$OutputRoot = '',
+    [string]$CocosProjectRoot = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,6 +24,11 @@ $unityTemplate = Join-Path $templateRoot 'unity'
 $typescriptTemplate = Join-Path $templateRoot 'typescript'
 $cocosTemplate = Join-Path $templateRoot 'cocos'
 $cppTemplate = Join-Path $templateRoot 'cpp'
+$resolvedCocosProjectRoot = if ([string]::IsNullOrWhiteSpace($CocosProjectRoot)) {
+    Join-Path (Split-Path -Parent $repoRoot) 'sdkTest'
+} else {
+    [System.IO.Path]::GetFullPath($CocosProjectRoot)
+}
 $unityRoot = Join-Path $codeRoot 'unity'
 $typescriptRoot = Join-Path $codeRoot 'typescript'
 $cocosRoot = Join-Path $codeRoot 'cocos'
@@ -498,7 +503,7 @@ if ($selected -contains 'TypeScript') {
 
 if ($selected -contains 'Cocos') {
     Generate-TypeScriptSdk -Template $cocosTemplate -Output $cocosRoot -Name 'cocos' -Cocos
-    Sync-CocosSdkToProject -SdkOutput $cocosRoot -ProjectRoot $CocosProjectRoot
+    Sync-CocosSdkToProject -SdkOutput $cocosRoot -ProjectRoot $resolvedCocosProjectRoot
 }
 
 if ($selected -contains 'Cpp') {

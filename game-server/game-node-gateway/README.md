@@ -3,8 +3,8 @@
 Gateway 面向客户端提供 Netty TCP 长连接与 UDP（轻量可靠 UDP）两种入口，负责 JWT 首帧认证、C2S 上行路由和 S2C 下行写回。它不直接访问 Redis 或 PostgreSQL；游戏状态和持久化属于 Logic 节点。
 
 - 模块：`game-node-gateway`
-- 技术：Java 21、Spring Boot、Netty、Akka Cluster、Protobuf
-- 默认端口：HTTP 8080、Netty TCP 8082、客户端 UDP 2002、Akka UDP 2001
+- 技术：Java 21、Spring Boot、Netty、Pekko Cluster、Protobuf
+- 默认端口：HTTP 8080、Netty TCP 8082、客户端 UDP 2002、Pekko UDP 2001
 
 ## 服务流程
 
@@ -16,8 +16,8 @@ flowchart LR
     UDP --> UdpAuth[UdpAuthHandler]
     Auth --> Registry[ChannelRegistry]
     UdpAuth --> Registry
-    Auth -->|Akka 分片| Player[Logic PlayerActor]
-    UdpAuth -->|Akka 分片| Player
+    Auth -->|Pekko 分片| Player[Logic PlayerActor]
+    UdpAuth -->|Pekko 分片| Player
     Player -->|S2C| ChannelActor[Gateway ChannelActor]
     ChannelActor --> Registry
     Registry -->|ClientEndpoint 写回| Client
@@ -92,7 +92,7 @@ src/main/java/com/game/
 
 `src/main/resources/application.yml` 定义 HTTP 端口、Netty 端口、线程数、帧大小、认证超时、空闲超时、连接限制和 JWT 配置，以及 `game.udp.*`（UDP 端口、窗口、重传间隔、会话空闲超时等）。仓库内的 JWT 密钥仅用于本地开发；部署时必须覆盖，并与 Login 节点使用完全相同的密钥。
 
-`application.conf` 定义 Akka Cluster 配置。多实例部署时，为每个 Gateway 实例配置独立的 Akka canonical 地址和端口。
+`application.conf` 定义 Pekko Cluster 配置。多实例部署时，为每个 Gateway 实例配置独立的 Pekko canonical 地址和端口。
 
 ## 运行与测试
 
@@ -102,4 +102,4 @@ src/main/java/com/game/
 .\mvnw.cmd -pl game-server/game-node-gateway -am test
 ```
 
-完整启动顺序、基础设施和联调客户端说明见 [../README.md](../README.md)。消息注册和路由细节见 [../../docs/消息注册与消息处理流程.md](../../docs/消息注册与消息处理流程.md)。
+完整启动顺序、基础设施和联调客户端说明见 [../README.md](../README.md)。消息注册和路由细节见 [../../xs-net/README.md](../../xs-net/README.md)。

@@ -6,7 +6,7 @@ Java 21 多模块游戏服务端工程，包含底层 RPC/Actor 框架和游戏�
 
 项目根目录统一聚合以下两个 Maven 工程：
 
-- `xs-net`：Akka、RPC 消息注册、SDK 和构建插件等底层框架；
+- `xs-net`：Pekko、RPC 消息注册、SDK 和构建插件等底层框架；
 - `game-server`：Gateway、Login 和非 Spring Boot Logic 节点；
 
 ## 构建
@@ -47,7 +47,7 @@ $env:DB_PASSWORD = '<database-password>'
 - [ARCHITECTURE.md](./ARCHITECTURE.md)：跨模块架构、数据流和服务边界；
 - [game-server/README.md](./game-server/README.md)：服务端构建、配置、端口与运行；
 - [xs-net/README.md](./xs-net/README.md)：框架模块与 RPC 基础设施；
-- [docs/消息注册与消息处理流程.md](./docs/消息注册与消息处理流程.md)：消息注册、路由和网关 wire protocol。
+- [docs/sdk-generation.md](./docs/sdk-generation.md)：客户端 SDK 的统一生成流程与产物边界。
 
 ## 编码
 

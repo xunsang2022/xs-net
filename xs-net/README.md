@@ -1,12 +1,12 @@
 # XS-NET（游戏服务器框架）
 
-XS-NET 为游戏服务端提供 Akka Cluster Sharding、RPC 消息契约、Protobuf 信封及 SDK 生成基础设施。Gateway 的 Netty 网络接入属于 `game-server`，不在本框架模块内实现。
+XS-NET 为游戏服务端提供 Pekko Cluster Sharding、RPC 消息契约、Protobuf 信封及 SDK 生成基础设施。Gateway 的 Netty 网络接入属于 `game-server`，不在本框架模块内实现。
 
 ## 模块结构
 
 ```text
 xs-net/
-├── xs-net-core/              # Akka 封装、Actor 扫描与分片初始化
+├── xs-net-core/              # Pekko 封装、Actor 扫描与分片初始化
 ├── xs-net-message/           # NetMessage、RpcMessageSpec、注册表和编解码
 ├── xs-net-rpc-maven-plugin/  # RPC 与 SDK 生成插件
 ├── xs-net-sdk/               # SDK 打包模块
@@ -24,11 +24,11 @@ xs-net/
 
 ### Actor 与分片
 
-- `RpcActor<M>` 是基于 Akka Typed `AbstractBehavior<M>` 的基类，保存实体 ID 和消息注册表，并提供 `sendRpc`；
+- `RpcActor<M>` 是基于 Pekko Typed `AbstractBehavior<M>` 的基类，保存实体 ID 和消息注册表，并提供 `sendRpc`；
 - `AkkaKit` 负责初始化 Cluster Sharding、获取实体引用和投递消息；
 - 节点启动时扫描其 Actor 包。节点拥有的角色初始化为本地实体分片；不拥有的角色初始化为远程代理分片。
 
-远程投递的消息必须能转换为 `NetMessage`，以便 Akka 跨节点传输。
+远程投递的消息必须能转换为 `NetMessage`，以便 Pekko 跨节点传输。
 
 ### SDK 与插件
 
@@ -44,7 +44,7 @@ xs-net/
 | `RpcMessageRegistry` | RPC 协议查询接口 |
 | `RpcMessageRegistryBuilder` | 构建并校验不可变注册表 |
 | `RpcPayloadCodec` | DTO 与 Protobuf payload 的双向编解码 |
-| `RpcActor` | 支持 RPC 投递的 Akka Typed Actor 基类 |
+| `RpcActor` | 支持 RPC 投递的 Pekko Typed Actor 基类 |
 | `AkkaKit` | Cluster Sharding 初始化与消息投递工具 |
 
 ## 构建
@@ -91,11 +91,11 @@ public final class PlayerActor extends RpcActor<PlayerMessage> {
 }
 ```
 
-Actor 的消息接口需由节点角色配置和 RPC 注册表共同约束。完整的注册、分片和网关路由流程见 [消息注册与消息处理流程.md](../docs/消息注册与消息处理流程.md)。
+Actor 的消息接口需由节点角色配置和 RPC 注册表共同约束。完整的注册、分片和网关路由流程见 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
 ## 注意事项
 
 - 远程分片消息必须具有可用的 RPC 契约；
 - 同一协议编号、Protobuf 类型和 DTO 类型不得重复注册；
 - Gateway wire protocol 为 `4 字节大端长度前缀 + NetMessage protobuf bytes`，长度前缀不属于 `xs-net-message` 的跨节点消息转换；
-- Logic 节点不使用 Spring Boot，Redis 与 Akka 由普通 Java 启动流程装配。
+- Logic 节点不使用 Spring Boot，Redis 与 Pekko 由普通 Java 启动流程装配。

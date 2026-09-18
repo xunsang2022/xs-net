@@ -19,7 +19,7 @@ The initial verification sequence is:
 2. Generate the SDK with `./scripts/Generate-Sdks.ps1 -Only Unity`, then build `xs-net/xs-net-sdk/target/code/unity/LoadTest/XsNet.LoadTest.csproj`.
 3. Run the login load test against Gateway 1, then repeat through Gateway 2:
    `dotnet run --project xs-net/xs-net-sdk/target/code/unity/LoadTest/XsNet.LoadTest.csproj -- --host 127.0.0.1 --protocol tcp --port 8082 --count 1000 --concurrency 200 --secret "$env:JWT_SECRET"`
-4. Repeat with `--protocol udp --port 2002`, then compare throughput and p99 latency with `docs/登录压测报告.md`.
+4. Repeat with `--protocol udp --port 2002`, then compare throughput and p99 latency with the generated test output.
 5. Stop `logic-2`, observe shard recovery and `dbsync_*` metrics, then restore it.
 
 The Compose files intentionally contain no credentials. Do not use development

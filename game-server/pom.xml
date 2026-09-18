@@ -71,14 +71,14 @@
                 <scope>import</scope>
             </dependency>
             
-            <!-- Aeron媒体驱动 - 提供高性能UDP传输支持，用于Akka Artery的Aeron UDP模式 -->
+            <!-- Aeron媒体驱动 - 提供高性能UDP传输支持，用于Pekko Artery的Aeron UDP模式 -->
             <dependency>
                 <groupId>io.aeron</groupId>
                 <artifactId>aeron-driver</artifactId>
                 <version>1.40.0</version>
             </dependency>
             
-            <!-- LMDB Java绑定 - 用于Akka分布式数据持久化 -->
+            <!-- LMDB Java绑定 - 用于Pekko分布式数据持久化 -->
             <dependency>
                 <groupId>org.lmdbjava</groupId>
                 <artifactId>lmdbjava</artifactId>

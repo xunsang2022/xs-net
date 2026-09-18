@@ -1,12 +1,12 @@
 # XS-NET Cocos Creator SDK
 
-这是面向 Cocos Creator 的 TypeScript SDK 模板。执行仓库根目录的生成脚本后，完整产物默认位于项目外的 `F:\project\sdk-generated\cocos`。
+这是面向 Cocos Creator 的 TypeScript SDK 模板。执行仓库根目录的生成脚本后，完整产物默认位于 `xs-net/xs-net-sdk/target/code/cocos`。
 
 ```powershell
 .\scripts\Generate-Sdks.ps1 -Only Cocos
 ```
 
-执行 `-Only Cocos` 后，脚本会同时把 SDK 同步到 `F:\project\sdkTest\assets\xs-net-sdk`，Cocos 工程会自动重新导入这些文件。目标工程也可以通过 `-CocosProjectRoot` 覆盖。
+执行 `-Only Cocos` 后，脚本会把 SDK 同步到仓库同级 `sdkTest/assets/xs-net-sdk`，Cocos 工程会自动重新导入这些文件。目标工程也可以通过 `-CocosProjectRoot` 覆盖。
 
 将生成目录中的 `src`、`generated` 和 `proto` 放入 Cocos Creator 工程即可使用：
 

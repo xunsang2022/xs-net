@@ -33,7 +33,7 @@ xs-net/xs-net-sdk/target/code/unity/
 
 ## 消息路由表
 
-所有 CS/SC 消息 ID 定义在 `RpcRoute` 枚举（[RpcRoutes.cs](Runtime/RpcRoutes.cs)），由 `rpc_routes.proto` 生成。客户端协议号以它为准。
+所有 CS/SC 消息 ID 定义在生成的 `Runtime/RpcRoutes.cs` 中的 `RpcRoute` 枚举，由 `rpc_routes.proto` 生成。客户端协议号以它为准。
 
 | 枚举名 | 值 | 方向 | 消息类型 | 说明 |
 |---|---:|---|---|---|

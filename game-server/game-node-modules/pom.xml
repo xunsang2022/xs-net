@@ -10,7 +10,7 @@
     </parent>
     <artifactId>game-node-modules</artifactId>
     <name>game-logic</name>
-    <description>Game Logic Service with Akka Cluster Sharding</description>
+    <description>Game Logic Service with Pekko Cluster Sharding</description>
     <dependencies>
         <dependency>
             <groupId>com.xs</groupId>
@@ -67,39 +67,39 @@
             <artifactId>postgresql</artifactId>
         </dependency>
 
-        <!-- Akka Core Dependencies -->
-        <!-- Akka Actor Typed - 提供Akka类型化Actor支持，用于构建类型安全的Actor系统 -->
+        <!-- Pekko core dependencies -->
+        <!-- Pekko Actor Typed - 提供Pekko类型化Actor支持，用于构建类型安全的Actor系统 -->
         <dependency>
             <groupId>org.apache.pekko</groupId>
             <artifactId>pekko-actor-typed_2.13</artifactId>
             <version>${pekko.version}</version>
         </dependency>
-        <!-- Akka Cluster Typed - 提供类型化Akka集群支持，用于构建类型安全的集群应用 -->
+        <!-- Pekko Cluster Typed - 提供类型化Pekko集群支持，用于构建类型安全的集群应用 -->
         <dependency>
             <groupId>org.apache.pekko</groupId>
             <artifactId>pekko-cluster-typed_2.13</artifactId>
             <version>${pekko.version}</version>
         </dependency>
-        <!-- Akka Cluster Sharding Typed - 提供类型化Akka集群分片支持，用于分布式实体管理 -->
+        <!-- Pekko Cluster Sharding Typed - 提供类型化Pekko集群分片支持，用于分布式实体管理 -->
         <dependency>
             <groupId>org.apache.pekko</groupId>
             <artifactId>pekko-cluster-sharding-typed_2.13</artifactId>
             <version>${pekko.version}</version>
         </dependency>
-        <!-- Akka Remote - 提供Akka远程通信支持，用于节点间消息传递 -->
+        <!-- Pekko Remote - 提供Pekko远程通信支持，用于节点间消息传递 -->
         <dependency>
             <groupId>org.apache.pekko</groupId>
             <artifactId>pekko-remote_2.13</artifactId>
             <version>${pekko.version}</version>
         </dependency>
-        <!-- Akka SLF4J - 提供Akka日志与SLF4J的集成，用于日志记录 -->
+        <!-- Pekko SLF4J - 提供Pekko日志与SLF4J的集成，用于日志记录 -->
         <dependency>
             <groupId>org.apache.pekko</groupId>
             <artifactId>pekko-slf4j_2.13</artifactId>
             <version>${pekko.version}</version>
         </dependency>
         
-        <!-- Akka Serialization - 提供Akka序列化支持 -->
+        <!-- Pekko Serialization - 提供Pekko序列化支持 -->
         <dependency>
             <groupId>org.apache.pekko</groupId>
             <artifactId>pekko-serialization-jackson_2.13</artifactId>
@@ -113,13 +113,13 @@
             <version>${protobuf-java.version}</version>
         </dependency>
         
-        <!-- Aeron媒体驱动 - 提供高性能UDP传输支持，用于Akka Artery的Aeron UDP模式 -->
+        <!-- Aeron媒体驱动 - 提供高性能UDP传输支持，用于Pekko Artery的Aeron UDP模式 -->
         <dependency>
             <groupId>io.aeron</groupId>
             <artifactId>aeron-driver</artifactId>
         </dependency>
         
-        <!-- LMDB Java绑定 - 用于Akka分布式数据持久化 -->
+        <!-- LMDB Java绑定 - 用于Pekko分布式数据持久化 -->
         <dependency>
             <groupId>org.lmdbjava</groupId>
             <artifactId>lmdbjava</artifactId>
