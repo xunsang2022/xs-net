@@ -77,10 +77,10 @@ public final class GameLogicApplication {
         properties.setMessageBasePackages(new String[]{"com.game.message.actor.logic", "com.game.message.actor"});
 
         RedisStandaloneConfiguration redisConfig = new RedisStandaloneConfiguration();
-        redisConfig.setHostName(config("game.redis.host", "REDIS_HOST", DEFAULT_HOST));
-        redisConfig.setPort(parseInt("game.redis.port", "REDIS_PORT", DEFAULT_PORT));
-        redisConfig.setDatabase(parseInt("game.redis.database", "REDIS_DATABASE", DEFAULT_DATABASE));
-        String password = config("game.redis.password", "REDIS_PASSWORD", DEFAULT_PASSWORD);
+        redisConfig.setHostName(fileConfig("game.redis.host", DEFAULT_HOST));
+        redisConfig.setPort(parseFileInt("game.redis.port", DEFAULT_PORT));
+        redisConfig.setDatabase(parseFileInt("game.redis.database", DEFAULT_DATABASE));
+        String password = fileConfig("game.redis.password", DEFAULT_PASSWORD);
         if (!password.isBlank()) {
             redisConfig.setPassword(password);
         }
@@ -99,30 +99,30 @@ public final class GameLogicApplication {
 
         RedisStore redisStore = new RedisStore(redisTemplate);
         LogicIoExecutors ioExecutors = LogicIoExecutors.fixed(
-                parseInt("game.io.redis-threads", "REDIS_IO_THREADS", "16"),
-                parseInt("game.io.db-threads", "DB_IO_THREADS", "8"));
+                parseFileInt("game.io.redis-threads", "16"),
+                parseFileInt("game.io.db-threads", "8"));
         LogicContext.setConnectionFactory(connectionFactory);
         LogicContext.setRedisTemplate(redisTemplate);
         LogicContext.setRedisStore(redisStore);
         LogicContext.setRedisIoExecutor(ioExecutors.redisIoExecutor());
         LogicContext.setDbIoExecutor(ioExecutors.dbIoExecutor());
-        LogicContext.setSyncIntervalMs(parseLong("game.storage.sync-interval-ms", "SYNC_INTERVAL_MS", DEFAULT_SYNC_INTERVAL_MS));
+        LogicContext.setSyncIntervalMs(parseFileLong("game.storage.sync-interval-ms", DEFAULT_SYNC_INTERVAL_MS));
 
         HikariConfig hikariConfig = new HikariConfig();
-        hikariConfig.setJdbcUrl(config("game.db.url", "DB_URL", DEFAULT_DB_URL));
-        hikariConfig.setUsername(config("game.db.username", "DB_USERNAME", DEFAULT_DB_USERNAME));
-        hikariConfig.setPassword(config("game.db.password", "DB_PASSWORD", DEFAULT_PASSWORD));
+        hikariConfig.setJdbcUrl(fileConfig("game.db.url", DEFAULT_DB_URL));
+        hikariConfig.setUsername(fileConfig("game.db.username", DEFAULT_DB_USERNAME));
+        hikariConfig.setPassword(fileConfig("game.db.password", DEFAULT_PASSWORD));
         hikariConfig.setDriverClassName("org.postgresql.Driver");
-        hikariConfig.setConnectionTimeout(parseLong("game.db.connection-timeout-ms", "DB_CONNECTION_TIMEOUT_MS", "5000"));
+        hikariConfig.setConnectionTimeout(parseFileLong("game.db.connection-timeout-ms", "5000"));
         hikariConfig.setInitializationFailTimeout(-1);
-        hikariConfig.setMaximumPoolSize(parseInt("game.db.max-pool-size", "DB_MAX_POOL_SIZE", "10"));
-        hikariConfig.setMinimumIdle(parseInt("game.db.min-idle", "DB_MIN_IDLE", "2"));
+        hikariConfig.setMaximumPoolSize(parseFileInt("game.db.max-pool-size", "10"));
+        hikariConfig.setMinimumIdle(parseFileInt("game.db.min-idle", "2"));
         HikariDataSource dataSource = new HikariDataSource(hikariConfig);
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
         DBSyncConfig dbSyncConfig = new DBSyncConfig();
-        dbSyncConfig.setBatchSize(parseInt("game.db.batch-size", "DB_BATCH_SIZE", "100"));
-        dbSyncConfig.setBgsaveSeconds(parseInt("game.db.bgsave-seconds", "DB_BGSAVE_SECONDS", "3"));
-        dbSyncConfig.setFlushConcurrency(parseInt("game.db.flush-concurrency", "DB_FLUSH_CONCURRENCY", "4"));
+        dbSyncConfig.setBatchSize(parseFileInt("game.db.batch-size", "100"));
+        dbSyncConfig.setBgsaveSeconds(parseFileInt("game.db.bgsave-seconds", "3"));
+        dbSyncConfig.setFlushConcurrency(parseFileInt("game.db.flush-concurrency", "4"));
         DBSyncEngine dbSyncEngine = new DBSyncEngine(jdbcTemplate, dbSyncConfig);
         dbSyncEngine.start();
         LogicContext.setDbSyncEngine(dbSyncEngine);
@@ -186,6 +186,19 @@ public final class GameLogicApplication {
             value = YML_CONFIG.get(key);
         }
         return value == null || value.isBlank() ? defaultValue : value;
+    }
+
+    static String fileConfig(String key, String defaultValue) {
+        String value = YML_CONFIG.get(key);
+        return value == null || value.isBlank() ? defaultValue : value;
+    }
+
+    private static int parseFileInt(String key, String defaultValue) {
+        return Integer.parseInt(fileConfig(key, defaultValue));
+    }
+
+    private static long parseFileLong(String key, String defaultValue) {
+        return Long.parseLong(fileConfig(key, defaultValue));
     }
 
     private static int parseInt(String key, String envKey, String defaultValue) {

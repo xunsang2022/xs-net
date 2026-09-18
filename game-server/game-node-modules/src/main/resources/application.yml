@@ -1,9 +1,9 @@
 # Plain configuration keys for the non-Boot startup flow.
 # GameLogicApplication loads this file via SnakeYAML first; system properties
-# and environment variables can still override (System.getProperty > env > yml > default).
+# Database and Redis settings are loaded from this file only.
 game:
   redis:
-    host: localhost
+    host: 172.21.255.41
     port: 6379
     password: ""
     database: 0
@@ -24,7 +24,7 @@ game:
       host: 127.0.0.1
       port: 9090
   db:
-    url: jdbc:postgresql://localhost:5432/gamedb
+    url: jdbc:postgresql://172.21.255.41:5432/gamedb
     username: root
     password: ""
     batch-size: 100
