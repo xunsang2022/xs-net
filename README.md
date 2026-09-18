@@ -47,7 +47,8 @@ $env:DB_PASSWORD = '<database-password>'
 - [ARCHITECTURE.md](./ARCHITECTURE.md)：跨模块架构、数据流和服务边界；
 - [game-server/README.md](./game-server/README.md)：服务端构建、配置、端口与运行；
 - [xs-net/README.md](./xs-net/README.md)：框架模块与 RPC 基础设施；
-- [docs/sdk-generation.md](./docs/sdk-generation.md)：客户端 SDK 的统一生成流程与产物边界。
+- [docs/sdk-generation.md](./docs/sdk-generation.md)：客户端 SDK 的统一生成流程与产物边界；
+- [openwiki/index.md](./openwiki/index.md)：仓库工程 Wiki 入口，包含快速上手、架构与源码地图、运行时流程、领域概念、集成扩展与工程运维。
 
 ## 编码
 
