@@ -82,7 +82,7 @@ public class KcpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
         }
         try {
             Metrics.counter(METRIC_C2S_MESSAGES).increment();
-            router.route(message);
+            router.route(message, session.channelId());
         } catch (Exception e) {
             log.error("Failed to handle KCP game message", e);
         }

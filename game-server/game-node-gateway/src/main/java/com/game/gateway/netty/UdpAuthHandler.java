@@ -92,7 +92,12 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
                 Metrics.counter(METRIC_AUTH_FAILURE).increment();
                 return;
             }
-            UdpSession session = new UdpSession(channelId, sender, channel, config, this::handleGameMessage);
+            UdpSession session = new UdpSession(
+                    channelId,
+                    sender,
+                    channel,
+                    config,
+                    body -> handleGameMessage(channelId, body));
             sessions.put(sender, session);
             ChannelRegistry.INSTANCE.register(channelId, session);
             // 回 ACK 确认握手完成
@@ -107,10 +112,10 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
     }
 
     /** 可靠层交付的上行 DATA 消息（NetMessage 字节）→ 解码并路由 Logic。 */
-    private void handleGameMessage(byte[] body) {
+    private void handleGameMessage(String channelId, byte[] body) {
         try {
             Metrics.counter(METRIC_C2S_MESSAGES).increment();
-            router.route(body);
+            router.route(body, channelId);
         } catch (Exception e) {
             log.error("Failed to handle UDP game message", e);
         }

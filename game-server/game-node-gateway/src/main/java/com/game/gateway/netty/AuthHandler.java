@@ -112,7 +112,7 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
             byte[] body = new byte[msg.readableBytes()];
             msg.readBytes(body);
             Metrics.counter(METRIC_C2S_MESSAGES).increment();
-            router.route(body);
+            router.route(body, channelId);
         } catch (Exception e) {
             log.error("Failed to handle game message, closing channel: channelId={}", channelId, e);
             ctx.close();

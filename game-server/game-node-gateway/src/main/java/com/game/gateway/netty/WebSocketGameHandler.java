@@ -62,7 +62,7 @@ final class WebSocketGameHandler extends SimpleChannelInboundHandler<BinaryWebSo
         }
         try {
             Metrics.counter(METRIC_C2S_MESSAGES).increment();
-            router.route(bytes);
+            router.route(bytes, channelId);
         } catch (Exception exception) {
             log.error("Failed to handle WebSocket game message, closing: channelId={}", channelId, exception);
             ctx.close();

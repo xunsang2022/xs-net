@@ -66,9 +66,9 @@ export class XsNetSdkTestPanel extends Component {
     title.horizontalAlign = Label.HorizontalAlign.CENTER;
 
     this.createLabel(panel, "UrlLabel", "WebSocket", -450, 262, 120, 34, 15);
-    this.urlInput = this.createInput(panel, "Url", "WebSocket 地址", this.defaultUrl, 55, 262, 800, 38, 15);
+    this.urlInput = this.createInput(panel, "Url", "WebSocket 地址", this.defaultUrl, 55, 262, 800, 38, 15, undefined, EditBox.InputMode.SINGLE_LINE);
     this.createLabel(panel, "JwtLabel", "JWT", -450, 214, 120, 34, 15);
-    this.jwtInput = this.createInput(panel, "Jwt", "JWT", this.defaultJwt, 55, 214, 800, 38, 15, 2048);
+    this.jwtInput = this.createInput(panel, "Jwt", "JWT", this.defaultJwt, 55, 214, 800, 38, 15, 2048, EditBox.InputMode.SINGLE_LINE);
 
     this.createButton(panel, "Connect", "连接", -180, 164, () => void this.connect());
     this.createButton(panel, "Close", "断开", 180, 164, () => this.disconnect());
@@ -192,8 +192,10 @@ export class XsNetSdkTestPanel extends Component {
     height: number,
     fontSize: number,
     maxLength?: number,
+    inputMode?: EditBox.InputMode,
   ): EditBox {
     const node = new Node(name);
+    node.active = false;
     node.setParent(parent);
     node.setPosition(x, y, 0);
     node.addComponent(UITransform).setContentSize(width, height);
@@ -205,8 +207,10 @@ export class XsNetSdkTestPanel extends Component {
 
     const input = node.addComponent(EditBox);
     if (maxLength !== undefined) input.maxLength = maxLength;
+    input.inputMode = inputMode ?? EditBox.InputMode.SINGLE_LINE;
     input.placeholder = placeholder;
     input.string = value;
+    node.active = true;
     this.configureEditBox(input, width, height, fontSize);
     this.scheduleOnce(() => this.configureEditBox(input, width, height, fontSize), 0);
     return input;
@@ -245,10 +249,26 @@ export class XsNetSdkTestPanel extends Component {
   }
 
   private async connect(): Promise<void> {
-    const url = this.urlInput?.string.trim() ?? "";
+    let url = this.urlInput?.string.trim() ?? "";
     const jwt = this.jwtInput?.string ?? "";
     if (!url) {
       this.appendLog("连接失败：WebSocket 地址为空。");
+      return;
+    }
+
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== "ws:" && parsed.protocol !== "wss:") {
+        throw new Error("地址必须使用 ws:// 或 wss://");
+      }
+      if (parsed.pathname === "" || parsed.pathname === "/") {
+        parsed.pathname = "/game";
+        url = parsed.toString();
+        if (this.urlInput) this.urlInput.string = url;
+        this.appendLog(`已补全 WebSocket 路径：${url}`);
+      }
+    } catch (error) {
+      this.appendLog(`连接失败：WebSocket 地址无效（${this.errorMessage(error)}）`);
       return;
     }
 
