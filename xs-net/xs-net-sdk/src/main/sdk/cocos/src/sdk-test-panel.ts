@@ -68,7 +68,7 @@ export class XsNetSdkTestPanel extends Component {
     this.createLabel(panel, "UrlLabel", "WebSocket", -450, 262, 120, 34, 15);
     this.urlInput = this.createInput(panel, "Url", "WebSocket 地址", this.defaultUrl, 55, 262, 800, 38, 15);
     this.createLabel(panel, "JwtLabel", "JWT", -450, 214, 120, 34, 15);
-    this.jwtInput = this.createInput(panel, "Jwt", "JWT", this.defaultJwt, 55, 214, 800, 38, 15);
+    this.jwtInput = this.createInput(panel, "Jwt", "JWT", this.defaultJwt, 55, 214, 800, 38, 15, 2048);
 
     this.createButton(panel, "Connect", "连接", -180, 164, () => void this.connect());
     this.createButton(panel, "Close", "断开", 180, 164, () => this.disconnect());
@@ -191,6 +191,7 @@ export class XsNetSdkTestPanel extends Component {
     width: number,
     height: number,
     fontSize: number,
+    maxLength?: number,
   ): EditBox {
     const node = new Node(name);
     node.setParent(parent);
@@ -203,6 +204,7 @@ export class XsNetSdkTestPanel extends Component {
     background.fill();
 
     const input = node.addComponent(EditBox);
+    if (maxLength !== undefined) input.maxLength = maxLength;
     input.placeholder = placeholder;
     input.string = value;
     this.configureEditBox(input, width, height, fontSize);
