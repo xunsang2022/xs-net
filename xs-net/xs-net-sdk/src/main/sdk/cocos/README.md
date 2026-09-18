@@ -1,10 +1,12 @@
 # XS-NET Cocos Creator SDK
 
-这是面向 Cocos Creator 的 TypeScript SDK 模板。执行仓库根目录的生成脚本后，完整产物默认位于 `F:\project\xs-net\xs-net\xs-net-sdk\cocos`。
+这是面向 Cocos Creator 的 TypeScript SDK 模板。执行仓库根目录的生成脚本后，完整产物默认位于项目外的 `F:\project\sdk-generated\cocos`。
 
 ```powershell
 .\scripts\Generate-Sdks.ps1 -Only Cocos
 ```
+
+执行 `-Only Cocos` 后，脚本会同时把 SDK 同步到 `F:\project\sdkTest\assets\xs-net-sdk`，Cocos 工程会自动重新导入这些文件。目标工程也可以通过 `-CocosProjectRoot` 覆盖。
 
 将生成目录中的 `src`、`generated` 和 `proto` 放入 Cocos Creator 工程即可使用：
 
@@ -30,7 +32,7 @@ client.send(
 
 `CocosWebSocketTransport` 会以二进制 WebSocket 帧发送 JWT，并接收二进制协议帧；它不依赖 Node.js 的 `net` 或 `dgram` 模块。默认使用 Cocos 运行时提供的全局 `WebSocket`，也可以通过第二个参数注入测试或平台适配实现。
 
-SDK 同时提供 `XsNetSdkTestPanel` 测试面板。将该组件挂到 Cocos 场景中的 Canvas 节点后运行，即可填写 WebSocket 地址和 JWT，执行连接、断开、发送 `CSLogin`，并查看连接状态和 `SCLogin` 响应日志。面板由脚本自动创建，不需要额外 Prefab。
+ SDK 同时提供由 `.proto` 自动生成的 `XsNetSdkTestPanel` 测试面板。生成脚本会读取 `rpc_routes.proto` 和对应消息的字段，自动生成 RPC 编号、Proto 名称、字段序号/字段名、参数输入框和发送按钮；新增或修改协议后重新生成即可，不需要手写面板里的 RPC 列表或参数。
 
 ```ts
 import { XsNetSdkTestPanel } from "./sdk/src/sdk-test-panel";

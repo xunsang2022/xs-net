@@ -3,7 +3,8 @@ param(
     [string]$Only = 'All',
     [string]$Protoc = $env:PROTOC,
     [string]$TsProtoPlugin = $env:TS_PROTO_PLUGIN,
-    [string]$OutputRoot = 'F:\project\xs-net\xs-net\xs-net-sdk'
+    [string]$OutputRoot = 'F:\project\sdk-generated',
+    [string]$CocosProjectRoot = 'F:\project\sdkTest'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -198,6 +199,228 @@ function Convert-CocosLocalImports {
     }
 }
 
+function Convert-ProtoFieldName {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    $parts = @($Name -split '_' | Where-Object { $_ })
+    if ($parts.Count -le 1) {
+        return $Name
+    }
+
+    $result = $parts[0]
+    foreach ($part in $parts[1..($parts.Count - 1)]) {
+        $result += $part.Substring(0, 1).ToUpperInvariant() + $part.Substring(1).ToLowerInvariant()
+    }
+    return $result
+}
+
+function Convert-ProtoFieldType {
+    param(
+        [Parameter(Mandatory = $true)][string]$Type
+    )
+
+    switch ($Type.ToLowerInvariant()) {
+        'string' { return 'string' }
+        'bool' { return 'bool' }
+        'bytes' { return 'bytes' }
+        'double' { return 'number' }
+        'float' { return 'number' }
+        'int32' { return 'number' }
+        'int64' { return 'number' }
+        'sint32' { return 'number' }
+        'sint64' { return 'number' }
+        'uint32' { return 'number' }
+        'uint64' { return 'number' }
+        'fixed32' { return 'number' }
+        'fixed64' { return 'number' }
+        'sfixed32' { return 'number' }
+        'sfixed64' { return 'number' }
+        default { throw "Unsupported Cocos test panel proto field type: $Type" }
+    }
+}
+
+function Normalize-ProtoIdentifier {
+    param(
+        [Parameter(Mandatory = $true)][string]$Value
+    )
+
+    return [regex]::Replace($Value.ToLowerInvariant(), '[^a-z0-9]', '')
+}
+
+function Get-CocosRpcMetadata {
+    param(
+        [Parameter(Mandatory = $true)][string]$ProtoDirectory,
+        [Parameter(Mandatory = $true)][string]$GeneratedDirectory
+    )
+
+    $messages = @{}
+    foreach ($protoFile in Get-ChildItem -LiteralPath $ProtoDirectory -Filter '*.proto' -File | Sort-Object Name) {
+        $content = [System.IO.File]::ReadAllText($protoFile.FullName)
+        $messageMatches = [regex]::Matches($content, '(?ms)^\s*message\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*\{(?<body>.*?)^\s*\}')
+        foreach ($messageMatch in $messageMatches) {
+            $fields = @()
+            $fieldMatches = [regex]::Matches($messageMatch.Groups['body'].Value, '(?m)^\s*(?:(?<modifier>optional|repeated)\s+)?(?<type>[A-Za-z_][A-Za-z0-9_.]*)\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<index>\d+)\s*(?:\[[^\]]*\])?\s*;')
+            foreach ($fieldMatch in $fieldMatches) {
+                $fields += [pscustomobject]@{
+                    Index = [int]$fieldMatch.Groups['index'].Value
+                    Name = Convert-ProtoFieldName -Name $fieldMatch.Groups['name'].Value
+                    Type = Convert-ProtoFieldType -Type $fieldMatch.Groups['type'].Value
+                    Repeated = $fieldMatch.Groups['modifier'].Value -eq 'repeated'
+                }
+            }
+
+            $sourceName = $messageMatch.Groups['name'].Value
+            $fileName = [System.IO.Path]::GetFileNameWithoutExtension($protoFile.Name)
+            $generatedFile = Join-Path $GeneratedDirectory "$fileName.ts"
+            $generatedContent = [System.IO.File]::ReadAllText($generatedFile)
+            $generatedSymbols = [regex]::Matches($generatedContent, '(?m)^export const (?<name>[A-Za-z_][A-Za-z0-9_]*)\s*:\s*MessageFns<')
+            $generatedSymbol = @($generatedSymbols | Where-Object {
+                (Normalize-ProtoIdentifier -Value $_.Groups['name'].Value) -eq (Normalize-ProtoIdentifier -Value $sourceName)
+            }) | Select-Object -First 1
+            if (-not $generatedSymbol) {
+                throw "No generated TypeScript codec matches proto message: $sourceName"
+            }
+            $messages[$sourceName] = [pscustomobject]@{
+                SourceName = $sourceName
+                TypeScriptName = $generatedSymbol.Groups['name'].Value
+                FileName = $fileName
+                Fields = @($fields | Sort-Object Index)
+            }
+        }
+    }
+
+    $routesFile = Join-Path $ProtoDirectory 'rpc_routes.proto'
+    $routesContent = [System.IO.File]::ReadAllText($routesFile)
+    $routeMatches = [regex]::Matches($routesContent, '(?m)^\s*(?<route>RPC_[A-Z0-9_]+)\s*=\s*(?<number>\d+)\s*;')
+    $definitions = @()
+    foreach ($routeMatch in $routeMatches) {
+        $route = $routeMatch.Groups['route'].Value
+        if ($route -eq 'RPC_ROUTE_UNSPECIFIED') {
+            continue
+        }
+        $routeName = $route.Substring(4)
+        $normalizedRoute = Normalize-ProtoIdentifier -Value $routeName
+        $message = @($messages.Values | Where-Object {
+            (Normalize-ProtoIdentifier -Value $_.SourceName) -eq $normalizedRoute
+        }) | Select-Object -First 1
+        if (-not $message) {
+            throw "No proto message matches RPC route: $route"
+        }
+
+        $definitions += [pscustomobject]@{
+            Route = $route
+            RpcNum = [int]$routeMatch.Groups['number'].Value
+            Message = $message
+        }
+    }
+    return @($definitions | Sort-Object RpcNum)
+}
+
+function Write-CocosTestPanelProtocol {
+    param(
+        [Parameter(Mandatory = $true)][string]$ProtoDirectory,
+        [Parameter(Mandatory = $true)][string]$GeneratedDirectory,
+        [Parameter(Mandatory = $true)][string]$Output
+    )
+
+    $definitions = Get-CocosRpcMetadata -ProtoDirectory $ProtoDirectory -GeneratedDirectory $GeneratedDirectory
+    $target = Join-Path $Output 'src\sdk-test-panel-protocol.ts'
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $imports = @{}
+    foreach ($definition in $definitions) {
+        $fileName = $definition.Message.FileName
+        if (-not $imports.ContainsKey($fileName)) {
+            $imports[$fileName] = @()
+        }
+        $imports[$fileName] += $definition.Message.TypeScriptName
+    }
+    foreach ($fileName in ($imports.Keys | Sort-Object)) {
+        $names = @($imports[$fileName] | Sort-Object -Unique) -join ', '
+        $lines.Add("import { $names } from `"../generated/$fileName`";")
+    }
+    $lines.Add('import { RpcRoute } from "../generated/rpc_routes";')
+    $lines.Add('')
+    $lines.Add('export type RpcFieldType = "string" | "number" | "bool" | "bytes";')
+    $lines.Add('')
+    $lines.Add('export interface RpcFieldDefinition {')
+    $lines.Add('  index: number;')
+    $lines.Add('  name: string;')
+    $lines.Add('  type: RpcFieldType;')
+    $lines.Add('  repeated?: boolean;')
+    $lines.Add('}')
+    $lines.Add('')
+    $lines.Add('interface MessageCodec {')
+    $lines.Add('  create(base?: Record<string, unknown>): unknown;')
+    $lines.Add('  encode(message: unknown): { finish(): Uint8Array };')
+    $lines.Add('}')
+    $lines.Add('')
+    $lines.Add('export interface RpcDefinition {')
+    $lines.Add('  rpcNum: number;')
+    $lines.Add('  protoName: string;')
+    $lines.Add('  fields: RpcFieldDefinition[];')
+    $lines.Add('  encode(values: Record<string, string>): Uint8Array;')
+    $lines.Add('}')
+    $lines.Add('')
+    $lines.Add('function parseScalarValue(field: RpcFieldDefinition, value: string): unknown {')
+    $lines.Add('  if (field.type === "string") return value;')
+    $lines.Add('  if (field.type === "bytes") {')
+    $lines.Add('    if (!globalThis.atob) throw new Error("Base64 decoding is unavailable");')
+    $lines.Add('    const binary = globalThis.atob(value.trim());')
+    $lines.Add('    return Uint8Array.from(binary, (character) => character.charCodeAt(0));')
+    $lines.Add('  }')
+    $lines.Add('  if (field.type === "bool") {')
+    $lines.Add('    if (value.trim() === "true" || value.trim() === "1") return true;')
+    $lines.Add('    if (value.trim() === "false" || value.trim() === "0") return false;')
+    $lines.Add('    throw new Error(`${field.name} must be true or false`);')
+    $lines.Add('  }')
+    $lines.Add('  const numberValue = Number(value.trim());')
+    $lines.Add('  if (!Number.isFinite(numberValue) || !Number.isInteger(numberValue)) {')
+    $lines.Add('    throw new Error(`${field.name} must be an integer`);')
+    $lines.Add('  }')
+    $lines.Add('  return numberValue;')
+    $lines.Add('}')
+    $lines.Add('')
+    $lines.Add('function parseValue(field: RpcFieldDefinition, value: string): unknown {')
+    $lines.Add('  if (!value.trim()) return undefined;')
+    $lines.Add('  if (!field.repeated) return parseScalarValue(field, value);')
+    $lines.Add('  return value.split(",").map((item) => item.trim()).filter(Boolean).map((item) => parseScalarValue(field, item));')
+    $lines.Add('}')
+    $lines.Add('')
+    $lines.Add('function createRpcDefinition(rpcNum: number, protoName: string, codecValue: unknown, fields: RpcFieldDefinition[]): RpcDefinition {')
+    $lines.Add('  const codec = codecValue as MessageCodec;')
+    $lines.Add('  return {')
+    $lines.Add('    rpcNum,')
+    $lines.Add('    protoName,')
+    $lines.Add('    fields,')
+    $lines.Add('    encode(values) {')
+    $lines.Add('      const message: Record<string, unknown> = {};')
+    $lines.Add('      for (const field of fields) {')
+    $lines.Add('        const parsed = parseValue(field, values[field.name] ?? "");')
+    $lines.Add('        if (parsed !== undefined) message[field.name] = parsed;')
+    $lines.Add('      }')
+    $lines.Add('      return codec.encode(codec.create(message)).finish();')
+    $lines.Add('    },')
+    $lines.Add('  };')
+    $lines.Add('}')
+    $lines.Add('')
+    $lines.Add('const field = (index: number, name: string, type: RpcFieldType, repeated = false): RpcFieldDefinition => ({ index, name, type, repeated });')
+    $lines.Add('')
+    $lines.Add('export const RPC_DEFINITIONS: RpcDefinition[] = [')
+    foreach ($definition in $definitions) {
+        $message = $definition.Message
+        $lines.Add("  createRpcDefinition(RpcRoute.$($definition.Route), `"$($message.TypeScriptName)`", $($message.TypeScriptName), [")
+        foreach ($field in $message.Fields) {
+            $repeated = if ($field.Repeated) { ', true' } else { '' }
+            $lines.Add("    field($($field.Index), `"$($field.Name)`", `"$($field.Type)`"$repeated),")
+        }
+        $lines.Add('  ]),')
+    }
+    $lines.Add('];')
+    [System.IO.File]::WriteAllText($target, ($lines -join [Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
+}
+
 function Generate-TypeScriptSdk {
     param(
         [Parameter(Mandatory = $true)][string]$Template,
@@ -224,8 +447,27 @@ function Generate-TypeScriptSdk {
     ) + @($protoFiles | ForEach-Object { $_.FullName })
     Invoke-LoggedProcess -FilePath $protoc -ArgumentList $arguments -Name $Name -WorkingDirectory $canonicalProto
     if ($Cocos) {
+        Write-CocosTestPanelProtocol -ProtoDirectory $typescriptProto -GeneratedDirectory $typescriptGenerated -Output $Output
         Convert-CocosLocalImports -Output $Output
     }
+}
+
+function Sync-CocosSdkToProject {
+    param(
+        [Parameter(Mandatory = $true)][string]$SdkOutput,
+        [Parameter(Mandatory = $true)][string]$ProjectRoot
+    )
+
+    if (-not (Test-Path -LiteralPath $ProjectRoot -PathType Container)) {
+        throw "Cocos project directory was not found: $ProjectRoot"
+    }
+
+    $target = Join-Path $ProjectRoot 'assets\xs-net-sdk'
+    New-Item -ItemType Directory -Force -Path $target | Out-Null
+    Get-ChildItem -LiteralPath $SdkOutput -Force |
+        Where-Object { $_.Name -notin @('node_modules', 'dist', 'test') } |
+        Copy-Item -Destination $target -Recurse -Force
+    Write-Host "[sdk] cocos synced: $target"
 }
 
 $protoc = Resolve-Protoc
@@ -256,6 +498,7 @@ if ($selected -contains 'TypeScript') {
 
 if ($selected -contains 'Cocos') {
     Generate-TypeScriptSdk -Template $cocosTemplate -Output $cocosRoot -Name 'cocos' -Cocos
+    Sync-CocosSdkToProject -SdkOutput $cocosRoot -ProjectRoot $CocosProjectRoot
 }
 
 if ($selected -contains 'Cpp') {

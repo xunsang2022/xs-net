@@ -6,16 +6,24 @@ import {
   EditBox,
   Graphics,
   Label,
+  Mask,
   Node,
+  ScrollView,
   UITransform,
 } from "cc";
 import { GameClient } from "./client.js";
 import { CocosWebSocketTransport } from "./cocos-websocket-transport.js";
-import { RpcRoute } from "../generated/rpc_routes.js";
-import { SCLogin } from "../generated/S2Cs.js";
-import { encodeSdkLogin } from "./sdk-test-panel-protocol.js";
+import { RPC_DEFINITIONS, type RpcDefinition } from "./sdk-test-panel-protocol.js";
 
 const { ccclass, property } = _decorator;
+
+const PANEL_WIDTH = 1040;
+const PANEL_HEIGHT = 700;
+const ROW_WIDTH = 960;
+const FIELD_COLUMNS = 5;
+const FIELD_WIDTH = 165;
+const FIELD_ROW_HEIGHT = 62;
+const ROW_GAP = 10;
 
 @ccclass("XsNetSdkTestPanel")
 export class XsNetSdkTestPanel extends Component {
@@ -25,20 +33,8 @@ export class XsNetSdkTestPanel extends Component {
   @property({ tooltip: "JWT used by the game gateway" })
   public defaultJwt = "";
 
-  @property({ tooltip: "Initial player id" })
-  public defaultPlayerId = "1001";
-
-  @property({ tooltip: "Initial player name" })
-  public defaultPlayerName = "Alice";
-
-  @property({ tooltip: "Initial session id" })
-  public defaultSessionId = "cocos-test";
-
   private urlInput?: EditBox;
   private jwtInput?: EditBox;
-  private playerIdInput?: EditBox;
-  private playerNameInput?: EditBox;
-  private sessionIdInput?: EditBox;
   private statusLabel?: Label;
   private logLabel?: Label;
   private client?: GameClient;
@@ -48,7 +44,7 @@ export class XsNetSdkTestPanel extends Component {
   protected onLoad(): void {
     this.createPanel();
     this.setStatus("未连接");
-    this.appendLog("请输入地址和 JWT，然后点击连接。");
+    this.appendLog("填写地址和 JWT 后点击连接，再按 RPC 行填写参数并发送。");
   }
 
   protected onDestroy(): void {
@@ -59,25 +55,105 @@ export class XsNetSdkTestPanel extends Component {
     const panel = new Node("XSNetSdkTestPanel");
     panel.setParent(this.node);
     panel.setPosition(0, 0, 0);
-    panel.addComponent(UITransform).setContentSize(780, 500);
+    panel.addComponent(UITransform).setContentSize(PANEL_WIDTH, PANEL_HEIGHT);
 
     const background = panel.addComponent(Graphics);
-    background.fillColor = new Color(22, 28, 40, 235);
-    background.roundRect(-390, -250, 780, 500, 14);
+    background.fillColor = new Color(22, 28, 40, 248);
+    background.roundRect(-PANEL_WIDTH / 2, -PANEL_HEIGHT / 2, PANEL_WIDTH, PANEL_HEIGHT, 14);
     background.fill();
 
-    this.createLabel(panel, "Title", "XS-NET Cocos SDK 连通性测试", 0, 218, 700, 34, 24);
-    this.urlInput = this.createInput(panel, "Url", "WebSocket 地址", this.defaultUrl, 70, 165);
-    this.jwtInput = this.createInput(panel, "Jwt", "JWT", this.defaultJwt, 70, 115);
-    this.playerIdInput = this.createInput(panel, "PlayerId", "玩家 ID", this.defaultPlayerId, 70, 65);
-    this.playerNameInput = this.createInput(panel, "PlayerName", "玩家名", this.defaultPlayerName, 70, 15);
-    this.sessionIdInput = this.createInput(panel, "SessionId", "会话 ID", this.defaultSessionId, 70, -35);
+    const title = this.createLabel(panel, "Title", "XS-NET Cocos SDK RPC 测试", 0, 314, 900, 40, 24);
+    title.horizontalAlign = Label.HorizontalAlign.CENTER;
 
-    this.createButton(panel, "Connect", "连接", -190, -100, () => void this.connect());
-    this.createButton(panel, "SendLogin", "发送登录", 0, -100, () => this.sendLogin());
-    this.createButton(panel, "Close", "断开", 190, -100, () => this.disconnect());
-    this.statusLabel = this.createLabel(panel, "Status", "状态：未连接", -350, -145, 700, 28, 18);
-    this.logLabel = this.createLabel(panel, "Log", "", -350, -200, 700, 82, 16);
+    this.createLabel(panel, "UrlLabel", "WebSocket", -450, 262, 120, 34, 15);
+    this.urlInput = this.createInput(panel, "Url", "WebSocket 地址", this.defaultUrl, 55, 262, 800, 38, 15);
+    this.createLabel(panel, "JwtLabel", "JWT", -450, 214, 120, 34, 15);
+    this.jwtInput = this.createInput(panel, "Jwt", "JWT", this.defaultJwt, 55, 214, 800, 38, 15);
+
+    this.createButton(panel, "Connect", "连接", -180, 164, () => void this.connect());
+    this.createButton(panel, "Close", "断开", 180, 164, () => this.disconnect());
+    this.statusLabel = this.createLabel(panel, "Status", "状态：未连接", -455, 124, 910, 28, 15);
+
+    this.createLabel(panel, "RpcHeader", "RPC", -430, 96, 80, 26, 14);
+    this.createLabel(panel, "ProtoHeader", "Proto 名称", -220, 96, 300, 26, 14);
+    this.createLabel(panel, "FieldHeader", "参数（序号：字段名）", -45, 96, 700, 26, 14);
+    this.createLabel(panel, "ActionHeader", "操作", 430, 96, 80, 26, 14);
+
+    this.createRpcList(panel);
+    this.logLabel = this.createLabel(panel, "Log", "", -455, -320, 910, 38, 13);
+  }
+
+  private createRpcList(panel: Node): void {
+    const scrollNode = new Node("RpcScrollView");
+    scrollNode.setParent(panel);
+    scrollNode.setPosition(0, -105, 0);
+    scrollNode.addComponent(UITransform).setContentSize(980, 390);
+    scrollNode.addComponent(Mask);
+
+    const scrollView = scrollNode.addComponent(ScrollView);
+    scrollView.horizontal = false;
+    scrollView.vertical = true;
+
+    const rowHeights = RPC_DEFINITIONS.map((definition) => this.rpcRowHeight(definition));
+    const totalHeight = rowHeights.reduce((sum, height) => sum + height, 0) + ROW_GAP * Math.max(0, rowHeights.length - 1);
+    const content = new Node("RpcContent");
+    content.setParent(scrollNode);
+    content.addComponent(UITransform).setContentSize(ROW_WIDTH, totalHeight);
+    scrollView.content = content;
+
+    let y = totalHeight / 2;
+    RPC_DEFINITIONS.forEach((definition, index) => {
+      const height = rowHeights[index];
+      const row = this.createRpcRow(content, definition, height);
+      y -= height / 2;
+      row.setPosition(0, y, 0);
+      y -= height / 2 + ROW_GAP;
+    });
+  }
+
+  private rpcRowHeight(definition: RpcDefinition): number {
+    const fieldRows = Math.max(1, Math.ceil(definition.fields.length / FIELD_COLUMNS));
+    return 50 + fieldRows * FIELD_ROW_HEIGHT + 10;
+  }
+
+  private createRpcRow(parent: Node, definition: RpcDefinition, rowHeight: number): Node {
+    const row = new Node(`Rpc${definition.rpcNum}`);
+    row.setParent(parent);
+    row.addComponent(UITransform).setContentSize(ROW_WIDTH, rowHeight);
+
+    const background = row.addComponent(Graphics);
+    background.fillColor = new Color(31, 39, 54, 235);
+    background.roundRect(-ROW_WIDTH / 2, -rowHeight / 2, ROW_WIDTH, rowHeight, 8);
+    background.fill();
+
+    const headerY = rowHeight / 2 - 25;
+    this.createLabel(row, "Rpc", String(definition.rpcNum), -430, headerY, 80, 30, 14);
+    this.createLabel(row, "Proto", definition.protoName, -220, headerY, 300, 30, 14);
+
+    const inputs = new Map<string, EditBox>();
+    const fieldRows = Math.max(1, Math.ceil(definition.fields.length / FIELD_COLUMNS));
+    definition.fields.forEach((field, index) => {
+      const column = index % FIELD_COLUMNS;
+      const fieldRow = Math.floor(index / FIELD_COLUMNS);
+      const x = -400 + column * FIELD_WIDTH;
+      const y = rowHeight / 2 - 62 - fieldRow * FIELD_ROW_HEIGHT;
+      this.createLabel(row, `Field${field.index}`, `${field.index}: ${field.name}`, x, y + 18, 154, 20, 11);
+      const input = this.createInput(
+        row,
+        `Input${field.index}`,
+        field.repeated ? `${field.type}[]` : field.type,
+        "",
+        x,
+        y - 14,
+        150,
+        30,
+        13,
+      );
+      inputs.set(field.name, input);
+    });
+
+    this.createButton(row, "Send", "发送", 430, headerY, () => this.sendRpc(definition, inputs));
+    return row;
   }
 
   private createLabel(
@@ -97,31 +173,72 @@ export class XsNetSdkTestPanel extends Component {
     const label = node.addComponent(Label);
     label.string = value;
     label.fontSize = fontSize;
-    label.lineHeight = fontSize + 6;
+    label.lineHeight = fontSize + 5;
     label.color = new Color(232, 238, 246, 255);
     label.horizontalAlign = Label.HorizontalAlign.LEFT;
     label.verticalAlign = Label.VerticalAlign.CENTER;
+    label.overflow = Label.Overflow.CLAMP;
     return label;
   }
 
-  private createInput(parent: Node, name: string, placeholder: string, value: string, x: number, y: number): EditBox {
+  private createInput(
+    parent: Node,
+    name: string,
+    placeholder: string,
+    value: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    fontSize: number,
+  ): EditBox {
     const node = new Node(name);
     node.setParent(parent);
     node.setPosition(x, y, 0);
-    node.addComponent(UITransform).setContentSize(570, 36);
+    node.addComponent(UITransform).setContentSize(width, height);
+
+    const background = node.addComponent(Graphics);
+    background.fillColor = new Color(12, 17, 26, 255);
+    background.roundRect(-width / 2, -height / 2, width, height, 5);
+    background.fill();
+
     const input = node.addComponent(EditBox);
     input.placeholder = placeholder;
     input.string = value;
+    this.configureEditBox(input, width, height, fontSize);
+    this.scheduleOnce(() => this.configureEditBox(input, width, height, fontSize), 0);
     return input;
+  }
+
+  private configureEditBox(input: EditBox, width: number, height: number, fontSize: number): void {
+    for (const label of [input.textLabel, input.placeholderLabel]) {
+      if (!label) continue;
+      label.fontSize = fontSize;
+      label.lineHeight = fontSize + 4;
+      label.color = new Color(220, 228, 238, 255);
+      label.horizontalAlign = Label.HorizontalAlign.LEFT;
+      label.verticalAlign = Label.VerticalAlign.CENTER;
+      label.overflow = Label.Overflow.CLAMP;
+      label.node.setPosition(0, 0, 0);
+      label.node.getComponent(UITransform)?.setContentSize(Math.max(1, width - 16), Math.max(1, height - 6));
+    }
   }
 
   private createButton(parent: Node, name: string, text: string, x: number, y: number, handler: () => void): void {
     const node = new Node(name);
     node.setParent(parent);
     node.setPosition(x, y, 0);
-    node.addComponent(UITransform).setContentSize(150, 38);
+    const transform = node.addComponent(UITransform);
+    transform.setContentSize(name === "Send" ? 80 : 150, 36);
+
+    const background = node.addComponent(Graphics);
+    background.fillColor = new Color(54, 86, 125, 255);
+    background.roundRect(-transform.width / 2, -18, transform.width, 36, 6);
+    background.fill();
+
     node.addComponent(Button);
-    this.createLabel(node, "Text", text, 0, 0, 150, 38, 18);
+    const label = this.createLabel(node, "Text", text, 0, 0, transform.width, 36, name === "Send" ? 13 : 15);
+    label.horizontalAlign = Label.HorizontalAlign.CENTER;
     node.on(Node.EventType.TOUCH_END, handler, this);
   }
 
@@ -137,9 +254,6 @@ export class XsNetSdkTestPanel extends Component {
     const transport = new CocosWebSocketTransport(url);
     const client = new GameClient(transport);
     this.client = client;
-    client.dispatcher.registerDecoded(RpcRoute.RPC_SC_LOGIN, SCLogin.decode, (response) => {
-      this.appendLog(`收到登录响应：result=${response.result ?? "undefined"}, playerId=${response.playerId ?? ""}`);
-    });
     this.closeOff = transport.onClose((error) => {
       this.setStatus("已断开");
       this.appendLog(`连接关闭${error ? `：${error.message}` : ""}`);
@@ -158,19 +272,20 @@ export class XsNetSdkTestPanel extends Component {
     }
   }
 
-  private sendLogin(): void {
+  private sendRpc(definition: RpcDefinition, inputs: Map<string, EditBox>): void {
     if (!this.client?.connected) {
       this.appendLog("发送失败：当前未连接。");
       return;
     }
 
-    const payload = encodeSdkLogin({
-      playerId: this.playerIdInput?.string.trim() ?? "",
-      playerName: this.playerNameInput?.string.trim() ?? "",
-      sessionId: this.sessionIdInput?.string.trim() ?? "",
-    });
-    this.client.send(RpcRoute.RPC_CS_LOGIN, payload);
-    this.appendLog("已发送 CSLogin。");
+    try {
+      const values: Record<string, string> = {};
+      for (const field of definition.fields) values[field.name] = inputs.get(field.name)?.string ?? "";
+      this.client.send(definition.rpcNum, definition.encode(values));
+      this.appendLog(`已发送 ${definition.rpcNum} ${definition.protoName}`);
+    } catch (error) {
+      this.appendLog(`发送失败：${this.errorMessage(error)}`);
+    }
   }
 
   private disconnect(): void {
@@ -192,7 +307,7 @@ export class XsNetSdkTestPanel extends Component {
 
   private appendLog(value: string): void {
     this.logs.push(value);
-    while (this.logs.length > 5) this.logs.shift();
+    while (this.logs.length > 3) this.logs.shift();
     if (this.logLabel) this.logLabel.string = this.logs.join("\n");
   }
 
