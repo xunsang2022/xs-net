@@ -53,10 +53,16 @@
             <artifactId>micrometer-core</artifactId>
         </dependency>
 
-        <!-- Non-Boot JDBC: manually wired DBSyncEngine batch writer to PostgreSQL -->
+        <!-- Non-Boot MyBatis-Plus ActiveRecord persistence for PostgreSQL -->
         <dependency>
-            <groupId>org.springframework</groupId>
-            <artifactId>spring-jdbc</artifactId>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-extension</artifactId>
+            <version>${mybatis-plus.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.mybatis</groupId>
+            <artifactId>mybatis-spring</artifactId>
+            <version>${mybatis-spring.version}</version>
         </dependency>
         <dependency>
             <groupId>com.zaxxer</groupId>

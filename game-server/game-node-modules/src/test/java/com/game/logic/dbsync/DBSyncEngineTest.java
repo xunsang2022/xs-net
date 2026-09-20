@@ -1,7 +1,6 @@
 package com.game.logic.dbsync;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -17,15 +16,15 @@ import static org.mockito.Mockito.when;
 
 class DBSyncEngineTest {
 
-    private DBSyncEngine newEngine(JdbcTemplate jdbcTemplate) {
+    private DBSyncEngine newEngine(PlayerPersistence persistence) {
         DBSyncConfig config = new DBSyncConfig();
         config.setFlushConcurrency(1);
-        return new DBSyncEngine(jdbcTemplate, config);
+        return new DBSyncEngine(persistence, config);
     }
 
     @Test
     void submitMergesDirtyFieldsForSamePlayer() {
-        DBSyncEngine engine = newEngine(mock(JdbcTemplate.class));
+        DBSyncEngine engine = newEngine(mock(PlayerPersistence.class));
 
         Map<String, String> first = new LinkedHashMap<>();
         first.put("name", "alice");
@@ -36,9 +35,9 @@ class DBSyncEngineTest {
         engine.submit(42L, second, 2L);
 
         // 通过一次 flush 验证合并结果：脏记录应同时包含 name 与 online，version 更新为 2
-        JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        when(jdbc.batchUpdate(any(String.class), anyList())).thenReturn(new int[]{1});
-        DBSyncEngine engine2 = newEngine(jdbc);
+        PlayerPersistence persistence = mock(PlayerPersistence.class);
+        when(persistence.upsertBatch(anyList())).thenReturn(java.util.Set.of(42L));
+        DBSyncEngine engine2 = newEngine(persistence);
         engine2.submit(42L, first, 1L);
         engine2.submit(42L, second, 2L);
         engine2.flush();
@@ -48,9 +47,9 @@ class DBSyncEngineTest {
 
     @Test
     void flushRemovesDirtyRecordOnSuccess() {
-        JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        when(jdbc.batchUpdate(any(String.class), anyList())).thenReturn(new int[]{1});
-        DBSyncEngine engine = newEngine(jdbc);
+        PlayerPersistence persistence = mock(PlayerPersistence.class);
+        when(persistence.upsertBatch(anyList())).thenReturn(java.util.Set.of(42L));
+        DBSyncEngine engine = newEngine(persistence);
 
         engine.submit(42L, Map.of("name", "alice"), 1L);
         engine.flush();
@@ -60,10 +59,10 @@ class DBSyncEngineTest {
 
     @Test
     void flushRetainsDirtyRecordOnOptimisticLockConflict() {
-        JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        // results[i] == 0 表示乐观锁冲突（WHERE version 不匹配），应保留重试
-        when(jdbc.batchUpdate(any(String.class), anyList())).thenReturn(new int[]{0});
-        DBSyncEngine engine = newEngine(jdbc);
+        PlayerPersistence persistence = mock(PlayerPersistence.class);
+        // RETURNING 未返回该 ID 表示乐观锁冲突，应保留重试
+        when(persistence.upsertBatch(anyList())).thenReturn(java.util.Set.of());
+        DBSyncEngine engine = newEngine(persistence);
 
         engine.submit(42L, Map.of("name", "alice"), 1L);
         engine.flush();
@@ -73,9 +72,9 @@ class DBSyncEngineTest {
 
     @Test
     void flushRetainsDirtyRecordOnException() {
-        JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        when(jdbc.batchUpdate(any(String.class), anyList())).thenThrow(new RuntimeException("db down"));
-        DBSyncEngine engine = newEngine(jdbc);
+        PlayerPersistence persistence = mock(PlayerPersistence.class);
+        when(persistence.upsertBatch(anyList())).thenThrow(new RuntimeException("db down"));
+        DBSyncEngine engine = newEngine(persistence);
 
         engine.submit(42L, Map.of("name", "alice"), 1L);
         engine.flush();
@@ -88,7 +87,7 @@ class DBSyncEngineTest {
         DBSyncConfig config = new DBSyncConfig();
         config.setFlushConcurrency(1);
         config.setMaxDirtyRecords(2);
-        DBSyncEngine engine = new DBSyncEngine(mock(JdbcTemplate.class), config);
+        DBSyncEngine engine = new DBSyncEngine(mock(PlayerPersistence.class), config);
 
         assertTrue(engine.submit(1L, Map.of("name", "alice"), 1L));
         assertTrue(engine.submit(2L, Map.of("name", "bob"), 1L));

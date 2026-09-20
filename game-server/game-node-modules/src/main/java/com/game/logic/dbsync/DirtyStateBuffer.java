@@ -35,7 +35,11 @@ public final class DirtyStateBuffer {
         final SubmitResult[] result = new SubmitResult[1];
         records.compute(playerId, (key, existing) -> {
             if (existing == null) {
-                DirtyRecord candidate = new DirtyRecord(playerId, new LinkedHashMap<>(fields), version);
+                DirtyRecord candidate = new DirtyRecord(
+                        playerId,
+                        new LinkedHashMap<>(fields),
+                        Math.max(0L, version - 1L),
+                        version);
                 long candidateBytes = estimate(candidate);
                 if (records.size() >= maxRecords || bytes.get() + candidateBytes > maxBytes) {
                     result[0] = SubmitResult.REJECTED_CAPACITY;
@@ -47,7 +51,11 @@ public final class DirtyStateBuffer {
             }
             Map<String, String> merged = new LinkedHashMap<>(existing.fields());
             merged.putAll(fields);
-            DirtyRecord candidate = new DirtyRecord(playerId, merged, Math.max(existing.version(), version));
+            DirtyRecord candidate = new DirtyRecord(
+                    playerId,
+                    merged,
+                    existing.expectedVersion(),
+                    Math.max(existing.newVersion(), version));
             bytes.addAndGet(estimate(candidate) - estimate(existing));
             result[0] = SubmitResult.COALESCED;
             return candidate;

@@ -11,6 +11,8 @@ import com.game.logic.config.LogicRuntimeConfiguration;
 import com.game.logic.dbsync.DBSyncConfig;
 import com.game.logic.dbsync.DBSyncEngine;
 import com.game.logic.dbsync.LogConsumer;
+import com.game.logic.dbsync.MybatisPersistenceConfiguration;
+import com.game.logic.dbsync.PlayerPersistence;
 import com.game.logic.redis.RedisStore;
 import com.game.logic.metrics.LogicPrometheusServer;
 import com.game.logic.management.GmProtocolTraceService;
@@ -31,7 +33,6 @@ import org.springframework.data.redis.connection.lettuce.LettuceClientConfigurat
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.connection.lettuce.LettucePoolingClientConfiguration;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.InputStream;
@@ -41,7 +42,7 @@ import java.util.Map;
 
 /**
  * Plain Java entry point for the logic node. Pekko, Redis and the in-process
- * DBSyncEngine are wired manually instead of through Spring Boot.
+ * DBSyncEngine and MyBatis-Plus are wired manually instead of through Spring Boot.
  */
 public final class GameLogicApplication {
 
@@ -118,12 +119,13 @@ public final class GameLogicApplication {
         hikariConfig.setMaximumPoolSize(parseFileInt("game.db.max-pool-size", "10"));
         hikariConfig.setMinimumIdle(parseFileInt("game.db.min-idle", "2"));
         HikariDataSource dataSource = new HikariDataSource(hikariConfig);
-        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        var sqlSessionFactory = MybatisPersistenceConfiguration.create(dataSource);
+        PlayerPersistence playerPersistence = new PlayerPersistence(sqlSessionFactory);
         DBSyncConfig dbSyncConfig = new DBSyncConfig();
         dbSyncConfig.setBatchSize(parseFileInt("game.db.batch-size", "100"));
         dbSyncConfig.setBgsaveSeconds(parseFileInt("game.db.bgsave-seconds", "3"));
         dbSyncConfig.setFlushConcurrency(parseFileInt("game.db.flush-concurrency", "4"));
-        DBSyncEngine dbSyncEngine = new DBSyncEngine(jdbcTemplate, dbSyncConfig);
+        DBSyncEngine dbSyncEngine = new DBSyncEngine(playerPersistence, dbSyncConfig);
         dbSyncEngine.start();
         LogicContext.setDbSyncEngine(dbSyncEngine);
 
@@ -149,7 +151,7 @@ public final class GameLogicApplication {
                     "1000"));
         }
 
-        LogConsumer logConsumer = new LogConsumer(redisTemplate, jdbcTemplate, dbSyncConfig);
+        LogConsumer logConsumer = new LogConsumer(redisTemplate, sqlSessionFactory, dbSyncConfig);
         logConsumer.start();
         LogicContext.setLogConsumer(logConsumer);
 

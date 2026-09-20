@@ -13,8 +13,9 @@ import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.connection.stream.StreamOffset;
 import org.springframework.data.redis.connection.stream.StreamReadOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.data.domain.Range;
+import org.apache.ibatis.session.SqlSession;
+import org.apache.ibatis.session.SqlSessionFactory;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -34,21 +35,17 @@ public class LogConsumer {
     public static final String LOG_CONSUMER = "log-consumer";
     public static final String LOG_DEAD_LETTER_KEY = "log:events:dead-letter";
 
-    private static final String INSERT_SQL = "INSERT INTO log_events "
-            + "(source_stream_id, level, type, message, player_id, created_at) VALUES (?, ?, ?, ?, ?, ?) "
-            + "ON CONFLICT (source_stream_id) DO NOTHING";
-
     private final StringRedisTemplate redis;
-    private final JdbcTemplate jdbcTemplate;
+    private final SqlSessionFactory sessionFactory;
     private final LogEventCodec codec;
     private final DBSyncConfig config;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     private Thread worker;
 
-    public LogConsumer(StringRedisTemplate redis, JdbcTemplate jdbcTemplate, DBSyncConfig config) {
+    public LogConsumer(StringRedisTemplate redis, SqlSessionFactory sessionFactory, DBSyncConfig config) {
         this.redis = redis;
-        this.jdbcTemplate = jdbcTemplate;
+        this.sessionFactory = sessionFactory;
         this.config = config;
         this.codec = new LogEventCodec(new ObjectMapper());
     }
@@ -108,19 +105,18 @@ public class LogConsumer {
                 .map(r -> new LogStreamRecord(r.getId().getValue(), r.getValue()))
                 .toList();
 
-        List<Object[]> batch = new ArrayList<>();
+        List<LogEventPO> batch = new ArrayList<>();
         List<String> acked = new ArrayList<>();
         for (LogStreamRecord record : streamRecords) {
             try {
                 LogEvent event = codec.toEvent(record);
-                batch.add(new Object[]{
+                batch.add(new LogEventPO(
                         record.id(),
                         event.level().ordinal(),
                         event.type().ordinal(),
                         event.content(),
                         event.playerId(),
-                        event.createTime()
-                });
+                        event.createTime()));
                 acked.add(record.id());
             } catch (Exception e) {
                 redis.opsForStream().add(LOG_DEAD_LETTER_KEY, Map.of(
@@ -135,12 +131,17 @@ public class LogConsumer {
 
         if (!batch.isEmpty()) {
             try {
-                int[] results = jdbcTemplate.batchUpdate(INSERT_SQL, batch);
-                for (int result : results) {
-                    if (result == 0) {
-                        Metrics.counter("log.consumer.duplicates").increment();
+                List<String> insertedIds;
+                try (SqlSession session = sessionFactory.openSession(false)) {
+                    try {
+                        insertedIds = session.getMapper(LogEventMapper.class).insertIgnoreBatch(batch);
+                        session.commit();
+                    } catch (RuntimeException exception) {
+                        session.rollback();
+                        throw exception;
                     }
                 }
+                Metrics.counter("log.consumer.duplicates").increment(batch.size() - insertedIds.size());
             } catch (RuntimeException exception) {
                 Metrics.counter("log.consumer.database_failures").increment();
                 // Do not ACK here: Redis keeps the entries pending for reclaim.

@@ -3,11 +3,8 @@ package com.game.logic.dbsync;
 import com.game.logic.context.LogicContext;
 import com.game.logic.context.LogicMetrics;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
 
-import java.sql.Timestamp;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -22,13 +19,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * 进程内批写器：收集脏记录，定时批量 UPSERT 到 PostgreSQL。
  * 使用 ConcurrentHashMap 收集脏记录，ScheduledExecutorService 定时触发 flush，
- * flush 按 flushConcurrency 分片并行执行 JdbcTemplate.batchUpdate，
+ * flush 按 flushConcurrency 分片并行执行 MyBatis-Plus 自定义批量 UPSERT，
  * 成功移除脏记录，失败（异常或乐观锁冲突）保留下一轮重试。
  */
 @Slf4j
 public class DBSyncEngine {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final PlayerPersistence persistence;
     private final DBSyncConfig config;
     private final DirtyStateBuffer dirty;
     private final ConcurrentHashMap<Long, Integer> retryAttempts = new ConcurrentHashMap<>();
@@ -39,8 +36,8 @@ public class DBSyncEngine {
     private ScheduledExecutorService scheduler;
     private ExecutorService flushPool;
 
-    public DBSyncEngine(JdbcTemplate jdbcTemplate, DBSyncConfig config) {
-        this.jdbcTemplate = jdbcTemplate;
+    public DBSyncEngine(PlayerPersistence persistence, DBSyncConfig config) {
+        this.persistence = persistence;
         this.config = config;
         this.dirty = new DirtyStateBuffer(config.getMaxDirtyRecords(), config.getMaxDirtyBytes());
     }
@@ -119,21 +116,7 @@ public class DBSyncEngine {
      * 相比「INSERT ... ON CONFLICT DO NOTHING + SELECT」省去一次 DB 往返（新玩家登录热路径）。
      */
     public Map<String, String> loadOrCreate(Long playerId) {
-        Map<String, Object> row = jdbcTemplate.queryForMap(
-                "INSERT INTO users (id, name, email, online, last_login_at, updated_at, version) "
-                        + "VALUES (?, ?, ?, 0, NOW(), NOW(), 1) "
-                        + "ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id "
-                        + "RETURNING id, name, email, online, last_login_at, updated_at, version",
-                playerId, "player-" + playerId, "");
-        Map<String, String> fields = new LinkedHashMap<>();
-        fields.put("id", String.valueOf(row.get("id")));
-        fields.put("name", row.get("name") == null ? "player-" + playerId : String.valueOf(row.get("name")));
-        fields.put("email", row.get("email") == null ? "" : String.valueOf(row.get("email")));
-        fields.put("online", String.valueOf(row.get("online") == null ? 0 : row.get("online")));
-        fields.put("last_login_at", timestampString(row.get("last_login_at")));
-        fields.put("updated_at", timestampString(row.get("updated_at")));
-        fields.put("version", String.valueOf(row.get("version") == null ? 1 : row.get("version")));
-        return fields;
+        return persistence.loadOrCreate(playerId);
     }
 
     /**
@@ -186,15 +169,21 @@ public class DBSyncEngine {
 
     private void flushShard(List<DirtyRecord> shard) {
         try {
-            int[] results = jdbcTemplate.batchUpdate(PlayerUpsertSql.SQL, PlayerUpsertSql.batchParams(shard));
-            for (int i = 0; i < shard.size(); i++) {
-                DirtyRecord r = shard.get(i);
-                // results[i] > 0 表示插入或更新成功；== 0 表示乐观锁冲突（WHERE version 不匹配），保留重试
-                if (results[i] > 0) {
-                    dirty.removeIfVersion(r.playerId(), r.version());
-                    retryAttempts.remove(r.playerId());
-                    nextRetryNanos.remove(r.playerId());
-                    terminalFailures.remove(r.playerId());
+            for (int offset = 0; offset < shard.size(); offset += config.getBatchSize()) {
+                List<DirtyRecord> batch = shard.subList(offset,
+                        Math.min(offset + config.getBatchSize(), shard.size()));
+                Set<Long> persistedIds = persistence.upsertBatch(
+                        batch.stream().map(PlayerPO::fromDirtyRecord).toList());
+                for (DirtyRecord record : batch) {
+                    if (persistedIds.contains(record.playerId())) {
+                        dirty.removeIfVersion(record.playerId(), record.version());
+                        retryAttempts.remove(record.playerId());
+                        nextRetryNanos.remove(record.playerId());
+                        terminalFailures.remove(record.playerId());
+                    } else {
+                        // PostgreSQL RETURNING 不返回乐观锁冲突行，保持记录并退避重试。
+                        scheduleRetry(record);
+                    }
                 }
             }
         } catch (Exception e) {
@@ -203,22 +192,26 @@ public class DBSyncEngine {
             if (metrics != null) {
                 metrics.recordFlushFailure();
             }
-            long now = System.nanoTime();
             for (DirtyRecord record : shard) {
-                int attempts = retryAttempts.merge(record.playerId(), 1, Integer::sum);
-                long multiplier = 1L << Math.min(attempts - 1, 10);
-                long delayMs = Math.min(60_000L, config.getRetryBackoffMs() * multiplier);
-                nextRetryNanos.put(record.playerId(), now + TimeUnit.MILLISECONDS.toNanos(delayMs));
-                if (attempts >= config.getMaxRetryAttempts()) {
-                    terminalFailures.add(record.playerId());
-                    LogicMetrics logicMetrics = LogicContext.getLogicMetricsOrNull();
-                    if (logicMetrics != null) {
-                        logicMetrics.recordRetryExhausted();
-                    }
-                    log.error("DBSyncEngine record exceeded retry threshold: playerId={}, attempts={}",
-                            record.playerId(), attempts);
-                }
+                scheduleRetry(record);
             }
+        }
+    }
+
+    private void scheduleRetry(DirtyRecord record) {
+        int attempts = retryAttempts.merge(record.playerId(), 1, Integer::sum);
+        long multiplier = 1L << Math.min(attempts - 1, 10);
+        long delayMs = Math.min(60_000L, config.getRetryBackoffMs() * multiplier);
+        nextRetryNanos.put(record.playerId(),
+                System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(delayMs));
+        if (attempts >= config.getMaxRetryAttempts()) {
+            terminalFailures.add(record.playerId());
+            LogicMetrics logicMetrics = LogicContext.getLogicMetricsOrNull();
+            if (logicMetrics != null) {
+                logicMetrics.recordRetryExhausted();
+            }
+            log.error("DBSyncEngine record exceeded retry threshold: playerId={}, attempts={}",
+                    record.playerId(), attempts);
         }
     }
 
@@ -233,16 +226,4 @@ public class DBSyncEngine {
         return shards;
     }
 
-    private static String timestampString(Object value) {
-        if (value == null) {
-            return "";
-        }
-        if (value instanceof Timestamp timestamp) {
-            return String.valueOf(timestamp.getTime());
-        }
-        if (value instanceof java.util.Date date) {
-            return String.valueOf(date.getTime());
-        }
-        return String.valueOf(value);
-    }
 }
