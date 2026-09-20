@@ -8,6 +8,8 @@ import java.util.List;
 /** Mapper containing the PostgreSQL-specific player persistence statements. */
 public interface PlayerMapper extends BaseMapper<PlayerPO> {
 
+    PlayerPO upsert(PlayerPO player);
+
     PlayerPO loadOrCreate(@Param("playerId") Long playerId,
                           @Param("defaultName") String defaultName);
 

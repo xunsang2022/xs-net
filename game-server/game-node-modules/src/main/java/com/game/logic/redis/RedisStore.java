@@ -5,7 +5,8 @@ import com.game.logic.enums.LogType;
 import com.game.logic.dbsync.PlayerPO;
 import com.game.protocol.pb.LogRecordCommand;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.HashOperations;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.util.Base64;
@@ -14,10 +15,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Logic 节点 Actor 状态和日志事件的 Redis 访问层。 */
-@RequiredArgsConstructor
 public class RedisStore {
 
-    public static final String PLAYER_KEY_PREFIX = "player:";
+    public static final String PLAYER_KEY_PREFIX = "playerActor:";
     public static final String PLAYER_IDX_KEY = "idx:player";
     public static final String PLAYER_ONLINE_KEY = "player:online";
     public static final String LOG_EVENTS_KEY = "log:events";
@@ -25,6 +25,17 @@ public class RedisStore {
     /** 由 Logic 启动流程装配的 Redis 模板。 */
     @NonNull
     private final StringRedisTemplate redis;
+    /** 玩家 PO 专用 JSON Hash 模板；日志和索引仍使用字符串模板。 */
+    private final RedisTemplate<String, Object> playerRedis;
+
+    public RedisStore(StringRedisTemplate redis) {
+        this(redis, null);
+    }
+
+    public RedisStore(StringRedisTemplate redis, RedisTemplate<String, Object> playerRedis) {
+        this.redis = redis;
+        this.playerRedis = playerRedis;
+    }
 
     public static String playerKey(String playerId) {
         return PLAYER_KEY_PREFIX + playerId;
@@ -35,45 +46,95 @@ public class RedisStore {
     }
 
     public Map<String, String> load(String playerId) {
-        Map<Object, Object> entries = redis.opsForHash().entries(playerKey(playerId));
+        Map<?, ?> entries = playerHash().entries(playerKey(playerId));
         Map<String, String> result = new HashMap<>();
-        for (Map.Entry<Object, Object> entry : entries.entrySet()) {
-            result.put(String.valueOf(entry.getKey()), entry.getValue() == null ? null : String.valueOf(entry.getValue()));
+        for (Map.Entry<?, ?> entry : entries.entrySet()) {
+            result.put(String.valueOf(entry.getKey()), textValue(entry.getValue()));
         }
         return result;
     }
 
     public boolean create(String playerId, PlayerPO state) {
-        return create(playerId, state.toHash());
+        if (playerRedis == null) {
+            return create(playerId, state.toHash());
+        }
+        putHash(playerKey(playerId), state.toRedisHash());
+        registerOnline(playerId);
+        return true;
     }
 
     public boolean create(String playerId, Map<String, String> fields) {
-        redis.opsForHash().putAll(playerKey(playerId), fields);
-        redis.opsForSet().add(PLAYER_IDX_KEY, playerId);
-        redis.opsForSet().add(PLAYER_ONLINE_KEY, playerId);
+        putHash(playerKey(playerId), playerRedis == null ? fields : PlayerPO.redisValues(fields));
+        registerOnline(playerId);
         return true;
     }
 
     public boolean flushDirty(String playerId, PlayerPO state) {
-        return flushDirty(playerId, state.toHash(state.getDirtyFields()));
+        if (playerRedis == null) {
+            return flushDirty(playerId, state.toHash(state.getDirtyFields()));
+        }
+        Map<String, Object> dirty = state.toRedisHash(state.getDirtyFields());
+        if (dirty.isEmpty()) {
+            return true;
+        }
+        putHash(playerKey(playerId), dirty);
+        return true;
     }
 
     public boolean flushDirty(String playerId, Map<String, String> dirty) {
         if (dirty.isEmpty()) {
             return true;
         }
-        redis.opsForHash().putAll(playerKey(playerId), dirty);
+        putHash(playerKey(playerId), playerRedis == null ? dirty : PlayerPO.redisValues(dirty));
         return true;
     }
 
     public boolean destroy(String playerId, PlayerPO state) {
-        return destroy(playerId, state.toHash());
+        if (playerRedis == null) {
+            return destroy(playerId, state.toHash());
+        }
+        putHash(playerKey(playerId), state.toRedisHash());
+        redis.opsForSet().remove(PLAYER_ONLINE_KEY, playerId);
+        return true;
     }
 
     public boolean destroy(String playerId, Map<String, String> fields) {
-        redis.opsForHash().putAll(playerKey(playerId), fields);
+        putHash(playerKey(playerId), playerRedis == null ? fields : PlayerPO.redisValues(fields));
         redis.opsForSet().remove(PLAYER_ONLINE_KEY, playerId);
         return true;
+    }
+
+    /** Writes the complete PO to its JSON Redis hash. */
+    public boolean saveRedis(PlayerPO state) {
+        if (playerRedis == null) {
+            redis.opsForHash().putAll(playerKey(String.valueOf(state.getId())), state.toHash());
+        } else {
+            putHash(playerKey(String.valueOf(state.getId())), state.toRedisHash());
+        }
+        state.clearDirtyMatching(state.toHash());
+        return true;
+    }
+
+    private void registerOnline(String playerId) {
+        redis.opsForSet().add(PLAYER_IDX_KEY, playerId);
+        redis.opsForSet().add(PLAYER_ONLINE_KEY, playerId);
+    }
+
+    @SuppressWarnings("unchecked")
+    private HashOperations<String, String, Object> playerHash() {
+        if (playerRedis != null) {
+            return playerRedis.opsForHash();
+        }
+        return (HashOperations<String, String, Object>) (HashOperations<?, ?, ?>) redis.opsForHash();
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void putHash(String key, Map<String, ?> values) {
+        ((HashOperations) playerHash()).putAll(key, values);
+    }
+
+    private static String textValue(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     public void writeLog(Map<String, String> event) {

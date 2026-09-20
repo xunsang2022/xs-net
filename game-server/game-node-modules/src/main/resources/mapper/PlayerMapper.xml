@@ -4,6 +4,20 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.game.logic.dbsync.PlayerMapper">
 
+    <select id="upsert" resultType="com.game.logic.dbsync.PlayerPO">
+        INSERT INTO users (id, name, email, online, last_login_at, updated_at, version)
+        VALUES (#{id}, #{name}, #{email}, #{online}, #{lastLoginAt}, #{updatedAt}, #{version})
+        ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            email = EXCLUDED.email,
+            online = EXCLUDED.online,
+            last_login_at = EXCLUDED.last_login_at,
+            updated_at = EXCLUDED.updated_at,
+            version = EXCLUDED.version
+        WHERE users.version = COALESCE(#{expectedVersion}, users.version)
+        RETURNING id, name, email, online, last_login_at, updated_at, version
+    </select>
+
     <select id="loadOrCreate" resultType="com.game.logic.dbsync.PlayerPO">
         INSERT INTO users (id, name, email, online, last_login_at, updated_at, version)
         VALUES (#{playerId}, #{defaultName}, '', 0, NOW(), NOW(), 1)

@@ -119,6 +119,11 @@ public class DBSyncEngine {
         return persistence.loadOrCreate(playerId);
     }
 
+    /** Performs one synchronous custom UPSERT for PlayerPO.saveDb(). */
+    public boolean saveNow(PlayerPO player) {
+        return persistence.upsert(player);
+    }
+
     /**
      * 定时批量 UPSERT：按 flushConcurrency 分片并行执行，成功移除脏记录，失败保留重试。
      * 未 start() 时（如单元测试）同步执行。

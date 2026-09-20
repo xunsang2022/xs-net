@@ -31,6 +31,24 @@ public final class PlayerPersistence {
         }
     }
 
+    public boolean upsert(PlayerPO player) {
+        try (SqlSession session = sessionFactory.openSession(false)) {
+            try {
+                PlayerPO persisted = session.getMapper(PlayerMapper.class).upsert(player);
+                if (persisted == null) {
+                    session.rollback();
+                    return false;
+                }
+                session.commit();
+                player.copyPersistedState(persisted);
+                return true;
+            } catch (RuntimeException exception) {
+                session.rollback();
+                throw exception;
+            }
+        }
+    }
+
     public Set<Long> upsertBatch(List<PlayerPO> players) {
         if (players.isEmpty()) {
             return Set.of();

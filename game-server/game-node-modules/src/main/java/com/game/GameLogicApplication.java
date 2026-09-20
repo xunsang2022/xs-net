@@ -1,5 +1,6 @@
 package com.game;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.pekko.actor.typed.ActorSystem;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.Behaviors;
@@ -32,7 +33,10 @@ import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.connection.lettuce.LettucePoolingClientConfiguration;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.InputStream;
@@ -97,8 +101,9 @@ public final class GameLogicApplication {
         connectionFactory.afterPropertiesSet();
         StringRedisTemplate redisTemplate = new StringRedisTemplate(connectionFactory);
         redisTemplate.afterPropertiesSet();
+        RedisTemplate<String, Object> playerRedisTemplate = createPlayerRedisTemplate(connectionFactory);
 
-        RedisStore redisStore = new RedisStore(redisTemplate);
+        RedisStore redisStore = new RedisStore(redisTemplate, playerRedisTemplate);
         LogicIoExecutors ioExecutors = LogicIoExecutors.fixed(
                 parseFileInt("game.io.redis-threads", "16"),
                 parseFileInt("game.io.db-threads", "8"));
@@ -223,6 +228,23 @@ public final class GameLogicApplication {
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to start Logic Prometheus endpoint on " + host + ':' + port, exception);
         }
+    }
+
+    @SuppressWarnings("deprecation")
+    private static RedisTemplate<String, Object> createPlayerRedisTemplate(
+            LettuceConnectionFactory connectionFactory
+    ) {
+        RedisTemplate<String, Object> template = new RedisTemplate<>();
+        StringRedisSerializer stringSerializer = new StringRedisSerializer();
+        Jackson2JsonRedisSerializer<Object> jsonSerializer =
+                new Jackson2JsonRedisSerializer<>(new ObjectMapper(), Object.class);
+        template.setConnectionFactory(connectionFactory);
+        template.setKeySerializer(stringSerializer);
+        template.setHashKeySerializer(stringSerializer);
+        template.setValueSerializer(jsonSerializer);
+        template.setHashValueSerializer(jsonSerializer);
+        template.afterPropertiesSet();
+        return template;
     }
 
     private static java.nio.file.Path arthasHome() {

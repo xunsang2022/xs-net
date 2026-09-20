@@ -33,11 +33,11 @@ class PlayerPOTest {
     @Test
     void tracksDirtyFieldsInOrderAndDeduplicates() {
         PlayerPO player = new PlayerPO();
-        player.markDirty(PlayerPO.FIELD_NAME);
-        player.markDirty(PlayerPO.FIELD_VERSION);
-        player.markDirty(PlayerPO.FIELD_NAME);
+        player.setProperty(PlayerPO::setName, "alice");
+        player.setProperty(PlayerPO::setVersionValue, 7L);
+        player.setProperty(PlayerPO::setName, "bob");
 
-        assertEquals(List.of(PlayerPO.FIELD_NAME, PlayerPO.FIELD_VERSION), player.getDirtyFields());
+        assertEquals(List.of("name", "version"), player.getDirtyFields());
         assertTrue(player.hasDirtyFields());
 
         player.clearDirty();
@@ -49,6 +49,29 @@ class PlayerPOTest {
     void rejectsUnknownDirtyField() {
         PlayerPO player = new PlayerPO();
         assertThrows(IllegalArgumentException.class, () -> player.markDirty("unknown"));
+    }
+
+    @Test
+    void setPropertyIsFluentAndInvokesCompatibleSetter() {
+        PlayerPO player = new PlayerPO();
+
+        PlayerPO result = player.setProperty(PlayerPO::setOnline, true)
+                .setProperty(PlayerPO::setLastLoginAtMillis, 1700000000000L);
+
+        assertEquals(player, result);
+        assertTrue(player.isOnline());
+        assertEquals(1700000000000L, player.getLastLoginAtMillis());
+        assertEquals(List.of("online", "last_login_at"), player.getDirtyFields());
+    }
+
+    @Test
+    void setPropertyRejectsSetterFromNonModelClass() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new PlayerPO().setProperty(PlayerPOTest::nonModelSetter, "value"));
+    }
+
+    private static void nonModelSetter(PlayerPO player, String value) {
+        throw new AssertionError("non-model setter should not be invoked");
     }
 
     @Test
@@ -78,12 +101,12 @@ class PlayerPOTest {
     void toHashOnlyIncludesRequestedFields() {
         PlayerPO player = new PlayerPO().setId(42L).setName("alice").setOnline(true);
 
-        Map<String, String> partial = player.toHash(List.of(PlayerPO.FIELD_NAME, PlayerPO.FIELD_ONLINE));
+        Map<String, String> partial = player.toHash(List.of("name", "online"));
 
         assertEquals(2, partial.size());
-        assertEquals("alice", partial.get(PlayerPO.FIELD_NAME));
-        assertEquals("1", partial.get(PlayerPO.FIELD_ONLINE));
-        assertNull(partial.get(PlayerPO.FIELD_ID));
+        assertEquals("alice", partial.get("name"));
+        assertEquals("1", partial.get("online"));
+        assertNull(partial.get("id"));
     }
 
     @Test
@@ -95,13 +118,13 @@ class PlayerPOTest {
     @Test
     void clearDirtyMatchingKeepsFieldsChangedWhileIoWasInFlight() {
         PlayerPO player = new PlayerPO().setName("before").setOnline(true);
-        player.markDirty(PlayerPO.FIELD_NAME);
-        player.markDirty(PlayerPO.FIELD_ONLINE);
+        player.setProperty(PlayerPO::setName, "before");
+        player.setProperty(PlayerPO::setOnline, true);
 
         Map<String, String> persisted = player.toHash(player.getDirtyFields());
         player.setName("after");
         player.clearDirtyMatching(persisted);
 
-        assertEquals(List.of(PlayerPO.FIELD_NAME), player.getDirtyFields());
+        assertEquals(List.of("name"), player.getDirtyFields());
     }
 }

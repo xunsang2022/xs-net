@@ -7,6 +7,7 @@ import com.game.protocol.pb.LogRecordCommand;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.redis.core.HashOperations;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.SetOperations;
 import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -29,7 +30,7 @@ class RedisStoreTest {
 
     @Test
     void playerKeyUsesPlayerPrefix() {
-        assertEquals("player:42", RedisStore.playerKey("42"));
+        assertEquals("playerActor:42", RedisStore.playerKey("42"));
     }
 
     @Test
@@ -41,10 +42,10 @@ class RedisStoreTest {
         RedisStore store = new RedisStore(redis);
         PlayerPO state = new PlayerPO();
         state.setName("alice");
-        state.markDirty(PlayerPO.FIELD_NAME);
+        state.setProperty(PlayerPO::setName, "alice");
 
         assertTrue(store.flushDirty("42", state));
-        verify(hashOps).putAll("player:42", Map.of("name", "alice"));
+        verify(hashOps).putAll("playerActor:42", Map.of("name", "alice"));
     }
 
     @Test
@@ -70,9 +71,25 @@ class RedisStoreTest {
         state.setName("alice");
 
         assertTrue(store.create("42", state));
-        verify(hashOps).putAll("player:42", state.toHash());
+        verify(hashOps).putAll("playerActor:42", state.toHash());
         verify(setOps).add(RedisStore.PLAYER_IDX_KEY, "42");
         verify(setOps).add(RedisStore.PLAYER_ONLINE_KEY, "42");
+    }
+
+    @Test
+    void jsonPlayerTemplateStoresTypedHashValuesUnderActorKey() {
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        RedisTemplate<String, Object> playerRedis = mock(RedisTemplate.class);
+        HashOperations<String, String, Object> hashOps = mock(HashOperations.class);
+        SetOperations<String, String> setOps = mock(SetOperations.class);
+        doReturn(hashOps).when(playerRedis).opsForHash();
+        doReturn(setOps).when(redis).opsForSet();
+
+        RedisStore store = new RedisStore(redis, playerRedis);
+        PlayerPO state = new PlayerPO().setId(42L).setName("alice").setOnline(true);
+
+        assertTrue(store.create("42", state));
+        verify(hashOps).putAll("playerActor:42", state.toRedisHash());
     }
 
     @Test
@@ -90,7 +107,7 @@ class RedisStoreTest {
         state.setOnline(true);
 
         assertTrue(store.destroy("42", state));
-        verify(hashOps).putAll("player:42", state.toHash());
+        verify(hashOps).putAll("playerActor:42", state.toHash());
         verify(setOps).remove(RedisStore.PLAYER_ONLINE_KEY, "42");
     }
 
@@ -99,7 +116,7 @@ class RedisStoreTest {
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
         HashOperations<String, String, String> hashOps = mock(HashOperations.class);
         doReturn(hashOps).when(redis).opsForHash();
-        when(hashOps.entries("player:42")).thenReturn(Map.of("name", "alice", "online", "1"));
+        when(hashOps.entries("playerActor:42")).thenReturn(Map.of("name", "alice", "online", "1"));
 
         RedisStore store = new RedisStore(redis);
         Map<String, String> loaded = store.load("42");
