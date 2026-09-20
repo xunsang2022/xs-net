@@ -21,9 +21,16 @@
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <mybatis-plus.version>3.5.4.1</mybatis-plus.version>
 
     </properties>
     <dependencies>
+        <!-- ActiveRecord 基类依赖，供 xs-net 框架模型复用。 -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-extension</artifactId>
+            <version>${mybatis-plus.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.apache.pekko</groupId>
             <artifactId>pekko-actor-typed_2.13</artifactId>
