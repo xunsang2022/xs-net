@@ -2,6 +2,8 @@ package com.game.gateway.netty;
 
 import com.game.comment.util.JwtUtil;
 import com.game.gateway.config.NettyConfig;
+import com.xs.net.transport.PacketFrame;
+import com.xs.net.transport.PacketId;
 import io.jsonwebtoken.Claims;
 import io.micrometer.core.instrument.Metrics;
 import io.netty.buffer.ByteBuf;
@@ -42,6 +44,8 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
 
     private boolean authenticated;
     private String channelId;
+    private ClientEndpoint registeredEndpoint;
+    private long connectionRandom;
     private ScheduledFuture<?> authTimeoutTask;
 
     @Override
@@ -61,17 +65,39 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) {
-        if (!authenticated) {
-            authenticate(ctx, msg);
+        PacketFrame packet;
+        try {
+            packet = NettyFramer.decode(msg);
+        } catch (IllegalArgumentException exception) {
+            log.warn("Invalid XS packet, closing channel", exception);
+            ctx.close();
             return;
         }
-        handleGameMessage(ctx, msg);
+        if (!authenticated) {
+            if (packet.packetId() != PacketId.HELLO) {
+                failAuth(ctx);
+                return;
+            }
+            authenticate(ctx, packet);
+            return;
+        }
+        if (packet.random() != connectionRandom) {
+            ctx.close();
+            return;
+        }
+        if (packet.packetId() == PacketId.HEARTBEAT) {
+            ctx.writeAndFlush(NettyFramer.encodeAck(connectionRandom, packet.sendSeq()));
+            return;
+        }
+        if (packet.packetId() == PacketId.DATA) {
+            ctx.writeAndFlush(NettyFramer.encodeAck(connectionRandom, packet.sendSeq()));
+            handleGameMessage(ctx, packet.body());
+        }
     }
 
-    private void authenticate(ChannelHandlerContext ctx, ByteBuf msg) {
+    private void authenticate(ChannelHandlerContext ctx, PacketFrame packet) {
         try {
-            byte[] tokenBytes = new byte[msg.readableBytes()];
-            msg.readBytes(tokenBytes);
+            byte[] tokenBytes = packet.body();
             String token = new String(tokenBytes, StandardCharsets.UTF_8);
             Claims claims = jwtUtil.validateToken(token);
             if (claims == null) {
@@ -88,16 +114,23 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
                 return;
             }
             // 单账号/单通道并发连接上限：已存在活跃连接时拒绝新连接
-            if (config.getMaxConnectionsPerAccount() > 0
-                    && ChannelRegistry.INSTANCE.isActive(channelId)) {
-                log.warn("Reject duplicate active connection: channelId={}", channelId);
-                Metrics.counter(METRIC_CONN_REJECTED).increment();
-                failAuth(ctx);
-                return;
+            connectionRandom = packet.random();
+            ClientEndpoint existing = ChannelRegistry.INSTANCE.get(channelId);
+            if (config.getMaxConnectionsPerAccount() > 0 && existing != null && existing.isActive()) {
+                if (existing.connectionRandom() != connectionRandom) {
+                    log.warn("Reject duplicate active connection: channelId={}", channelId);
+                    Metrics.counter(METRIC_CONN_REJECTED).increment();
+                    failAuth(ctx);
+                    return;
+                }
+                ChannelRegistry.INSTANCE.remove(channelId, existing);
+                existing.close();
             }
-            ChannelRegistry.INSTANCE.register(channelId, new TcpClientEndpoint(ctx.channel()));
+            registeredEndpoint = new TcpClientEndpoint(ctx.channel(), connectionRandom);
+            ChannelRegistry.INSTANCE.register(channelId, registeredEndpoint);
             authenticated = true;
             cancelAuthTimeout();
+            ctx.writeAndFlush(NettyFramer.encodeAck(connectionRandom, 0));
             Metrics.counter(METRIC_AUTH_SUCCESS).increment();
             log.info("Channel authenticated: channelId={}", channelId);
         } catch (Exception e) {
@@ -107,10 +140,8 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
         }
     }
 
-    private void handleGameMessage(ChannelHandlerContext ctx, ByteBuf msg) {
+    private void handleGameMessage(ChannelHandlerContext ctx, byte[] body) {
         try {
-            byte[] body = new byte[msg.readableBytes()];
-            msg.readBytes(body);
             Metrics.counter(METRIC_C2S_MESSAGES).increment();
             router.route(body, channelId);
         } catch (Exception e) {
@@ -133,8 +164,8 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
         cancelAuthTimeout();
-        if (channelId != null) {
-            ChannelRegistry.INSTANCE.remove(channelId);
+        if (channelId != null && registeredEndpoint != null) {
+            ChannelRegistry.INSTANCE.remove(channelId, registeredEndpoint);
             log.info("Channel closed: channelId={}", channelId);
         }
         ctx.fireChannelInactive();

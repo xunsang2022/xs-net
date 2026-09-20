@@ -1,6 +1,6 @@
 # Game Gateway（网关节点）
 
-Gateway 面向客户端提供 Netty TCP 长连接与 UDP（轻量可靠 UDP）两种入口，负责 JWT 首帧认证、C2S 上行路由和 S2C 下行写回。它不直接访问 Redis 或 PostgreSQL；游戏状态和持久化属于 Logic 节点。
+Gateway 面向客户端提供 TCP、WebSocket、UDP（轻量可靠 UDP）和 KCP 入口，负责 JWT 首帧认证、C2S 上行路由和 S2C 下行写回。它不直接访问 Redis 或 PostgreSQL；游戏状态和持久化属于 Logic 节点。
 
 - 模块：`game-node-gateway`
 - 技术：Java 21、Spring Boot、Netty、Pekko Cluster、Protobuf
@@ -10,7 +10,7 @@ Gateway 面向客户端提供 Netty TCP 长连接与 UDP（轻量可靠 UDP）�
 
 ```mermaid
 flowchart LR
-    Client[客户端] -->|首帧 JWT / C2S| Netty[Netty TCP 8082]
+    Client[客户端] -->|HELLO(JWT) / DATA| Netty[Netty TCP 8082]
     Netty --> Auth[AuthHandler]
     Client -->|HELLO/JWT + DATA| UDP[UdpServer 2002]
     UDP --> UdpAuth[UdpAuthHandler]
@@ -23,7 +23,7 @@ flowchart LR
     Registry -->|ClientEndpoint 写回| Client
 ```
 
-1. 连接建立后，第一个长度前缀帧必须是 UTF-8 JWT；UDP 则先发 `HELLO(JWT)` 数据报，网关校验通过后回 `ACK` 完成握手；
+1. 连接建立后，第一个包必须是 `HELLO`，body 为 UTF-8 JWT；网关校验通过后回 `ACK` 完成握手；
 2. `AuthHandler` / `UdpAuthHandler` 校验 JWT，读取 `cid` 并登记 `channelId → ClientEndpoint`（TCP 为 `TcpClientEndpoint`，UDP 为 `UdpSession`）；
 3. 认证后的 C2S `NetMessage` 按协议号解码，提取 `playerId` 后投递至 Logic 的 `PlayerActor`；
 4. Logic 的 S2C 消息以 `channelId` 路由至 `ChannelActor`，后者从注册表取回 `ClientEndpoint` 并写出（TCP 走帧编码，UDP 走可靠层 DATA 包）。
@@ -32,36 +32,27 @@ flowchart LR
 
 ## 帧协议
 
-### TCP
+### TCP / WebSocket / UDP
 
-Gateway TCP 上下行均使用 4 字节大端长度前缀：
-
-```text
-len (4B BE, 后续消息体长度) | NetMessage protobuf bytes
-                              ├─ rpcNum
-                              └─ data
-```
-
-首帧的消息体为 UTF-8 JWT；之后的消息体才是 `NetMessage`。单帧默认最大 65536 字节。`rpcNum` 位于 Protobuf 信封内，不存在独立的帧级 RPC 头。
-
-### UDP（轻量可靠 UDP）
-
-一个大 datagram 一个包，固定 15 字节头（大端）：
+TCP、WebSocket binary frame 和自研 UDP 共用 XS packet 格式（大端序）：
 
 ```text
-偏移  长度  字段        说明
-0     2    magic      0x58 0x53 ("XS")
-2     1    type       1=DATA 2=ACK 3=HELLO 4=HEARTBEAT 5=ERROR
-3     4    seq        发送方递增序列号（DATA 携带）
-7     4    ack        累积确认：对端已收到的最大连续 seq
-11    4    payloadLen payload 字节数
-15    -    payload    DATA=NetMessage 字节 / HELLO=JWT(UTF-8)
+length(4) | packetId(2) | sendSeq(4) | random(4) | headCRC(2) | bodyCRC(2) | body(N)
+body 长度 | 包类型 | 发送序号 | 逻辑连接随机数 | 头 CRC | body CRC | 包体
 ```
 
-- **握手**：客户端发 `HELLO(JWT)`，网关校验 JWT 后建立会话并回 `ACK`。
-- **可靠传输**：双向对称（`UdpReliableLayer`），DATA 带递增 seq，接收方按序交付并回累积 `ACK`，发送方超时（`retry-interval-ms`）重传在途未确认包；乱序包缓存后补序。
-- **心跳/清理**：客户端周期发 `HEARTBEAT`；网关后台每秒扫描，超过 `session-idle-timeout-seconds` 未活动的会话被清理，防止 UDP 无连接资源泄漏。
-- UDP 会话以远端 `ip:port` 为 key，channelId 从 JWT 提取，单账号并发限制与 TCP 一致。
+`length` 表示 body 长度；`headCRC` 校验前 14 字节，`bodyCRC` 校验 body，均为 CRC-16/CCITT-FALSE。`packetId` 为 `DATA=1`、`ACK=2`、`HELLO=3`、`HEARTBEAT=4`、`ERROR=5`。单包默认最大 65536 字节；`rpcNum` 仍位于 `NetMessage` Protobuf body 内。
+
+- **握手**：客户端发 `HELLO(JWT)`，网关校验 JWT 后建立会话并回 `ACK(sendSeq=0)`。
+- **TCP/WebSocket**：认证后的消息使用 `DATA`，每个连接维护发送序号。
+- **UDP 可靠传输**：`DATA` 带递增 `sendSeq`，接收方按序交付并回累计 `ACK(sendSeq=最高连续序号)`，超时重传在途包；乱序包缓存后补序。
+- **心跳/清理**：客户端周期发 `HEARTBEAT`；网关后台按空闲超时清理 UDP 会话。
+
+### 断线重连
+
+客户端重连时应复用同一个 `random`。网关按 `channelId + random` 识别同一逻辑连接：新连接认证成功后替换旧端点，旧端点关闭不会误删新端点。Unity SDK 默认开启自动重连；TypeScript SDK 可使用 `ReconnectingTransport` 包装 TCP/WebSocket/UDP transport，并配置退避和最大重试次数。
+
+当前实现是连接级重连：已提供稳定 `random`、新连接替换和传输层重试，但尚未实现业务状态快照、`baseSeq`、`resyncQueue` 及断线期间业务事件回放。要实现完整状态恢复，还需要由 Logic/PlayerActor 提供玩家快照和可回放的业务事件日志，再接入 `SNAPSHOT(baseSeq) -> seq+1...` 流程。
 
 ## 目录结构
 

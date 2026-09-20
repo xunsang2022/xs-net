@@ -2,106 +2,108 @@ using System;
 
 namespace Game.Message.Networking
 {
-    /// <summary>
-    /// 帧协议常量与编解码（大端序）。
-    /// <para>UDP 数据报：固定 15 字节头 + payload，一个大 datagram 一个包：</para>
-    /// <code>
-    ///   偏移  长度  字段        说明
-    ///   0     2    magic      0x58 0x53 ("XS")
-    ///   2     1    type       1=DATA 2=ACK 3=HELLO 4=HEARTBEAT 5=ERROR
-    ///   3     4    seq        发送方递增序列号（DATA 携带）
-    ///   7     4    ack        累积确认：对端已收到的最大连续 seq
-    ///   11    4    payloadLen payload 字节数
-    ///   15    -    payload    DATA=NetMessage 字节 / HELLO=JWT(UTF-8)
-    /// </code>
-    /// <para>TCP 帧：4 字节大端长度 + body（body 为 NetMessage 字节）。</para>
-    /// </summary>
+    /// <summary>XS packet codec. All integers are big-endian.</summary>
     public static class Frame
     {
-        // ---- UDP 包类型 ----
         public const byte TypeData = 1;
         public const byte TypeAck = 2;
         public const byte TypeHello = 3;
         public const byte TypeHeartbeat = 4;
         public const byte TypeError = 5;
 
-        // ---- UDP 头偏移 ----
-        public const int OffMagic = 0;
-        public const int OffType = 2;
-        public const int OffSeq = 3;
-        public const int OffAck = 7;
-        public const int OffLen = 11;
-        public const int HeaderLength = 15;
-
-        private const byte Magic0 = 0x58;
-        private const byte Magic1 = 0x53;
-
-        /// <summary>单帧/单包最大长度（与服务端 max-frame-length 对齐）。</summary>
+        public const int OffLength = 0;
+        public const int OffPacketId = 4;
+        public const int OffSendSeq = 6;
+        public const int OffRandom = 10;
+        public const int OffHeadCrc = 14;
+        public const int OffBodyCrc = 16;
+        public const int HeaderLength = 18;
         public const int MaxFrameLength = 65536;
 
-        /// <summary>一个解析后的 UDP 包。</summary>
         public struct Packet
         {
             public byte Type;
             public uint Seq;
-            public uint Ack;
+            public uint Random;
             public byte[] Payload;
+
+            // Compatibility alias for callers that used the old UDP ACK field.
+            public uint Ack { get => Seq; set => Seq = value; }
         }
 
-        /// <summary>构造一个 UDP 数据报字节。</summary>
-        public static byte[] EncodeUdpPacket(byte type, uint seq, uint ack, byte[] payload)
+        public static byte[] EncodeUdpPacket(byte packetId, uint sendSeq, uint random, byte[] body)
         {
-            int len = payload?.Length ?? 0;
-            byte[] buf = new byte[HeaderLength + len];
-            buf[OffMagic] = Magic0;
-            buf[OffMagic + 1] = Magic1;
-            buf[OffType] = type;
-            WriteUInt32BE(buf, OffSeq, seq);
-            WriteUInt32BE(buf, OffAck, ack);
-            WriteUInt32BE(buf, OffLen, (uint)len);
-            if (len > 0)
-            {
-                Array.Copy(payload, 0, buf, HeaderLength, len);
-            }
-            return buf;
+            return EncodePacket(packetId, sendSeq, random, body);
         }
 
-        /// <summary>解析 UDP 数据报，非法返回 false。</summary>
+        public static byte[] EncodeTcpFrame(byte[] body)
+        {
+            return EncodePacket(TypeData, 0, 0, body);
+        }
+
+        public static byte[] EncodePacket(byte packetId, uint sendSeq, uint random, byte[] body)
+        {
+            body ??= Array.Empty<byte>();
+            if (body.Length > MaxFrameLength - HeaderLength)
+            {
+                throw new ArgumentException("Packet body is too large: " + body.Length);
+            }
+            byte[] result = new byte[HeaderLength + body.Length];
+            WriteUInt32BE(result, OffLength, (uint)body.Length);
+            WriteUInt16BE(result, OffPacketId, packetId);
+            WriteUInt32BE(result, OffSendSeq, sendSeq);
+            WriteUInt32BE(result, OffRandom, random);
+            WriteUInt16BE(result, OffHeadCrc, Crc16(result, 0, OffHeadCrc));
+            WriteUInt16BE(result, OffBodyCrc, Crc16(body, 0, body.Length));
+            if (body.Length > 0) Array.Copy(body, 0, result, HeaderLength, body.Length);
+            return result;
+        }
+
         public static bool TryDecodeUdpPacket(byte[] data, out Packet packet)
         {
+            return TryDecodePacket(data, out packet);
+        }
+
+        public static bool TryDecodePacket(byte[] data, out Packet packet)
+        {
             packet = default;
-            if (data == null || data.Length < HeaderLength)
-            {
-                return false;
-            }
-            if (data[OffMagic] != Magic0 || data[OffMagic + 1] != Magic1)
-            {
-                return false;
-            }
-            packet.Type = data[OffType];
-            packet.Seq = ReadUInt32BE(data, OffSeq);
-            packet.Ack = ReadUInt32BE(data, OffAck);
-            uint len = ReadUInt32BE(data, OffLen);
-            if (len > MaxFrameLength - HeaderLength || data.Length < HeaderLength + (int)len)
-            {
-                return false;
-            }
-            packet.Payload = new byte[len];
-            Array.Copy(data, HeaderLength, packet.Payload, 0, (int)len);
+            if (data == null || data.Length < HeaderLength) return false;
+            uint length = ReadUInt32BE(data, OffLength);
+            if (length > MaxFrameLength - HeaderLength || data.Length != HeaderLength + (int)length) return false;
+            if (ReadUInt16BE(data, OffHeadCrc) != Crc16(data, 0, OffHeadCrc)) return false;
+            if (ReadUInt16BE(data, OffBodyCrc) != Crc16(data, HeaderLength, (int)length)) return false;
+            packet.Type = (byte)ReadUInt16BE(data, OffPacketId);
+            packet.Seq = ReadUInt32BE(data, OffSendSeq);
+            packet.Random = ReadUInt32BE(data, OffRandom);
+            packet.Payload = new byte[length];
+            if (length > 0) Array.Copy(data, HeaderLength, packet.Payload, 0, (int)length);
             return true;
         }
 
-        /// <summary>TCP 帧：4 字节大端长度 + body。</summary>
-        public static byte[] EncodeTcpFrame(byte[] body)
+        public static ushort Crc16(byte[] data, int offset, int length)
         {
-            if (body == null || body.Length == 0 || body.Length > MaxFrameLength)
+            int crc = 0xffff;
+            for (int index = offset; index < offset + length; index++)
             {
-                throw new ArgumentException("Invalid frame body length: " + (body?.Length ?? 0));
+                crc ^= (data[index] & 0xff) << 8;
+                for (int bit = 0; bit < 8; bit++)
+                {
+                    crc = (crc & 0x8000) != 0 ? (crc << 1) ^ 0x1021 : crc << 1;
+                    crc &= 0xffff;
+                }
             }
-            byte[] buf = new byte[4 + body.Length];
-            WriteUInt32BE(buf, 0, (uint)body.Length);
-            Array.Copy(body, 0, buf, 4, body.Length);
-            return buf;
+            return (ushort)crc;
+        }
+
+        public static ushort ReadUInt16BE(byte[] buf, int offset)
+        {
+            return (ushort)((buf[offset] << 8) | buf[offset + 1]);
+        }
+
+        public static void WriteUInt16BE(byte[] buf, int offset, ushort value)
+        {
+            buf[offset] = (byte)(value >> 8);
+            buf[offset + 1] = (byte)value;
         }
 
         public static uint ReadUInt32BE(byte[] buf, int offset)

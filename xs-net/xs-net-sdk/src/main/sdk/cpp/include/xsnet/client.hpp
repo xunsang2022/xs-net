@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -58,13 +59,18 @@ public:
 
 private:
     void read_loop();
-    void write_frame(const std::vector<std::uint8_t>& body);
+    void write_packet(const std::vector<std::uint8_t>& packet);
 
     NetworkConfig config_;
     asio::io_context context_;
     asio::ip::tcp::socket socket_{context_};
     std::thread reader_;
     std::atomic_bool running_{false};
+    std::atomic_bool handshaken_{false};
+    std::uint32_t connection_random_{0};
+    std::uint32_t send_sequence_{1};
+    std::condition_variable handshake_cv_;
+    mutable std::mutex state_mutex_;
     mutable std::mutex write_mutex_;
 };
 
@@ -90,6 +96,7 @@ private:
     std::thread maintenance_;
     std::atomic_bool running_{false};
     std::atomic_bool handshaken_{false};
+    std::uint32_t connection_random_{0};
     mutable std::mutex socket_mutex_;
 };
 

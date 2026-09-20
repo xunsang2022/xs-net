@@ -2,9 +2,12 @@ package com.game.gateway.netty;
 
 import com.game.comment.util.JwtUtil;
 import com.game.gateway.config.NettyConfig;
+import com.xs.net.transport.PacketFrame;
+import com.xs.net.transport.PacketId;
 import io.jsonwebtoken.Claims;
 import io.micrometer.core.instrument.Metrics;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.EventLoop;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -30,6 +33,8 @@ final class WebSocketGameHandler extends SimpleChannelInboundHandler<BinaryWebSo
     private final GatewayMessageRouter router = new GatewayMessageRouter();
     private boolean authenticated;
     private String channelId;
+    private ClientEndpoint registeredEndpoint;
+    private long connectionRandom;
     private ScheduledFuture<?> authTimeoutTask;
 
     WebSocketGameHandler(JwtUtil jwtUtil, NettyConfig config) {
@@ -57,12 +62,34 @@ final class WebSocketGameHandler extends SimpleChannelInboundHandler<BinaryWebSo
         byte[] bytes = new byte[content.readableBytes()];
         content.getBytes(content.readerIndex(), bytes);
         if (!authenticated) {
-            authenticate(ctx, bytes);
+            PacketFrame packet;
+            try {
+                packet = NettyFramer.decode(Unpooled.wrappedBuffer(bytes));
+            } catch (IllegalArgumentException exception) {
+                ctx.close();
+                return;
+            }
+            if (packet.packetId() != PacketId.HELLO) {
+                ctx.close();
+                return;
+            }
+            authenticate(ctx, packet);
             return;
         }
         try {
+            PacketFrame packet = NettyFramer.decode(Unpooled.wrappedBuffer(bytes));
+            if (packet.random() != connectionRandom) {
+                ctx.close();
+                return;
+            }
+            if (packet.packetId() == PacketId.HEARTBEAT || packet.packetId() == PacketId.DATA) {
+                ctx.writeAndFlush(new BinaryWebSocketFrame(NettyFramer.encodeAck(connectionRandom, packet.sendSeq())));
+            }
+            if (packet.packetId() != PacketId.DATA) {
+                return;
+            }
             Metrics.counter(METRIC_C2S_MESSAGES).increment();
-            router.route(bytes, channelId);
+            router.route(packet.body(), channelId);
         } catch (Exception exception) {
             log.error("Failed to handle WebSocket game message, closing: channelId={}", channelId, exception);
             ctx.close();
@@ -81,15 +108,15 @@ final class WebSocketGameHandler extends SimpleChannelInboundHandler<BinaryWebSo
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
         cancelAuthTimeout();
-        if (channelId != null) {
-            ChannelRegistry.INSTANCE.remove(channelId);
+        if (channelId != null && registeredEndpoint != null) {
+            ChannelRegistry.INSTANCE.remove(channelId, registeredEndpoint);
         }
         ctx.fireChannelInactive();
     }
 
-    private void authenticate(ChannelHandlerContext ctx, byte[] tokenBytes) {
+    private void authenticate(ChannelHandlerContext ctx, PacketFrame packet) {
         try {
-            Claims claims = jwtUtil.validateToken(new String(tokenBytes, StandardCharsets.UTF_8));
+            Claims claims = jwtUtil.validateToken(new String(packet.body(), StandardCharsets.UTF_8));
             if (claims == null) {
                 Metrics.counter(METRIC_AUTH_FAILURE).increment();
                 ctx.close();
@@ -101,15 +128,23 @@ final class WebSocketGameHandler extends SimpleChannelInboundHandler<BinaryWebSo
                 ctx.close();
                 return;
             }
-            if (config.getMaxConnectionsPerAccount() > 0 && ChannelRegistry.INSTANCE.isActive(resolvedChannelId)) {
-                Metrics.counter(METRIC_CONN_REJECTED).increment();
-                ctx.close();
-                return;
+            connectionRandom = packet.random();
+            ClientEndpoint existing = ChannelRegistry.INSTANCE.get(resolvedChannelId);
+            if (config.getMaxConnectionsPerAccount() > 0 && existing != null && existing.isActive()) {
+                if (existing.connectionRandom() != connectionRandom) {
+                    Metrics.counter(METRIC_CONN_REJECTED).increment();
+                    ctx.close();
+                    return;
+                }
+                ChannelRegistry.INSTANCE.remove(resolvedChannelId, existing);
+                existing.close();
             }
             channelId = resolvedChannelId;
-            ChannelRegistry.INSTANCE.register(channelId, new WebSocketClientEndpoint(ctx.channel()));
+            registeredEndpoint = new WebSocketClientEndpoint(ctx.channel(), connectionRandom);
+            ChannelRegistry.INSTANCE.register(channelId, registeredEndpoint);
             authenticated = true;
             cancelAuthTimeout();
+            ctx.writeAndFlush(new BinaryWebSocketFrame(NettyFramer.encodeAck(connectionRandom, 0)));
             Metrics.counter(METRIC_AUTH_SUCCESS).increment();
             log.info("WebSocket channel authenticated: channelId={}", channelId);
         } catch (Exception exception) {

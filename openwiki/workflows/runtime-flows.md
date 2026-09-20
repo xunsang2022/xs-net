@@ -63,24 +63,24 @@ NodeActor.init
 
 ## 客户端接入与认证
 
-四类入口共享同一模型：**首帧 JWT → 绑定 `channelId` → 后续帧为 `NetMessage`**。认证前 `auth-timeout-seconds`（默认 10 秒）到期即断开；认证通过后触发 `max-connections-per-account` 检查。
+TCP、WebSocket 和自研 UDP 共享同一模型：**首个 `HELLO(JWT)` 包 → 绑定 `channelId` → 后续 `DATA` 包承载 `NetMessage`**；KCP 使用独立的 KCP 应用层握手。认证前 `auth-timeout-seconds`（默认 10 秒）到期即断开；认证通过后触发 `max-connections-per-account` 检查。
 
 ### TCP（8082）
 
 ```text
 连接建立
-  -> LengthFieldBasedFrameDecoder(maxFrameLength=65536, offset=0, length=4, strip=4)
+  -> LengthFieldBasedFrameDecoder(maxFrameLength=65536, offset=0, length=4, strip=0)
   -> IdleStateHandler(readerIdle=300s)
   -> AuthHandler（挂 business 线程池）
 
-首帧：body = UTF-8 JWT
+首帧：XS packet(packetId=HELLO)，body = UTF-8 JWT
   -> jwtUtil.validateToken -> Claims
   -> channelId = claims.cid，缺失即失败
   -> max-connections-per-account 检查（ChannelRegistry.isActive）
   -> ChannelRegistry.register(channelId, TcpClientEndpoint)
   -> gateway.auth.success / gateway.auth.failure / gateway.connection.rejected
 
-后续帧：body = NetMessage 字节 -> GatewayMessageRouter.route(body, channelId)
+后续帧：XS packet(packetId=DATA)，body = NetMessage 字节 -> GatewayMessageRouter.route(body, channelId)
 ```
 
 注意：由于拆帧在 `AuthHandler` 之前，**JWT 帧同样带 4 字节大端长度前缀**。这一点在 README 的文字描述里没有展开，但实现与 SDK（TypeScript `encodeTcpFrame`）都是如此。
@@ -89,7 +89,7 @@ NodeActor.init
 
 ### WebSocket（8083，路径 `/game`）
 
-与 TCP 等价，只是帧类型为 `BinaryWebSocketFrame`，首个 binary frame 承载 JWT。使用独立的端口、线程组与 `WebSocketConfig`，指标前缀为 `gateway.websocket.*`。
+与 TCP 等价，只是帧类型为 `BinaryWebSocketFrame`，首个 binary frame 承载 `HELLO(JWT)` XS packet。使用独立的端口、线程组与 `WebSocketConfig`，指标前缀为 `gateway.websocket.*`。
 
 ### UDP（2002）
 
@@ -101,25 +101,19 @@ DatagramPacket
        其他        -> sessions.get(sender) -> synchronized(session) { session.receive(bytes) }
 ```
 
-每个会话串行、不同会话并行；后台调度线程每秒执行 `retryAndCleanup`（未确认包重传 + 空闲/认证超时清理）。指标前缀 `gateway.udp.*`。
+每个会话串行、不同会话并行；后台调度线程每秒执行 `retryAndCleanup`（未确认包重传 + 空闲/认证超时清理）。指标前缀 `gateway.udp.*`。TCP、WebSocket 和自研 UDP 的应用包均为 `length(4) | packetId(2) | sendSeq(4) | random(4) | headCRC(2) | bodyCRC(2) | body(N)`。
 
 ### KCP（2003）
 
 `KcpAuthHandler` 与 `KcpServer` 用同一套结构承载标准 KCP：握手阶段校验 JWT，之后由后台调度线程周期驱动 `Kcp.update()` 与超时清理。窗口与节拍由 `game.kcp.window` / `game.kcp.retry-interval-ms` 控制。
 
-### UDP 可靠层线格式
+### XS packet 与 UDP 可靠层
 
 ```text
-偏移  长度  字段        说明
-0     2     magic       0x58 0x53 ("XS")
-2     1     type        1=DATA 2=ACK 3=HELLO 4=HEARTBEAT 5=ERROR
-3     4     seq         发送方递增序列号
-7     4     ack         累积确认（对端已收到的最大连续 seq）
-11    4     payloadLen  payload 字节数
-15    -     payload     DATA=NetMessage 字节 / HELLO=JWT
+length(4) | packetId(2) | sendSeq(4) | random(4) | headCRC(2) | bodyCRC(2) | body(N)
 ```
 
-发送方向维护在途窗口并超时重传；接收方向用 `ConcurrentSkipListMap` 做重排序后按序交付。
+`length` 是 body 长度；两个 CRC 均为 CRC-16/CCITT-FALSE。发送方向维护在途窗口并超时重传；接收方向用 `ConcurrentSkipListMap` 做重排序后按序交付。`random` 在自动重连期间保持不变，用于识别同一逻辑会话。
 
 ## C2S 上行路由
 

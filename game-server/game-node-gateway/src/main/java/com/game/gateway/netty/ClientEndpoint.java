@@ -22,6 +22,11 @@ public interface ClientEndpoint extends TransportSession {
     @Override
     boolean isActive();
 
+    /** Stable logical connection random used to recognize an automatic reconnect. */
+    default long connectionRandom() {
+        return 0;
+    }
+
     /**
      * 关闭底层连接/会话并清理资源。
      */

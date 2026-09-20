@@ -21,11 +21,15 @@ namespace Game.Message.Networking
         private volatile bool _handshaken;
         private Timer _retryTimer;
         private Timer _heartbeatTimer;
+        private readonly uint _connectionRandom;
 
         public UdpConnection(NetworkConfig config, MessageDispatcher dispatcher)
             : base(config, dispatcher)
         {
-            _reliable = new ReliableUdp(config.WindowSize)
+            _connectionRandom = config.ConnectionRandom != 0
+                ? config.ConnectionRandom
+                : (uint)Random.Shared.NextInt64(1, uint.MaxValue);
+            _reliable = new ReliableUdp(config.WindowSize, _connectionRandom)
             {
                 SendAction = SendDatagram,
                 OnDeliver = OnDeliverPayload
@@ -41,13 +45,18 @@ namespace Game.Message.Networking
             _client = client;
             _running = true;
             _handshaken = false;
+            _reliable = new ReliableUdp(Config.WindowSize, _connectionRandom)
+            {
+                SendAction = SendDatagram,
+                OnDeliver = OnDeliverPayload
+            };
 
             _receiveThread = new Thread(ReceiveLoop) { IsBackground = true };
             _receiveThread.Start();
 
             // 握手：发 HELLO(JWT)
             byte[] token = Encoding.UTF8.GetBytes(jwt ?? string.Empty);
-            byte[] hello = Frame.EncodeUdpPacket(Frame.TypeHello, 0, 0, token);
+            byte[] hello = Frame.EncodeUdpPacket(Frame.TypeHello, 0, _connectionRandom, token);
             client.Send(hello, hello.Length);
 
             _retryTimer = new Timer(_ => _reliable.RetryOutstanding(), null,
@@ -97,7 +106,7 @@ namespace Game.Message.Networking
         {
             if (_running)
             {
-                SendDatagram(Frame.EncodeUdpPacket(Frame.TypeHeartbeat, 0, _reliable.Contiguous, null));
+                SendDatagram(Frame.EncodeUdpPacket(Frame.TypeHeartbeat, _reliable.Contiguous, _connectionRandom, null));
             }
         }
 
@@ -120,13 +129,14 @@ namespace Game.Message.Networking
                     if (!_handshaken)
                     {
                         // 未认证：仅接受 ACK 作为握手完成信号
-                        if (packet.Type == Frame.TypeAck)
+                        if (packet.Type == Frame.TypeAck && packet.Random == _connectionRandom)
                         {
                             _handshaken = true;
                             RaiseConnected();
                         }
                         continue;
                     }
+                    if (packet.Random != _connectionRandom) continue;
                     if (packet.Type == Frame.TypeData || packet.Type == Frame.TypeAck)
                     {
                         _reliable.OnPacket(packet);

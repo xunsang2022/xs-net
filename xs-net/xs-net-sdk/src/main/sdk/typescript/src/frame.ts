@@ -1,5 +1,5 @@
 export const MAX_FRAME_LENGTH = 65536;
-export const UDP_HEADER_LENGTH = 15;
+export const PACKET_HEADER_LENGTH = 18;
 
 export const FrameType = {
   Data: 1,
@@ -11,57 +11,86 @@ export const FrameType = {
 
 export type FrameTypeValue = (typeof FrameType)[keyof typeof FrameType];
 
-export interface UdpPacket {
-  type: number;
-  seq: number;
-  ack: number;
-  payload: Uint8Array;
+export interface Packet {
+  packetId: number;
+  sendSeq: number;
+  random: number;
+  body: Uint8Array;
 }
 
-export function encodeTcpFrame(body: Uint8Array): Uint8Array {
-  if (body.length === 0 || body.length > MAX_FRAME_LENGTH) {
-    throw new RangeError(`Invalid TCP frame body length: ${body.length}`);
-  }
-  const result = new Uint8Array(body.length + 4);
-  new DataView(result.buffer).setUint32(0, body.length);
-  result.set(body, 4);
-  return result;
+export type UdpPacket = Packet;
+
+export function randomUint32(): number {
+  return Math.floor(Math.random() * 0x100000000) >>> 0;
 }
 
-export function tryReadTcpFrame(buffer: Uint8Array): { body: Uint8Array; rest: Uint8Array } | undefined {
+export function encodeTcpFrame(body: Uint8Array, packetId = FrameType.Data, sendSeq = 0, random = 0): Uint8Array {
+  return encodePacket(packetId, sendSeq, random, body);
+}
+
+export function tryReadTcpFrame(buffer: Uint8Array): { packet: Packet; body: Uint8Array; rest: Uint8Array } | undefined {
   if (buffer.length < 4) return undefined;
-  const length = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength).getUint32(0);
-  if (length === 0 || length > MAX_FRAME_LENGTH) throw new RangeError(`Invalid TCP frame length: ${length}`);
-  if (buffer.length < 4 + length) return undefined;
-  return { body: buffer.slice(4, 4 + length), rest: buffer.slice(4 + length) };
+  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  const length = view.getUint32(0);
+  if (length > MAX_FRAME_LENGTH - PACKET_HEADER_LENGTH) throw new RangeError(`Invalid TCP frame length: ${length}`);
+  const frameLength = PACKET_HEADER_LENGTH + length;
+  if (buffer.length < frameLength) return undefined;
+  const frame = decodePacket(buffer.slice(0, frameLength));
+  return { packet: frame, body: frame.body, rest: buffer.slice(frameLength) };
 }
 
-export function encodeUdpPacket(type: number, seq: number, ack: number, payload?: Uint8Array): Uint8Array {
-  const body = payload ?? new Uint8Array(0);
-  if (body.length > MAX_FRAME_LENGTH - UDP_HEADER_LENGTH) throw new RangeError("UDP payload is too large");
-  const result = new Uint8Array(UDP_HEADER_LENGTH + body.length);
-  result[0] = 0x58;
-  result[1] = 0x53;
-  result[2] = type;
+export function encodeUdpPacket(packetId: number, sendSeq: number, random: number, body?: Uint8Array): Uint8Array {
+  return encodePacket(packetId, sendSeq, random, body ?? new Uint8Array(0));
+}
+
+export function decodeUdpPacket(data: Uint8Array): Packet | undefined {
+  try {
+    return decodePacket(data);
+  } catch {
+    return undefined;
+  }
+}
+
+export function encodePacket(packetId: number, sendSeq: number, random: number, body: Uint8Array): Uint8Array {
+  if (body.length > MAX_FRAME_LENGTH - PACKET_HEADER_LENGTH) throw new RangeError("Packet body is too large");
+  const result = new Uint8Array(PACKET_HEADER_LENGTH + body.length);
   const view = new DataView(result.buffer);
-  view.setUint32(3, seq >>> 0);
-  view.setUint32(7, ack >>> 0);
-  view.setUint32(11, body.length);
-  result.set(body, UDP_HEADER_LENGTH);
+  view.setUint32(0, body.length);
+  view.setUint16(4, packetId & 0xffff);
+  view.setUint32(6, sendSeq >>> 0);
+  view.setUint32(10, random >>> 0);
+  view.setUint16(14, crc16(result, 0, 14));
+  view.setUint16(16, crc16(body, 0, body.length));
+  result.set(body, PACKET_HEADER_LENGTH);
   return result;
 }
 
-export function decodeUdpPacket(data: Uint8Array): UdpPacket | undefined {
-  if (data.length < UDP_HEADER_LENGTH || data[0] !== 0x58 || data[1] !== 0x53) return undefined;
+export function decodePacket(data: Uint8Array): Packet {
+  if (data.length < PACKET_HEADER_LENGTH) throw new RangeError("Packet is shorter than the XS header");
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  const length = view.getUint32(11);
-  if (length > MAX_FRAME_LENGTH - UDP_HEADER_LENGTH || data.length < UDP_HEADER_LENGTH + length) return undefined;
+  const length = view.getUint32(0);
+  if (length > MAX_FRAME_LENGTH - PACKET_HEADER_LENGTH || data.length !== PACKET_HEADER_LENGTH + length) {
+    throw new RangeError("Packet length mismatch");
+  }
+  if (view.getUint16(14) !== crc16(data, 0, 14)) throw new RangeError("Invalid packet header CRC");
+  if (view.getUint16(16) !== crc16(data, PACKET_HEADER_LENGTH, length)) {
+    throw new RangeError("Invalid packet body CRC");
+  }
   return {
-    type: data[2] ?? 0,
-    seq: view.getUint32(3),
-    ack: view.getUint32(7),
-    payload: data.slice(UDP_HEADER_LENGTH, UDP_HEADER_LENGTH + length)
+    packetId: view.getUint16(4),
+    sendSeq: view.getUint32(6),
+    random: view.getUint32(10),
+    body: data.slice(PACKET_HEADER_LENGTH)
   };
+}
+
+export function crc16(data: Uint8Array, offset: number, length: number): number {
+  let crc = 0xffff;
+  for (let index = offset; index < offset + length; index++) {
+    crc ^= (data[index] ?? 0) << 8;
+    for (let bit = 0; bit < 8; bit++) crc = ((crc & 0x8000) !== 0 ? (crc << 1) ^ 0x1021 : crc << 1) & 0xffff;
+  }
+  return crc;
 }
 
 export function concatBytes(...parts: Uint8Array[]): Uint8Array {

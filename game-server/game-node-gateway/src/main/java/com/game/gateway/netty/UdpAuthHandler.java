@@ -61,8 +61,8 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
         if (p == null) {
             return;
         }
-        if (p.type() == UdpReliableLayer.TYPE_HELLO) {
-            authenticate(channel, sender, p.payload());
+            if (p.type() == UdpReliableLayer.TYPE_HELLO) {
+            authenticate(channel, sender, p.payload(), p.random());
             return;
         }
         UdpSession session = sessions.get(sender);
@@ -74,7 +74,7 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
         }
     }
 
-    private void authenticate(DatagramChannel channel, InetSocketAddress sender, byte[] tokenBytes) {
+    private void authenticate(DatagramChannel channel, InetSocketAddress sender, byte[] tokenBytes, long connectionRandom) {
         try {
             String token = new String(tokenBytes, StandardCharsets.UTF_8);
             Claims claims = jwtUtil.validateToken(token);
@@ -87,22 +87,27 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
                 Metrics.counter(METRIC_AUTH_FAILURE).increment();
                 return;
             }
-            if (config.getMaxConnectionsPerAccount() > 0
-                    && ChannelRegistry.INSTANCE.isActive(channelId)) {
-                Metrics.counter(METRIC_AUTH_FAILURE).increment();
-                return;
+            ClientEndpoint existing = ChannelRegistry.INSTANCE.get(channelId);
+            if (config.getMaxConnectionsPerAccount() > 0 && existing != null && existing.isActive()) {
+                if (existing.connectionRandom() != connectionRandom) {
+                    Metrics.counter(METRIC_AUTH_FAILURE).increment();
+                    return;
+                }
+                ChannelRegistry.INSTANCE.remove(channelId, existing);
+                existing.close();
             }
             UdpSession session = new UdpSession(
                     channelId,
                     sender,
                     channel,
                     config,
+                    connectionRandom,
                     body -> handleGameMessage(channelId, body));
             sessions.put(sender, session);
             ChannelRegistry.INSTANCE.register(channelId, session);
             // 回 ACK 确认握手完成
             channel.writeAndFlush(new DatagramPacket(
-                    UdpReliableLayer.encode(UdpReliableLayer.TYPE_ACK, 0, 0, null), sender));
+                    UdpReliableLayer.encode(UdpReliableLayer.TYPE_ACK, 0, connectionRandom, null), sender));
             Metrics.counter(METRIC_AUTH_SUCCESS).increment();
             log.debug("UDP session authenticated: channelId={}, remote={}", channelId, sender);
         } catch (Exception e) {
@@ -130,7 +135,7 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
             synchronized (session) {
                 session.retryOutstanding();
                 if (now - session.lastActiveMs() > config.getSessionIdleTimeoutSeconds() * 1000L) {
-                    ChannelRegistry.INSTANCE.remove(session.channelId());
+                    ChannelRegistry.INSTANCE.remove(session.channelId(), session);
                     sessions.remove(entry.getKey(), session);
                     log.info("UDP session idle timeout, removed: channelId={}, remote={}",
                             session.channelId(), entry.getKey());

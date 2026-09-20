@@ -20,7 +20,7 @@ public class FrameTests
         Assert.True(Frame.TryDecodeUdpPacket(datagram, out var packet));
         Assert.Equal(Frame.TypeData, packet.Type);
         Assert.Equal(42u, packet.Seq);
-        Assert.Equal(7u, packet.Ack);
+        Assert.Equal(7u, packet.Random);
         Assert.Equal(payload, packet.Payload);
         Assert.Equal(Frame.HeaderLength + payload.Length, datagram.Length);
     }
@@ -28,7 +28,7 @@ public class FrameTests
     [Fact]
     public void UdpPacket_EmptyPayload_IsValid()
     {
-        byte[] datagram = Frame.EncodeUdpPacket(Frame.TypeAck, 0, 9, null);
+        byte[] datagram = Frame.EncodeUdpPacket(Frame.TypeAck, 9, 7, null);
         Assert.Equal(Frame.HeaderLength, datagram.Length);
         Assert.True(Frame.TryDecodeUdpPacket(datagram, out var packet));
         Assert.Equal(Frame.TypeAck, packet.Type);
@@ -36,10 +36,10 @@ public class FrameTests
     }
 
     [Fact]
-    public void UdpPacket_BadMagic_IsRejected()
+    public void UdpPacket_BadHeaderCrc_IsRejected()
     {
         byte[] datagram = Frame.EncodeUdpPacket(Frame.TypeData, 1, 0, null);
-        datagram[0] = 0x00; // 破坏 magic
+        datagram[6] ^= 0x01; // 破坏 sendSeq，但不更新 headCRC
         Assert.False(Frame.TryDecodeUdpPacket(datagram, out _));
     }
 
@@ -55,12 +55,12 @@ public class FrameTests
         var body = new byte[] { 0x01, 0x02, 0x03 };
         byte[] frame = Frame.EncodeTcpFrame(body);
 
-        Assert.Equal(7, frame.Length);
+        Assert.Equal(21, frame.Length);
         Assert.Equal(0, frame[0]); // 大端：最高字节在最前
         Assert.Equal(0, frame[1]);
         Assert.Equal(0, frame[2]);
         Assert.Equal(3, frame[3]);
-        Assert.Equal(body, new ArraySegment<byte>(frame, 4, 3));
+        Assert.Equal(body, new ArraySegment<byte>(frame, Frame.HeaderLength, 3));
     }
 }
 

@@ -79,17 +79,32 @@ void TcpConnection::connect(const std::string& jwt) {
     asio::ip::tcp::resolver resolver(context_);
     auto endpoints = resolver.resolve(config_.host, std::to_string(config_.tcp_port));
     asio::connect(socket_, endpoints);
-    write_frame(std::vector<std::uint8_t>(jwt.begin(), jwt.end()));
+    if (connection_random_ == 0) connection_random_ = now_ms();
+    handshaken_ = false;
+    write_packet(encode_packet(UdpFrameType::hello, 0, connection_random_,
+                               std::vector<std::uint8_t>(jwt.begin(), jwt.end())));
     running_ = true;
     reader_ = std::thread(&TcpConnection::read_loop, this);
+    std::unique_lock lock(state_mutex_);
+    if (!handshake_cv_.wait_for(lock, std::chrono::seconds(10), [this] {
+            return handshaken_.load() || !running_.load();
+        }) || !handshaken_) {
+        lock.unlock();
+        close();
+        throw std::runtime_error("TCP handshake timeout");
+    }
 }
 
 void TcpConnection::send(std::int32_t rpc_number, const std::vector<std::uint8_t>& payload) {
-    write_frame(encode_message(rpc_number, payload));
+    if (!connected()) throw std::logic_error("TCP connection is not authenticated");
+    write_packet(encode_packet(UdpFrameType::data, send_sequence_++, connection_random_,
+                               encode_message(rpc_number, payload)));
 }
 
 void TcpConnection::close() {
     const bool was_running = running_.exchange(false);
+    handshaken_ = false;
+    handshake_cv_.notify_all();
     asio::error_code ignored;
     socket_.shutdown(asio::ip::tcp::socket::shutdown_both, ignored);
     socket_.close(ignored);
@@ -102,21 +117,34 @@ void TcpConnection::close() {
 }
 
 bool TcpConnection::connected() const {
-    return running_ && socket_.is_open();
+    return running_ && handshaken_ && socket_.is_open();
 }
 
 void TcpConnection::read_loop() {
     try {
         while (running_) {
-            std::array<std::uint8_t, 4> header{};
+            std::array<std::uint8_t, kPacketHeaderLength> header{};
             asio::read(socket_, asio::buffer(header));
             const auto length = read_u32_be(header.data());
-            if (length == 0 || length > kMaxFrameLength) {
+            if (length > kMaxFrameLength - kPacketHeaderLength) {
                 throw std::runtime_error("received invalid TCP frame length");
             }
             std::vector<std::uint8_t> body(length);
             asio::read(socket_, asio::buffer(body));
-            deliver(body);
+            std::vector<std::uint8_t> packet(kPacketHeaderLength + body.size());
+            std::copy(header.begin(), header.end(), packet.begin());
+            std::copy(body.begin(), body.end(), packet.begin() + kPacketHeaderLength);
+            UdpPacket decoded{};
+            if (!decode_packet(packet.data(), packet.size(), decoded) || decoded.random != connection_random_) {
+                throw std::runtime_error("received invalid XS packet");
+            }
+            if (decoded.type == UdpFrameType::ack && !handshaken_) {
+                handshaken_ = true;
+                handshake_cv_.notify_all();
+            } else if (decoded.type == UdpFrameType::data) {
+                write_packet(encode_packet(UdpFrameType::ack, decoded.sequence, connection_random_));
+                deliver(decoded.payload);
+            }
         }
     } catch (const std::exception& exception) {
         if (running_) {
@@ -124,10 +152,11 @@ void TcpConnection::read_loop() {
         }
     }
     running_ = false;
+    handshaken_ = false;
+    handshake_cv_.notify_all();
 }
 
-void TcpConnection::write_frame(const std::vector<std::uint8_t>& body) {
-    const auto frame = encode_tcp_frame(body);
+void TcpConnection::write_packet(const std::vector<std::uint8_t>& frame) {
     std::lock_guard lock(write_mutex_);
     asio::write(socket_, asio::buffer(frame));
 }
@@ -148,13 +177,15 @@ void UdpConnection::connect(const std::string& jwt) {
     socket_.connect(endpoint.endpoint());
     running_ = true;
     handshaken_ = false;
+    if (connection_random_ == 0) connection_random_ = now_ms();
     reliable_ = std::make_unique<ReliableUdp>(
         [this](const auto& datagram) { send_datagram(datagram); },
         [this](const auto& body) { deliver(body); },
-        config_.udp_window_size);
+        config_.udp_window_size, connection_random_);
     receiver_ = std::thread(&UdpConnection::receive_loop, this);
     maintenance_ = std::thread(&UdpConnection::maintenance_loop, this);
-    send_datagram(encode_udp_packet(UdpFrameType::hello, 0, 0, std::vector<std::uint8_t>(jwt.begin(), jwt.end())));
+    send_datagram(encode_udp_packet(UdpFrameType::hello, 0, connection_random_,
+                                    std::vector<std::uint8_t>(jwt.begin(), jwt.end())));
 }
 
 void UdpConnection::send(std::int32_t rpc_number, const std::vector<std::uint8_t>& payload) {
@@ -191,11 +222,11 @@ void UdpConnection::receive_loop() {
             if (!decode_udp_packet(buffer.data(), size, packet)) {
                 continue;
             }
-            if (!handshaken_ && packet.type == UdpFrameType::ack) {
+            if (!handshaken_ && packet.type == UdpFrameType::ack && packet.random == connection_random_) {
                 handshaken_ = true;
                 continue;
             }
-            if (handshaken_ && reliable_) {
+            if (handshaken_ && reliable_ && packet.random == connection_random_) {
                 reliable_->receive(packet);
             }
         } catch (const std::exception& exception) {
@@ -219,7 +250,9 @@ void UdpConnection::maintenance_loop() {
             next_retry = now + config_.retry_interval;
         }
         if (handshaken_ && now >= next_heartbeat) {
-            send_datagram(encode_udp_packet(UdpFrameType::heartbeat, 0, reliable_ ? reliable_->contiguous_ack() : 0));
+            send_datagram(encode_udp_packet(UdpFrameType::heartbeat,
+                                            reliable_ ? reliable_->contiguous_ack() : 0,
+                                            connection_random_));
             next_heartbeat = now + config_.heartbeat_interval;
         }
     }

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
@@ -10,9 +9,9 @@
 namespace xsnet {
 
 constexpr std::size_t kMaxFrameLength = 65536;
-constexpr std::size_t kUdpHeaderLength = 15;
+constexpr std::size_t kPacketHeaderLength = 18;
 
-enum class UdpFrameType : std::uint8_t {
+enum class UdpFrameType : std::uint16_t {
     data = 1,
     ack = 2,
     hello = 3,
@@ -23,9 +22,18 @@ enum class UdpFrameType : std::uint8_t {
 struct UdpPacket {
     UdpFrameType type;
     std::uint32_t sequence;
-    std::uint32_t acknowledgement;
+    std::uint32_t random;
     std::vector<std::uint8_t> payload;
 };
+
+inline void write_u16_be(std::uint8_t* target, std::uint16_t value) {
+    target[0] = static_cast<std::uint8_t>(value >> 8U);
+    target[1] = static_cast<std::uint8_t>(value);
+}
+
+inline std::uint16_t read_u16_be(const std::uint8_t* source) {
+    return static_cast<std::uint16_t>((static_cast<std::uint16_t>(source[0]) << 8U) | source[1]);
+}
 
 inline void write_u32_be(std::uint8_t* target, std::uint32_t value) {
     target[0] = static_cast<std::uint8_t>(value >> 24U);
@@ -41,48 +49,64 @@ inline std::uint32_t read_u32_be(const std::uint8_t* source) {
         | static_cast<std::uint32_t>(source[3]);
 }
 
-inline std::vector<std::uint8_t> encode_tcp_frame(const std::vector<std::uint8_t>& body) {
-    if (body.empty() || body.size() > kMaxFrameLength) {
-        throw std::invalid_argument("invalid TCP frame body length");
+inline std::uint16_t crc16(const std::uint8_t* data, std::size_t offset, std::size_t length) {
+    std::uint32_t crc = 0xffffU;
+    for (std::size_t index = offset; index < offset + length; ++index) {
+        crc ^= static_cast<std::uint32_t>(data[index]) << 8U;
+        for (int bit = 0; bit < 8; ++bit) {
+            crc = (crc & 0x8000U) != 0 ? (crc << 1U) ^ 0x1021U : crc << 1U;
+            crc &= 0xffffU;
+        }
     }
-    std::vector<std::uint8_t> result(4 + body.size());
+    return static_cast<std::uint16_t>(crc);
+}
+
+inline std::vector<std::uint8_t> encode_packet(UdpFrameType type, std::uint32_t sequence,
+                                                std::uint32_t random,
+                                                const std::vector<std::uint8_t>& body = {}) {
+    if (body.size() > kMaxFrameLength - kPacketHeaderLength) {
+        throw std::invalid_argument("packet body is too large");
+    }
+    std::vector<std::uint8_t> result(kPacketHeaderLength + body.size());
     write_u32_be(result.data(), static_cast<std::uint32_t>(body.size()));
-    std::copy(body.begin(), body.end(), result.begin() + 4);
+    write_u16_be(result.data() + 4, static_cast<std::uint16_t>(type));
+    write_u32_be(result.data() + 6, sequence);
+    write_u32_be(result.data() + 10, random);
+    write_u16_be(result.data() + 14, crc16(result.data(), 0, 14));
+    write_u16_be(result.data() + 16, crc16(body.data(), 0, body.size()));
+    std::copy(body.begin(), body.end(), result.begin() + kPacketHeaderLength);
     return result;
+}
+
+inline std::vector<std::uint8_t> encode_tcp_frame(const std::vector<std::uint8_t>& body) {
+    return encode_packet(UdpFrameType::data, 0, 0, body);
 }
 
 inline std::vector<std::uint8_t> encode_udp_packet(UdpFrameType type, std::uint32_t sequence,
-                                                    std::uint32_t acknowledgement,
+                                                    std::uint32_t random,
                                                     const std::vector<std::uint8_t>& payload = {}) {
-    if (payload.size() > kMaxFrameLength - kUdpHeaderLength) {
-        throw std::invalid_argument("UDP payload is too large");
+    return encode_packet(type, sequence, random, payload);
+}
+
+inline bool decode_packet(const std::uint8_t* data, std::size_t size, UdpPacket& result) {
+    if (size < kPacketHeaderLength) return false;
+    const auto body_length = read_u32_be(data);
+    if (body_length > kMaxFrameLength - kPacketHeaderLength || size != kPacketHeaderLength + body_length) {
+        return false;
     }
-    std::vector<std::uint8_t> result(kUdpHeaderLength + payload.size());
-    result[0] = 0x58;
-    result[1] = 0x53;
-    result[2] = static_cast<std::uint8_t>(type);
-    write_u32_be(result.data() + 3, sequence);
-    write_u32_be(result.data() + 7, acknowledgement);
-    write_u32_be(result.data() + 11, static_cast<std::uint32_t>(payload.size()));
-    std::copy(payload.begin(), payload.end(), result.begin() + kUdpHeaderLength);
-    return result;
+    if (read_u16_be(data + 14) != crc16(data, 0, 14)) return false;
+    if (read_u16_be(data + 16) != crc16(data, kPacketHeaderLength, body_length)) return false;
+    result = {
+        static_cast<UdpFrameType>(read_u16_be(data + 4)),
+        read_u32_be(data + 6),
+        read_u32_be(data + 10),
+        std::vector<std::uint8_t>(data + kPacketHeaderLength, data + kPacketHeaderLength + body_length)
+    };
+    return true;
 }
 
 inline bool decode_udp_packet(const std::uint8_t* data, std::size_t size, UdpPacket& result) {
-    if (size < kUdpHeaderLength || data[0] != 0x58 || data[1] != 0x53) {
-        return false;
-    }
-    const auto payload_length = read_u32_be(data + 11);
-    if (payload_length > kMaxFrameLength - kUdpHeaderLength || size < kUdpHeaderLength + payload_length) {
-        return false;
-    }
-    result = {
-        static_cast<UdpFrameType>(data[2]),
-        read_u32_be(data + 3),
-        read_u32_be(data + 7),
-        std::vector<std::uint8_t>(data + kUdpHeaderLength, data + kUdpHeaderLength + payload_length)
-    };
-    return true;
+    return decode_packet(data, size, result);
 }
 
 }  // namespace xsnet

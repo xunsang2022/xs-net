@@ -13,12 +13,20 @@ tags: [xs-net, integrations, sdk, observability]
 
 | 协议 | 端口 | 分帧边界 | 可靠性来源 | 适配代码 |
 | --- | --- | --- | --- | --- |
-| TCP | 8082 | `4B BE length + body` | TCP 栈 | `netty/NettyServer`、`NettyChannelInitializer`、`AuthHandler`、`NettyFramer` |
-| WebSocket | 8083（`/game`） | 一个 binary frame 一条消息 | TCP 栈 | `netty/WebSocketServer`、`WebSocketChannelInitializer`、`WebSocketGameHandler` |
-| UDP | 2002 | 15 字节自定义头 + payload | 项目自研 `UdpReliableLayer` | `netty/UdpServer`、`UdpAuthHandler`、`UdpSession`、`UdpReliableLayer` |
+| TCP | 8082 | XS packet（TCP 流按 `length` 拆帧） | TCP 栈 | `netty/NettyServer`、`NettyChannelInitializer`、`AuthHandler`、`NettyFramer` |
+| WebSocket | 8083（`/game`） | 一个 binary frame 一个 XS packet | TCP 栈 | `netty/WebSocketServer`、`WebSocketChannelInitializer`、`WebSocketGameHandler` |
+| UDP | 2002 | XS packet 一个 datagram | 项目自研 `UdpReliableLayer` | `netty/UdpServer`、`UdpAuthHandler`、`UdpSession`、`UdpReliableLayer` |
 | KCP | 2003 | KCP 段重组后交付 | KCP 状态机 | `kcp/KcpServer`、`KcpAuthHandler`、`KcpSession`、`Kcp` |
 
-共同点：认证后都产出 `channelId`，都通过 `ClientEndpoint` 接口向 `ChannelActor` 暴露 `write(NetMessage)`，都复用同一个 `GatewayMessageRouter`。
+共同点：认证后都产出 `channelId`，都通过 `ClientEndpoint` 接口向 `ChannelActor` 暴露 `write(NetMessage)`，都复用同一个 `GatewayMessageRouter`。TCP、WebSocket 和自研 UDP 共用以下包头：
+
+```text
+length(4) | packetId(2) | sendSeq(4) | random(4) | headCRC(2) | bodyCRC(2) | body(N)
+```
+
+其中 `length` 是 body 长度，CRC 为 CRC-16/CCITT-FALSE；包类型为 `DATA=1`、`ACK=2`、`HELLO=3`、`HEARTBEAT=4`、`ERROR=5`。
+
+使用自动重连时，客户端必须在同一逻辑会话中保持 `random` 不变。网关据此允许同一 `channelId + random` 的新端点替换旧端点，并使用条件删除避免旧连接关闭时删除新端点。该机制只保证连接重新建立，不包含玩家业务状态快照和断线事件回放。
 
 新增一种传输时的最小改动面：
 

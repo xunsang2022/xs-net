@@ -10,9 +10,10 @@ int main() {
     assert(xsnet::read_u32_be(tcp_frame.data()) == payload.size());
 
     xsnet::UdpPacket packet{};
-    assert(xsnet::decode_udp_packet(xsnet::encode_udp_packet(xsnet::UdpFrameType::data, 7, 3, payload).data(), 18, packet));
+    const auto udp_frame = xsnet::encode_udp_packet(xsnet::UdpFrameType::data, 7, 3, payload);
+    assert(xsnet::decode_udp_packet(udp_frame.data(), udp_frame.size(), packet));
     assert(packet.sequence == 7);
-    assert(packet.acknowledgement == 3);
+    assert(packet.random == 3);
     assert(packet.payload == payload);
 
     std::vector<int> delivered;

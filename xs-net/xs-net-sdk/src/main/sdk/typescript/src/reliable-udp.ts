@@ -4,12 +4,14 @@ export interface ReliableUdpOptions {
   windowSize?: number;
   sendDatagram: (data: Uint8Array) => void;
   onDeliver: (payload: Uint8Array) => void;
+  random?: number;
 }
 
 export class ReliableUdp {
   private readonly windowSize: number;
   private readonly sendDatagram: (data: Uint8Array) => void;
   private readonly onDeliver: (payload: Uint8Array) => void;
+  private readonly random: number;
   private readonly inFlight = new Map<number, Uint8Array>();
   private readonly reorder = new Map<number, Uint8Array>();
   private sendSeq = 1;
@@ -20,6 +22,7 @@ export class ReliableUdp {
     this.windowSize = Math.max(1, options.windowSize ?? 32);
     this.sendDatagram = options.sendDatagram;
     this.onDeliver = options.onDeliver;
+    this.random = options.random ?? 0;
   }
 
   public send(payload: Uint8Array): void {
@@ -33,25 +36,25 @@ export class ReliableUdp {
   }
 
   public receive(packet: UdpPacket): void {
-    if (packet.ack > 0) {
+    if (packet.packetId === FrameType.Ack && packet.sendSeq > 0) {
       for (const sequence of this.inFlight.keys()) {
-        if (sequence <= packet.ack) this.inFlight.delete(sequence);
+        if (sequence <= packet.sendSeq) this.inFlight.delete(sequence);
       }
     }
-    if (packet.type !== FrameType.Data) return;
-    if (packet.seq < this.nextReceiveSeq) {
+    if (packet.packetId !== FrameType.Data) return;
+    if (packet.sendSeq < this.nextReceiveSeq) {
       this.emit(FrameType.Ack, 0);
       return;
     }
-    if (packet.seq === this.nextReceiveSeq) {
-      this.deliver(packet.seq, packet.payload);
+    if (packet.sendSeq === this.nextReceiveSeq) {
+      this.deliver(packet.sendSeq, packet.body);
       while (this.reorder.has(this.nextReceiveSeq)) {
         const payload = this.reorder.get(this.nextReceiveSeq);
         this.reorder.delete(this.nextReceiveSeq);
         if (payload) this.deliver(this.nextReceiveSeq, payload);
       }
     } else if (this.reorder.size < this.windowSize * 2) {
-      this.reorder.set(packet.seq, packet.payload);
+      this.reorder.set(packet.sendSeq, packet.body);
     }
     this.emit(FrameType.Ack, 0);
   }
@@ -75,6 +78,7 @@ export class ReliableUdp {
   }
 
   private emit(type: number, sequence: number, payload?: Uint8Array): void {
-    this.sendDatagram(encodeUdpPacket(type, sequence, this.highestAck, payload));
+    const sendSeq = type === FrameType.Ack ? this.highestAck : sequence;
+    this.sendDatagram(encodeUdpPacket(type, sendSeq, this.random, payload));
   }
 }

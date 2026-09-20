@@ -67,7 +67,7 @@ xs-net 是一个 Java 21 Maven 工作区，一个仓库里包含两层内容：
 
 ```text
 客户端（Unity / TypeScript / Cocos Creator / C++）
-  -> TCP 8082 | WebSocket 8083 | UDP 2002 | KCP 2003        首帧：UTF-8 JWT
+  -> TCP 8082 | WebSocket 8083 | UDP 2002 | KCP 2003        首包：HELLO(JWT)
   -> Gateway：AuthHandler / WebSocketGameHandler / UdpAuthHandler / KcpAuthHandler
   -> GatewayMessageRouter：按 rpcNum 查路由表、解码 DTO、提取 playerId
   -> Pekko Cluster Sharding（Artery / aeron-udp）
@@ -99,7 +99,7 @@ Logic：Redis（player:{id} 状态 + log:events Streams）-> DBSyncEngine / LogC
 - **`@Rpc(kind = REQUEST)` 会展开成两条规格**：请求号带 handler，响应号（`responseNumber`）不带 handler。响应 DTO 必须是同一批源码目录中被扫描到的 record。
 - **`roleClass` 决定分片实体键**。`AkkaKit` 以 DTO 接口类型的简单类名创建 `EntityTypeKey`；同一 role 接口下的所有消息共享一个分片类型。
 - **消息注册表是 JVM 级静态状态**。`MessageAble.initialize(...)` 只初始化一次，`NodeActor` 与各启动类都依赖它。同一 JVM 内不要创建多个独立运行时。
-- **首帧认证与游戏帧共用同一种 TCP 分帧**。`LengthFieldBasedFrameDecoder` 先按 4 字节大端长度前缀拆帧，`AuthHandler` 拿到的是帧体；也就是说 JWT 帧同样带长度前缀。
+- **TCP/WebSocket/自研 UDP 共用 XS packet**。格式为 `length(4) | packetId(2) | sendSeq(4) | random(4) | headCRC(2) | bodyCRC(2) | body(N)`；TCP 由 `LengthFieldBasedFrameDecoder` 按 `length` 拆包，JWT 位于 `HELLO` 的 body 中。
 - **`playerId` 与 `channelId` 的取值来源不同**。上行路由用 DTO 中的 `playerId`；下行回写用 JWT `cid` 绑定的 `channelId`，且认证上下文优先于 DTO 中的 `sessionId`。
 - **Publisher/队列是有界的，不做投递确认**。Gateway 入站有 4096 全局 + 256 每连接的准入控制，超限直接拒绝并记指标；DBSync 缓冲区满时拒绝新状态；Actor 出错时消息被丢弃而非重试。
 - **Logic 不使用 Spring Boot**，Redis、PostgreSQL、Pekko 与 Arthas 由 `GameLogicApplication` 手工装配。配置读取不统一：Redis、数据库、I/O 与刷新周期只从 `application.yml` 读取（环境变量无效），只有管理类参数（`LOGIC_METRICS_*`、`LOGIC_GM_TOKEN`、`LOGIC_ARTHAS_*`、`LOGIC_CONFIG_RELOAD_INTERVAL_MS`）按系统属性 > 环境变量 > YAML > 默认值解析，细节见 [工程与运维](operations/engineering-guide.md#logic--battle)。

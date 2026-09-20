@@ -17,6 +17,7 @@ namespace Game.Message.Networking
         public Action<byte[]> OnDeliver { get; set; }
 
         private readonly int _window;
+        private readonly uint _random;
         private readonly object _sync = new();
         private readonly SortedDictionary<uint, byte[]> _inFlight = new();
         private readonly SortedDictionary<uint, byte[]> _reorder = new();
@@ -25,9 +26,10 @@ namespace Game.Message.Networking
         private uint _nextRecvSeq = 1;
         private uint _highestAck;
 
-        public ReliableUdp(int window)
+        public ReliableUdp(int window, uint random = 0)
         {
             _window = Math.Max(1, window);
+            _random = random;
         }
 
         /// <summary>发送一条业务消息：分配 seq 入在途窗口并组 DATA 包发出。</summary>
@@ -43,7 +45,7 @@ namespace Game.Message.Networking
                 }
                 uint seq = _sendSeq++;
                 _inFlight[seq] = payload;
-                datagram = Frame.EncodeUdpPacket(Frame.TypeData, seq, _highestAck, payload);
+                datagram = Frame.EncodeUdpPacket(Frame.TypeData, seq, _random, payload);
             }
             SendAction?.Invoke(datagram);
         }
@@ -55,14 +57,14 @@ namespace Game.Message.Networking
             byte[]? ackDatagram = null;
             lock (_sync)
             {
-                if (packet.Ack > 0)
+                if (packet.Type == Frame.TypeAck && packet.Seq > 0)
                 {
-                    RemoveAcked(packet.Ack);
+                    RemoveAcked(packet.Seq);
                 }
                 if (packet.Type == Frame.TypeData)
                 {
                     HandleData(packet.Seq, packet.Payload, deliveries);
-                    ackDatagram = Frame.EncodeUdpPacket(Frame.TypeAck, 0, _highestAck, null);
+                    ackDatagram = Frame.EncodeUdpPacket(Frame.TypeAck, _highestAck, _random, null);
                 }
             }
             foreach (byte[] payload in deliveries)
@@ -142,7 +144,7 @@ namespace Game.Message.Networking
             {
                 foreach (var kv in _inFlight)
                 {
-                    datagrams.Add(Frame.EncodeUdpPacket(Frame.TypeData, kv.Key, _highestAck, kv.Value));
+                    datagrams.Add(Frame.EncodeUdpPacket(Frame.TypeData, kv.Key, _random, kv.Value));
                 }
             }
             foreach (byte[] datagram in datagrams)

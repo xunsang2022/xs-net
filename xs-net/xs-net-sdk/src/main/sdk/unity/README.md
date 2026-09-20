@@ -13,7 +13,7 @@ xs-net/xs-net-sdk/target/code/unity/
     ├── PlayerMessages.cs   # 生成后出现
     ├── RpcRoutes.cs        # 生成后出现
     └── Networking/         # 手写网络层（不会被重新导出清除）
-        ├── Frame.cs              # 帧协议：UDP 15 字节头 / TCP 4 字节长度前缀（大端）
+        ├── Frame.cs              # XS packet：18 字节头（大端，含 headCRC/bodyCRC）
         ├── NetMessage.cs         # 消息信封（对应服务端 net_message.proto）
         ├── ReliableUdp.cs        # 轻量可靠 UDP 层（seq/累积ACK/重传/排序）
         ├── NetConnection.cs      # 连接抽象基类
@@ -208,8 +208,9 @@ client.Disconnect();
 
 ### 帧协议要点
 
-- **UDP**：一个大 datagram 一个包，固定 15 字节头（`magic(2) + type(1) + seq(4) + ack(4) + payloadLen(4)`，大端）后跟 payload。`type`：1=DATA 2=ACK 3=HELLO 4=HEARTBEAT 5=ERROR。握手发 `HELLO(JWT)`，收到 `ACK` 即认证完成；DATA 经可靠层保证有序与重传。
-- **TCP**：4 字节大端长度前缀 + body（body 为 `NetMessage` 信封）。连接建立后首帧发送 JWT 完成握手。
+- **TCP / UDP**：共用 `length(4) | packetId(2) | sendSeq(4) | random(4) | headCRC(2) | bodyCRC(2) | body(N)`（大端）格式。`packetId`：1=DATA、2=ACK、3=HELLO、4=HEARTBEAT、5=ERROR；`length` 是 body 长度，CRC 为 CRC-16/CCITT-FALSE。
+- **握手与重连**：连接建立后发送 `HELLO(JWT)`，收到 `ACK` 即认证完成；自动重连时复用 `ConnectionRandom`，Unity `GameNetworkClient` 默认启用自动重连。
+- **UDP 可靠性**：DATA 经可靠层保证有序、累计 ACK 与重传。
 - 消息信封 `NetMessage` 字段：`rpc_num(1) / data(2) / error_code(3) / session_id(4) / user_id(5) / user_ip(6)`。
 
 ## 说明

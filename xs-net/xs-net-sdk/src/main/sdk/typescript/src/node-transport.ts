@@ -1,7 +1,7 @@
 import { createConnection, type Socket } from "node:net";
 import { createSocket, type Socket as UdpSocket } from "node:dgram";
 import { AbstractTransport } from "./transport.js";
-import { concatBytes, decodeUdpPacket, encodeUdpPacket, encodeTcpFrame, FrameType, tryReadTcpFrame } from "./frame.js";
+import { concatBytes, decodeUdpPacket, encodeUdpPacket, encodeTcpFrame, FrameType, randomUint32, tryReadTcpFrame } from "./frame.js";
 import { ReliableUdp } from "./reliable-udp.js";
 
 export interface NodeTransportOptions {
@@ -17,6 +17,8 @@ export interface NodeTransportOptions {
 export class TcpTransport extends AbstractTransport {
   private socket?: Socket;
   private readBuffer = new Uint8Array();
+  private readonly connectionRandom = randomUint32();
+  private sendSeq = 1;
   private readonly options: Required<Pick<NodeTransportOptions, "host" | "tcpPort" | "connectTimeoutMs">>;
 
   public constructor(options: NodeTransportOptions) {
@@ -25,7 +27,12 @@ export class TcpTransport extends AbstractTransport {
   }
 
   public connect(jwt: string): Promise<void> {
-    this.close();
+    const previous = this.socket;
+    this.socket = undefined;
+    previous?.removeAllListeners();
+    previous?.destroy();
+    this.connectedState = false;
+    this.readBuffer = new Uint8Array();
     return new Promise((resolve, reject) => {
       const socket = createConnection({ host: this.options.host, port: this.options.tcpPort });
       this.socket = socket;
@@ -36,10 +43,7 @@ export class TcpTransport extends AbstractTransport {
       }, this.options.connectTimeoutMs);
       socket.once("connect", () => {
         clearTimeout(timeout);
-        socket.write(Buffer.from(encodeTcpFrame(new TextEncoder().encode(jwt))));
-        this.connectedState = true;
-        settled = true;
-        resolve();
+        socket.write(Buffer.from(encodeTcpFrame(new TextEncoder().encode(jwt), FrameType.Hello, 0, this.connectionRandom)));
       });
       socket.on("data", (chunk: Buffer) => {
         this.readBuffer = new Uint8Array(concatBytes(this.readBuffer, new Uint8Array(chunk)));
@@ -47,7 +51,13 @@ export class TcpTransport extends AbstractTransport {
           const frame = tryReadTcpFrame(this.readBuffer);
           if (!frame) break;
           this.readBuffer = new Uint8Array(frame.rest);
-          this.emitMessage(frame.body);
+          if (!this.connected && frame.packet.packetId === FrameType.Ack && frame.packet.random === this.connectionRandom) {
+            this.connectedState = true;
+            settled = true;
+            resolve();
+          } else if (this.connected && frame.packet.packetId === FrameType.Data) {
+            this.emitMessage(frame.body);
+          }
         }
       });
       socket.on("error", (error) => {
@@ -62,7 +72,7 @@ export class TcpTransport extends AbstractTransport {
 
   public send(body: Uint8Array): void {
     if (!this.socket || !this.connected) throw new Error("TCP transport is not connected");
-    this.socket.write(Buffer.from(encodeTcpFrame(body)));
+    this.socket.write(Buffer.from(encodeTcpFrame(body, FrameType.Data, this.sendSeq++ >>> 0, this.connectionRandom)));
   }
 
   public close(): void {
@@ -79,6 +89,7 @@ export class UdpTransport extends AbstractTransport {
   private retryTimer?: NodeJS.Timeout;
   private heartbeatTimer?: NodeJS.Timeout;
   private readonly options: Required<Pick<NodeTransportOptions, "host" | "udpPort" | "connectTimeoutMs" | "retryIntervalMs" | "heartbeatIntervalMs" | "windowSize">>;
+  private readonly connectionRandom = randomUint32();
 
   public constructor(options: NodeTransportOptions) {
     super();
@@ -93,7 +104,16 @@ export class UdpTransport extends AbstractTransport {
   }
 
   public connect(jwt: string): Promise<void> {
-    this.close();
+    const previous = this.socket;
+    this.socket = undefined;
+    previous?.removeAllListeners();
+    previous?.close();
+    this.connectedState = false;
+    if (this.retryTimer) clearInterval(this.retryTimer);
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    this.retryTimer = undefined;
+    this.heartbeatTimer = undefined;
+    this.reliable = undefined;
     return new Promise((resolve, reject) => {
       const socket = createSocket("udp4");
       this.socket = socket;
@@ -104,13 +124,14 @@ export class UdpTransport extends AbstractTransport {
       }, this.options.connectTimeoutMs);
       this.reliable = new ReliableUdp({
         windowSize: this.options.windowSize,
+        random: this.connectionRandom,
         sendDatagram: (data) => socket.send(Buffer.from(data), this.options.udpPort, this.options.host),
         onDeliver: (body) => this.emitMessage(body)
       });
       socket.on("message", (message: Buffer) => {
         const packet = decodeUdpPacket(new Uint8Array(message));
         if (!packet || !this.reliable) return;
-        if (!this.connected && packet.type === FrameType.Ack) {
+        if (!this.connected && packet.packetId === FrameType.Ack && packet.random === this.connectionRandom) {
           clearTimeout(timeout);
           this.connectedState = true;
           settled = true;
@@ -124,10 +145,12 @@ export class UdpTransport extends AbstractTransport {
         else this.emitClose(error);
       });
       socket.bind(() => {
-        socket.send(Buffer.from(encodeUdpPacket(FrameType.Hello, 0, 0, new TextEncoder().encode(jwt))), this.options.udpPort, this.options.host);
+        socket.send(Buffer.from(encodeUdpPacket(
+          FrameType.Hello, 0, this.connectionRandom, new TextEncoder().encode(jwt))), this.options.udpPort, this.options.host);
         this.retryTimer = setInterval(() => this.reliable?.retryOutstanding(), this.options.retryIntervalMs);
         this.heartbeatTimer = setInterval(() => {
-          if (this.connected) socket.send(Buffer.from(encodeUdpPacket(FrameType.Heartbeat, 0, this.reliable?.contiguousAck ?? 0)));
+          if (this.connected) socket.send(Buffer.from(encodeUdpPacket(
+            FrameType.Heartbeat, this.reliable?.contiguousAck ?? 0, this.connectionRandom)));
         }, this.options.heartbeatIntervalMs);
       });
     });

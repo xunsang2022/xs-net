@@ -101,7 +101,7 @@ tags: [xs-net, modules, source-map, maven]
 
 ### 修改传输接入
 
-连接无关的契约改动放 `xs-net-transport`；认证/分帧/会话语义改动放 `game-node-gateway` 的 `netty` 与 `kcp` 包。四类入口都必须维持"首帧 JWT → 绑定 `channelId` → 后续 `NetMessage`"这一共同模型，否则 SDK 侧无法复用同一套握手逻辑。
+连接无关的契约改动放 `xs-net-transport`；TCP/WebSocket/自研 UDP 的认证、XS packet 分帧和会话语义改动放 `game-node-gateway` 的 `netty` 包，KCP 仍由 `kcp` 包维护独立的 KCP 应用层封装。前三类入口维持"首个 `HELLO(JWT)` → 绑定 `channelId` → 后续 `DATA(NetMessage)`"模型；自动重连必须复用同一个 `random`。
 
 ### 修改状态持久化
 

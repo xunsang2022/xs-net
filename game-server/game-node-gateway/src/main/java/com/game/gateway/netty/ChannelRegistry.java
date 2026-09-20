@@ -53,6 +53,10 @@ public final class ChannelRegistry {
         return channelId == null ? null : endpoints.remove(channelId);
     }
 
+    public boolean remove(String channelId, ClientEndpoint expected) {
+        return channelId != null && expected != null && endpoints.remove(channelId, expected);
+    }
+
     public boolean isRegistered(String channelId) {
         return channelId != null && endpoints.containsKey(channelId);
     }

@@ -41,7 +41,7 @@ game-server
 面向客户端的接入层，承担四件事：
 
 1. 终止 TCP 8082、WebSocket 8083、UDP 2002、KCP 2003 四类连接/会话；
-2. 用首帧 JWT 完成认证，把 JWT 的 `cid` 绑定为 `channelId` 并写入 `ChannelRegistry`；
+2. TCP/WebSocket/自研 UDP 用首个 `HELLO(JWT)` XS packet 完成认证，把 JWT 的 `cid` 绑定为 `channelId` 并写入 `ChannelRegistry`；KCP 保持独立的 KCP 应用层握手；
 3. 按 `rpcNum` 解码上行 `NetMessage`，提取 `playerId`，经 Pekko Cluster Sharding 投递到 Logic；
 4. 通过 `ChannelActor`（entityId = `channelId`）把 S2C 消息写回 `ClientEndpoint`。
 

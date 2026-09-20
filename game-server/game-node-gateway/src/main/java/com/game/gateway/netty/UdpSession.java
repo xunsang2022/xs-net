@@ -24,16 +24,19 @@ public final class UdpSession implements ClientEndpoint {
     private final DatagramChannel channel;
     private final UdpReliableLayer layer;
     private final UdpConfig config;
+    private final long connectionRandom;
     private volatile long lastActiveMs;
 
     public UdpSession(String channelId, InetSocketAddress remote, DatagramChannel channel,
-                      UdpConfig config, Consumer<byte[]> onDeliver) {
+                      UdpConfig config, long connectionRandom, Consumer<byte[]> onDeliver) {
         this.channelId = channelId;
         this.remote = remote;
         this.channel = channel;
         this.config = config;
+        this.connectionRandom = connectionRandom;
         this.lastActiveMs = System.currentTimeMillis();
-        this.layer = new UdpReliableLayer(config.getWindow(), this::sendPacket, onDeliver, System::currentTimeMillis);
+        this.layer = new UdpReliableLayer(config.getWindow(), connectionRandom,
+                this::sendPacket, onDeliver, System::currentTimeMillis);
     }
 
     private void sendPacket(byte type, long seq, long ack, byte[] payload) {
@@ -45,7 +48,7 @@ public final class UdpSession implements ClientEndpoint {
     public void receive(byte[] datagram) {
         lastActiveMs = System.currentTimeMillis();
         var packet = UdpReliableLayer.decode(Unpooled.wrappedBuffer(datagram));
-        if (packet != null) {
+        if (packet != null && packet.random() == connectionRandom) {
             layer.onPacket(packet);
         }
     }
@@ -93,5 +96,10 @@ public final class UdpSession implements ClientEndpoint {
 
     public long lastActiveMs() {
         return lastActiveMs;
+    }
+
+    @Override
+    public long connectionRandom() {
+        return connectionRandom;
     }
 }

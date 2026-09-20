@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocketTransport } from "../src/browser-transport.js";
 import { GameClient } from "../src/client.js";
-import { encodeTcpFrame, tryReadTcpFrame } from "../src/frame.js";
+import { encodeTcpFrame, FrameType, tryReadTcpFrame } from "../src/frame.js";
 import { encodeNetMessage } from "../src/net-message.js";
 import { TcpTransport } from "../src/node-transport.js";
 
@@ -19,8 +19,11 @@ describe("client transports", () => {
         const frame = tryReadTcpFrame(buffered);
         if (!frame) return;
         buffered = frame.rest;
-        token = new TextDecoder().decode(frame.body);
-        socket.write(Buffer.from(encodeTcpFrame(encodeNetMessage(1002, new Uint8Array([7])))));
+        if (frame.packet.packetId === FrameType.Hello) {
+          token = new TextDecoder().decode(frame.body);
+          socket.write(Buffer.from(encodeTcpFrame(new Uint8Array(), FrameType.Ack, 0, frame.packet.random)));
+          socket.write(Buffer.from(encodeTcpFrame(encodeNetMessage(1002, new Uint8Array([7])), FrameType.Data, 1, frame.packet.random)));
+        }
       });
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -48,9 +51,11 @@ describe("client transports", () => {
     const received = new Promise<Uint8Array>((resolve) => transport.onMessage(resolve));
 
     await transport.connect("jwt-token");
-    fake.emit(new Uint8Array([9]).buffer);
+    const hello = tryReadTcpFrame(fake.sent[0] as Uint8Array);
+    expect(hello).toBeDefined();
+    fake.emit(encodeTcpFrame(new Uint8Array([9]), FrameType.Data, 1, hello!.packet.random).buffer);
 
-    expect(new TextDecoder().decode(fake.sent[0] as Uint8Array)).toBe("jwt-token");
+    expect(fake.sent[0]).toBeInstanceOf(Uint8Array);
     await expect(received).resolves.toEqual(new Uint8Array([9]));
     transport.close();
   });

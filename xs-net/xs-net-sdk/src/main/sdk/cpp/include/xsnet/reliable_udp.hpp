@@ -16,8 +16,10 @@ public:
     using DatagramSender = std::function<void(const std::vector<std::uint8_t>&)>;
     using PayloadHandler = std::function<void(const std::vector<std::uint8_t>&)>;
 
-    ReliableUdp(DatagramSender sender, PayloadHandler deliver, std::size_t window_size = 32)
-        : sender_(std::move(sender)), deliver_(std::move(deliver)), window_size_(std::max<std::size_t>(1, window_size)) {
+    ReliableUdp(DatagramSender sender, PayloadHandler deliver, std::size_t window_size = 32,
+                std::uint32_t random = 0)
+        : sender_(std::move(sender)), deliver_(std::move(deliver)), window_size_(std::max<std::size_t>(1, window_size)),
+          random_(random) {
     }
 
     void send(const std::vector<std::uint8_t>& payload) {
@@ -29,7 +31,7 @@ public:
             }
             const auto sequence = send_sequence_++;
             in_flight_[sequence] = payload;
-            datagram = encode_udp_packet(UdpFrameType::data, sequence, highest_ack_, payload);
+            datagram = encode_udp_packet(UdpFrameType::data, sequence, random_, payload);
         }
         sender_(datagram);
     }
@@ -39,8 +41,8 @@ public:
         std::vector<std::uint8_t> acknowledgement;
         {
             std::lock_guard lock(mutex_);
-            if (packet.acknowledgement > 0) {
-                in_flight_.erase(in_flight_.begin(), in_flight_.upper_bound(packet.acknowledgement));
+            if (packet.type == UdpFrameType::ack && packet.sequence > 0) {
+                in_flight_.erase(in_flight_.begin(), in_flight_.upper_bound(packet.sequence));
             }
             if (packet.type != UdpFrameType::data) {
                 return;
@@ -57,7 +59,7 @@ public:
                     reordering_.emplace(packet.sequence, packet.payload);
                 }
             }
-            acknowledgement = encode_udp_packet(UdpFrameType::ack, 0, highest_ack_);
+            acknowledgement = encode_udp_packet(UdpFrameType::ack, highest_ack_, random_);
         }
         for (const auto& payload : deliveries) {
             deliver_(payload);
@@ -70,7 +72,7 @@ public:
         {
             std::lock_guard lock(mutex_);
             for (const auto& [sequence, payload] : in_flight_) {
-                datagrams.push_back(encode_udp_packet(UdpFrameType::data, sequence, highest_ack_, payload));
+                datagrams.push_back(encode_udp_packet(UdpFrameType::data, sequence, random_, payload));
             }
         }
         for (const auto& datagram : datagrams) {
@@ -99,6 +101,7 @@ private:
     DatagramSender sender_;
     PayloadHandler deliver_;
     std::size_t window_size_;
+    std::uint32_t random_;
     std::map<std::uint32_t, std::vector<std::uint8_t>> in_flight_;
     std::map<std::uint32_t, std::vector<std::uint8_t>> reordering_;
     std::uint32_t send_sequence_ = 1;

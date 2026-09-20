@@ -2,8 +2,6 @@ package com.xs.net.transport;
 
 import com.xs.net.message.TransportKind;
 
-import java.util.Arrays;
-
 public final class RawFrameCodec implements FrameCodec {
     public static final int DEFAULT_MAX_PAYLOAD_BYTES = 64 * 1024;
     private final TransportKind kind;
@@ -32,13 +30,13 @@ public final class RawFrameCodec implements FrameCodec {
     @Override
     public byte[] encode(byte[] payload) {
         checkSize(payload);
-        return Arrays.copyOf(payload, payload.length);
+        return PacketCodec.encode(PacketId.DATA, 0, 0, payload, maxPayloadBytes);
     }
 
     @Override
     public byte[] decode(byte[] frame) {
         checkSize(frame);
-        return Arrays.copyOf(frame, frame.length);
+        return PacketCodec.decode(frame, maxPayloadBytes).body();
     }
 
     private void checkSize(byte[] payload) {

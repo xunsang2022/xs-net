@@ -8,8 +8,7 @@ using Google.Protobuf;
 namespace Game.Message.Networking
 {
     /// <summary>
-    /// TCP 连接：4 字节大端长度帧 + NetMessage body。
-    /// 连接建立后首帧发送 JWT(UTF-8) 完成握手，随后进入游戏消息模式。
+    /// TCP 连接：XS packet 头 + NetMessage body。
     /// </summary>
     public sealed class TcpConnection : NetConnection
     {
@@ -17,10 +16,17 @@ namespace Game.Message.Networking
         private NetworkStream _stream;
         private Thread _readThread;
         private volatile bool _running;
+        private volatile bool _handshaken;
+        private readonly uint _connectionRandom;
+        private uint _sendSeq = 1;
+        private readonly ManualResetEventSlim _handshakeEvent = new(false);
 
         public TcpConnection(NetworkConfig config, MessageDispatcher dispatcher)
             : base(config, dispatcher)
         {
+            _connectionRandom = config.ConnectionRandom != 0
+                ? config.ConnectionRandom
+                : (uint)Random.Shared.NextInt64(1, uint.MaxValue);
         }
 
         public override bool IsConnected => _client != null && _client.Connected && _running;
@@ -28,6 +34,7 @@ namespace Game.Message.Networking
         public override void Connect(string jwt)
         {
             Disconnect();
+            _handshakeEvent.Reset();
             var client = new TcpClient();
             var connect = client.BeginConnect(Config.Host, Config.TcpPort, null, null);
             if (!connect.AsyncWaitHandle.WaitOne(Config.ConnectTimeoutMs))
@@ -40,15 +47,18 @@ namespace Game.Message.Networking
             _stream = client.GetStream();
             _stream.ReadTimeout = Config.ReadTimeoutMs;
 
-            // 握手：首帧发 JWT(UTF-8)
+            // 握手：首帧发 HELLO(JWT)
             byte[] token = Encoding.UTF8.GetBytes(jwt ?? string.Empty);
-            WriteFrame(token);
+            WritePacket(Frame.EncodePacket(Frame.TypeHello, 0, _connectionRandom, token));
 
             _running = true;
             _readThread = new Thread(ReadLoop) { IsBackground = true };
             _readThread.Start();
-
-            RaiseConnected();
+            if (!_handshakeEvent.Wait(Config.ConnectTimeoutMs))
+            {
+                Disconnect();
+                throw new TimeoutException("TCP handshake timeout");
+            }
         }
 
         public override void Send(RpcRoute route, IMessage message)
@@ -62,13 +72,16 @@ namespace Game.Message.Networking
             byte[] body = envelope.ToByteArray();
             lock (this)
             {
-                WriteFrame(body);
+                if (!IsConnected) throw new InvalidOperationException("TCP connection is not authenticated");
+                WritePacket(Frame.EncodePacket(Frame.TypeData, _sendSeq++, _connectionRandom, body));
             }
         }
 
         public override void Disconnect()
         {
             _running = false;
+            _handshaken = false;
+            _handshakeEvent.Reset();
             try
             {
                 _stream?.Close();
@@ -87,9 +100,8 @@ namespace Game.Message.Networking
             _client = null;
         }
 
-        private void WriteFrame(byte[] body)
+        private void WritePacket(byte[] frame)
         {
-            byte[] frame = Frame.EncodeTcpFrame(body);
             _stream.Write(frame, 0, frame.Length);
             _stream.Flush();
         }
@@ -98,18 +110,35 @@ namespace Game.Message.Networking
         {
             try
             {
-                var header = new byte[4];
+                var header = new byte[Frame.HeaderLength];
                 while (_running)
                 {
-                    ReadExactly(_stream, header, 0, 4);
+                    ReadExactly(_stream, header, 0, Frame.HeaderLength);
                     uint len = Frame.ReadUInt32BE(header, 0);
-                    if (len == 0 || len > Frame.MaxFrameLength)
+                    if (len > Frame.MaxFrameLength - Frame.HeaderLength)
                     {
                         throw new IOException("Invalid frame length: " + len);
                     }
                     byte[] body = new byte[len];
                     ReadExactly(_stream, body, 0, (int)len);
-                    HandleBody(body);
+                    byte[] packetBytes = new byte[Frame.HeaderLength + body.Length];
+                    Array.Copy(header, packetBytes, Frame.HeaderLength);
+                    Array.Copy(body, 0, packetBytes, Frame.HeaderLength, body.Length);
+                    if (!Frame.TryDecodePacket(packetBytes, out var packet) || packet.Random != _connectionRandom)
+                    {
+                        throw new IOException("Invalid XS packet");
+                    }
+                    if (packet.Type == Frame.TypeAck && !_handshaken)
+                    {
+                        _handshaken = true;
+                        _handshakeEvent.Set();
+                        RaiseConnected();
+                    }
+                    else if (packet.Type == Frame.TypeData)
+                    {
+                        WritePacket(Frame.EncodePacket(Frame.TypeAck, packet.Seq, _connectionRandom, null));
+                        HandleBody(packet.Payload);
+                    }
                 }
             }
             catch (Exception e)

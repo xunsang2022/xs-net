@@ -30,7 +30,7 @@ class WebSocketGameHandlerTest {
         JwtUtil jwtUtil = new JwtUtil(SECRET, 60_000);
         EmbeddedChannel channel = new EmbeddedChannel(new WebSocketGameHandler(jwtUtil, nettyConfig()));
 
-        channel.writeInbound(binary(jwtUtil.generateToken("player-1", CHANNEL_ID)));
+        channel.writeInbound(hello(jwtUtil.generateToken("player-1", CHANNEL_ID)));
         assertTrue(ChannelRegistry.INSTANCE.isActive(CHANNEL_ID));
         assertInstanceOf(WebSocketClientEndpoint.class, ChannelRegistry.INSTANCE.get(CHANNEL_ID));
 
@@ -42,7 +42,7 @@ class WebSocketGameHandlerTest {
     void invalidFirstBinaryFrameClosesTheConnectionWithoutRegisteringIt() {
         EmbeddedChannel channel = new EmbeddedChannel(new WebSocketGameHandler(new JwtUtil(SECRET, 60_000), nettyConfig()));
 
-        channel.writeInbound(binary("not-a-jwt"));
+        channel.writeInbound(hello("not-a-jwt"));
         channel.runPendingTasks();
 
         assertFalse(channel.isOpen());
@@ -65,6 +65,11 @@ class WebSocketGameHandlerTest {
 
     private static BinaryWebSocketFrame binary(String value) {
         return new BinaryWebSocketFrame(Unpooled.wrappedBuffer(value.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private static BinaryWebSocketFrame hello(String value) {
+        return new BinaryWebSocketFrame(NettyFramer.encodeHello(42,
+                value.getBytes(StandardCharsets.UTF_8)));
     }
 
     private static NettyConfig nettyConfig() {

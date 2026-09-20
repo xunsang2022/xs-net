@@ -17,5 +17,9 @@ namespace Game.Message.Networking
         public int RetryIntervalMs = 200;
         public int HeartbeatIntervalMs = 3000;
         public int ReadTimeoutMs = 0; // 0 = 无读超时
+        public bool AutoReconnect = true;
+        public int ReconnectDelayMs = 500;
+        public int MaxReconnectAttempts = 10;
+        public uint ConnectionRandom = 0;
     }
 }

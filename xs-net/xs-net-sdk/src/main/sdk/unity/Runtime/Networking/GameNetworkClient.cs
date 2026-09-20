@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Google.Protobuf;
 
 namespace Game.Message.Networking
@@ -11,6 +12,10 @@ namespace Game.Message.Networking
     {
         private readonly NetworkConfig _config;
         private NetConnection _connection;
+        private string _jwt;
+        private Timer _reconnectTimer;
+        private int _reconnectAttempts;
+        private bool _manualDisconnect = true;
 
         public MessageDispatcher Dispatcher { get; } = new MessageDispatcher();
 
@@ -28,23 +33,71 @@ namespace Game.Message.Networking
         public void Connect(string jwt)
         {
             Disconnect();
+            _jwt = jwt ?? string.Empty;
+            if (_config.ConnectionRandom == 0)
+            {
+                _config.ConnectionRandom = (uint)Random.Shared.NextInt64(1, uint.MaxValue);
+            }
+            _manualDisconnect = false;
+            _reconnectAttempts = 0;
+            ConnectInternal();
+        }
+
+        private void ConnectInternal()
+        {
             NetConnection connection = _config.UseKcp
                 ? new KcpConnection(_config, Dispatcher)
                 : _config.UseUdp
                     ? new UdpConnection(_config, Dispatcher)
                     : new TcpConnection(_config, Dispatcher);
-            connection.OnConnected += () => OnConnected?.Invoke();
-            connection.OnDisconnected += () => OnDisconnected?.Invoke();
+            connection.OnConnected += () =>
+            {
+                _reconnectAttempts = 0;
+                OnConnected?.Invoke();
+            };
+            connection.OnDisconnected += () =>
+            {
+                OnDisconnected?.Invoke();
+                ScheduleReconnect();
+            };
             connection.OnError += message => OnError?.Invoke(message);
             _connection = connection;
-            connection.Connect(jwt);
+            try
+            {
+                connection.Connect(_jwt);
+            }
+            catch (Exception exception)
+            {
+                OnError?.Invoke(exception.Message);
+                ScheduleReconnect();
+            }
         }
 
         public void Disconnect()
         {
+            _manualDisconnect = true;
+            _reconnectTimer?.Dispose();
+            _reconnectTimer = null;
             var connection = _connection;
             _connection = null;
             connection?.Disconnect();
+        }
+
+        private void ScheduleReconnect()
+        {
+            if (_manualDisconnect || !_config.AutoReconnect || string.IsNullOrEmpty(_jwt)
+                || _reconnectAttempts >= Math.Max(0, _config.MaxReconnectAttempts)
+                || _reconnectTimer != null)
+            {
+                return;
+            }
+            _reconnectAttempts++;
+            _reconnectTimer = new Timer(_ =>
+            {
+                _reconnectTimer?.Dispose();
+                _reconnectTimer = null;
+                if (!_manualDisconnect) ConnectInternal();
+            }, null, Math.Max(0, _config.ReconnectDelayMs), Timeout.Infinite);
         }
 
         public void Send(RpcRoute route, IMessage message)
