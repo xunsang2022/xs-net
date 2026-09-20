@@ -23,7 +23,7 @@ public final class PlayerPersistence {
                 PlayerPO player = session.getMapper(PlayerMapper.class)
                         .loadOrCreate(playerId, "player-" + playerId);
                 session.commit();
-                return player.toStateFields();
+                return player.toHash();
             } catch (RuntimeException exception) {
                 session.rollback();
                 throw exception;

@@ -2,7 +2,7 @@ package com.game.logic.redis;
 
 import com.game.logic.enums.LogLevel;
 import com.game.logic.enums.LogType;
-import com.game.logic.player.PlayerState;
+import com.game.logic.dbsync.PlayerPO;
 import com.game.protocol.pb.LogRecordCommand;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -39,9 +39,9 @@ class RedisStoreTest {
         doReturn(hashOps).when(redis).opsForHash();
 
         RedisStore store = new RedisStore(redis);
-        PlayerState state = new PlayerState();
+        PlayerPO state = new PlayerPO();
         state.setName("alice");
-        state.markDirty(PlayerState.FIELD_NAME);
+        state.markDirty(PlayerPO.FIELD_NAME);
 
         assertTrue(store.flushDirty("42", state));
         verify(hashOps).putAll("player:42", Map.of("name", "alice"));
@@ -52,7 +52,7 @@ class RedisStoreTest {
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
         RedisStore store = new RedisStore(redis);
 
-        assertTrue(store.flushDirty("42", new PlayerState()));
+        assertTrue(store.flushDirty("42", new PlayerPO()));
         verifyNoInteractions(redis);
     }
 
@@ -65,7 +65,7 @@ class RedisStoreTest {
         doReturn(setOps).when(redis).opsForSet();
 
         RedisStore store = new RedisStore(redis);
-        PlayerState state = new PlayerState();
+        PlayerPO state = new PlayerPO();
         state.setId(42L);
         state.setName("alice");
 
@@ -84,7 +84,7 @@ class RedisStoreTest {
         doReturn(setOps).when(redis).opsForSet();
 
         RedisStore store = new RedisStore(redis);
-        PlayerState state = new PlayerState();
+        PlayerPO state = new PlayerPO();
         state.setId(42L);
         state.setName("alice");
         state.setOnline(true);

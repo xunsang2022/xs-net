@@ -8,7 +8,7 @@ import com.game.logic.actor.player.message.InitialRedisWriteResult;
 import com.game.logic.actor.player.message.RedisFlushResult;
 import com.game.logic.context.LogicContext;
 import com.game.logic.dbsync.DBSyncEngine;
-import com.game.logic.player.PlayerState;
+import com.game.logic.dbsync.PlayerPO;
 import com.game.logic.redis.RedisStore;
 import com.game.message.actor.logic.PlayerMessage;
 import com.xs.core.actor.ActorServices;
@@ -232,13 +232,13 @@ public final class PlayerStateSync {
     private Behavior<PlayerMessage> onFlushDirty(FlushDirty message) {
         refreshFlushTimerIfNeeded();
         PlayerLifecycle currentLifecycle = lifecycle();
-        PlayerState state = currentLifecycle.state();
+        PlayerPO state = currentLifecycle.state();
         if (!currentLifecycle.isOnline() || redisFlushPending || !state.hasDirtyFields()) {
             return org.apache.pekko.actor.typed.javadsl.Behaviors.same();
         }
         Map<String, String> dirtySnapshot = immutableCopy(state.toHash(state.getDirtyFields()));
         Map<String, String> stateSnapshot = immutableCopy(state.toHash());
-        flushDirty(dirtySnapshot, stateSnapshot, state.getVersion());
+        flushDirty(dirtySnapshot, stateSnapshot, state.getVersionValue());
         return org.apache.pekko.actor.typed.javadsl.Behaviors.same();
     }
 

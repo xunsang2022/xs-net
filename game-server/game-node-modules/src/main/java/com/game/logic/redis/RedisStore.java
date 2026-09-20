@@ -2,7 +2,7 @@ package com.game.logic.redis;
 
 import com.game.logic.enums.LogLevel;
 import com.game.logic.enums.LogType;
-import com.game.logic.player.PlayerState;
+import com.game.logic.dbsync.PlayerPO;
 import com.game.protocol.pb.LogRecordCommand;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -43,7 +43,7 @@ public class RedisStore {
         return result;
     }
 
-    public boolean create(String playerId, PlayerState state) {
+    public boolean create(String playerId, PlayerPO state) {
         return create(playerId, state.toHash());
     }
 
@@ -54,7 +54,7 @@ public class RedisStore {
         return true;
     }
 
-    public boolean flushDirty(String playerId, PlayerState state) {
+    public boolean flushDirty(String playerId, PlayerPO state) {
         return flushDirty(playerId, state.toHash(state.getDirtyFields()));
     }
 
@@ -66,7 +66,7 @@ public class RedisStore {
         return true;
     }
 
-    public boolean destroy(String playerId, PlayerState state) {
+    public boolean destroy(String playerId, PlayerPO state) {
         return destroy(playerId, state.toHash());
     }
 

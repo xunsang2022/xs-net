@@ -6,7 +6,7 @@ import com.game.logic.actor.player.message.DestroyResult;
 import com.game.logic.actor.player.message.InitialRedisWriteResult;
 import com.game.logic.actor.player.message.LoadTimeout;
 import com.game.logic.context.LogicContext;
-import com.game.logic.player.PlayerState;
+import com.game.logic.dbsync.PlayerPO;
 import com.game.logic.scene.PlayerSceneTracker;
 import com.game.message.actor.S2C;
 import com.game.message.actor.gateway.GatewayControlMessage;
@@ -49,7 +49,7 @@ public final class PlayerLifecycle {
     /** 玩家状态读写同步组件。 */
     private final PlayerStateSync stateSync;
     /** 玩家业务状态。 */
-    private final PlayerState state = new PlayerState();
+    private final PlayerPO state = new PlayerPO();
     /** 玩家当前场景关系。 */
     private final PlayerSceneTracker sceneTracker = new PlayerSceneTracker();
 
@@ -275,7 +275,7 @@ public final class PlayerLifecycle {
             return;
         }
         stateSync.cancelFlushTimer();
-        stateSync.destroy(immutableCopy(state.toHash()), state.getVersion());
+        stateSync.destroy(immutableCopy(state.toHash()), state.getVersionValue());
     }
 
     /** 处理玩家销毁结果，完成登出响应后停止 Actor。 */
@@ -295,7 +295,7 @@ public final class PlayerLifecycle {
     private Behavior<PlayerMessage> onPostStop() {
         if (shouldPersistOnStop()) {
             log.info("PlayerActor stopping, scheduling state persistence: playerId={}", services.entityId());
-            stateSync.persistStopped(immutableCopy(state.toHash()), state.getVersion());
+            stateSync.persistStopped(immutableCopy(state.toHash()), state.getVersionValue());
         }
         return Behaviors.same();
     }
@@ -376,7 +376,7 @@ public final class PlayerLifecycle {
         String playerName = command.playerName();
         if (playerName != null && !playerName.equals(state.getName())) {
             state.setName(playerName);
-            state.markDirty(PlayerState.FIELD_NAME);
+            state.markDirty(PlayerPO.FIELD_NAME);
         }
         markOnlineFields();
         log.info("PlayerActor enter: playerId={}, channelId={}", services.entityId(), command.channelId());
@@ -391,9 +391,9 @@ public final class PlayerLifecycle {
         phase = Phase.DESTROYING;
         long now = System.currentTimeMillis();
         state.setOnline(false);
-        state.setUpdatedAt(now);
-        state.markDirty(PlayerState.FIELD_ONLINE);
-        state.markDirty(PlayerState.FIELD_UPDATED_AT);
+        state.setUpdatedAtMillis(now);
+        state.markDirty(PlayerPO.FIELD_ONLINE);
+        state.markDirty(PlayerPO.FIELD_UPDATED_AT);
         return true;
     }
 
@@ -431,17 +431,17 @@ public final class PlayerLifecycle {
     private void markOnlineFields() {
         long now = System.currentTimeMillis();
         state.setOnline(true);
-        state.setLastLoginAt(now);
-        state.setUpdatedAt(now);
+        state.setLastLoginAtMillis(now);
+        state.setUpdatedAtMillis(now);
         state.incrementVersion();
-        state.markDirty(PlayerState.FIELD_ONLINE);
-        state.markDirty(PlayerState.FIELD_LAST_LOGIN_AT);
-        state.markDirty(PlayerState.FIELD_UPDATED_AT);
-        state.markDirty(PlayerState.FIELD_VERSION);
+        state.markDirty(PlayerPO.FIELD_ONLINE);
+        state.markDirty(PlayerPO.FIELD_LAST_LOGIN_AT);
+        state.markDirty(PlayerPO.FIELD_UPDATED_AT);
+        state.markDirty(PlayerPO.FIELD_VERSION);
     }
 
     /** 返回当前玩家业务状态，供状态同步组件创建和清理持久化快照。 */
-    PlayerState state() {
+    PlayerPO state() {
         return state;
     }
 
