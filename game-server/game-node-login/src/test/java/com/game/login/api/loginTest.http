@@ -1,0 +1,35 @@
+@host = http://127.0.0.1:8081
+@channelId = cocos-test-channel
+@playerId = 123
+@playerName = cocos
+
+### 签发 JWT
+POST {{host}}/api/auth/issue
+X-Channel-Id: {{channelId}}
+Content-Type: application/json
+
+{
+  "playerId": {{playerId}},
+  "playerName": "{{playerName}}"
+}
+
+> {%
+  client.global.set("jwt", response.body.token);
+  client.global.set("expiresAt", response.body.expiresAt);
+%}
+
+### 校验 JWT
+POST {{host}}/api/auth/verify
+Content-Type: application/json
+
+{
+  "token": "{{jwt}}"
+}
+
+### 校验无效 JWT
+POST {{host}}/api/auth/verify
+Content-Type: application/json
+
+{
+  "token": "invalid-token"
+}
