@@ -90,16 +90,17 @@ public class RedisStore {
     }
 
     public boolean destroy(String playerId, PlayerPO state) {
-        if (playerRedis == null) {
-            return destroy(playerId, state.toHash());
-        }
-        putHash(playerKey(playerId), state.toRedisHash());
-        redis.opsForSet().remove(PLAYER_ONLINE_KEY, playerId);
-        return true;
+        return deletePlayerCache(playerId);
     }
 
     public boolean destroy(String playerId, Map<String, String> fields) {
-        putHash(playerKey(playerId), playerRedis == null ? fields : PlayerPO.redisValues(fields));
+        return deletePlayerCache(playerId);
+    }
+
+    /** 删除玩家状态缓存及其索引；数据库快照由 DBSyncEngine 异步持久化。 */
+    public boolean deletePlayerCache(String playerId) {
+        redis.delete(playerKey(playerId));
+        redis.opsForSet().remove(PLAYER_IDX_KEY, playerId);
         redis.opsForSet().remove(PLAYER_ONLINE_KEY, playerId);
         return true;
     }

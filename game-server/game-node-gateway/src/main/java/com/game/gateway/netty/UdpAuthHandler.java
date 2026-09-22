@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.Date;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
@@ -87,6 +88,10 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
                 Metrics.counter(METRIC_AUTH_FAILURE).increment();
                 return;
             }
+            if (ChannelRegistry.INSTANCE.isTokenRevoked(channelId, claims.getIssuedAt())) {
+                Metrics.counter(METRIC_AUTH_FAILURE).increment();
+                return;
+            }
             ClientEndpoint existing = ChannelRegistry.INSTANCE.get(channelId);
             if (config.getMaxConnectionsPerAccount() > 0 && existing != null && existing.isActive()) {
                 if (existing.connectionRandom() != connectionRandom) {
@@ -102,7 +107,7 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
                     channel,
                     config,
                     connectionRandom,
-                    body -> handleGameMessage(channelId, body));
+                    body -> handleGameMessage(channelId, claims.getIssuedAt(), body));
             sessions.put(sender, session);
             ChannelRegistry.INSTANCE.register(channelId, session);
             // 回 ACK 确认握手完成
@@ -117,8 +122,12 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
     }
 
     /** 可靠层交付的上行 DATA 消息（NetMessage 字节）→ 解码并路由 Logic。 */
-    private void handleGameMessage(String channelId, byte[] body) {
+    private void handleGameMessage(String channelId, Date tokenIssuedAt, byte[] body) {
         try {
+            if (ChannelRegistry.INSTANCE.isTokenRevoked(channelId, tokenIssuedAt)) {
+                ChannelRegistry.INSTANCE.remove(channelId);
+                return;
+            }
             Metrics.counter(METRIC_C2S_MESSAGES).increment();
             router.route(body, channelId);
         } catch (Exception e) {

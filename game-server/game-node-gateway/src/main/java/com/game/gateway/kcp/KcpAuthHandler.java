@@ -80,6 +80,10 @@ public class KcpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
             authenticate(session, message);
             return;
         }
+        if (ChannelRegistry.INSTANCE.isTokenRevoked(session.channelId(), session.tokenIssuedAt())) {
+            removeSession(session);
+            return;
+        }
         try {
             Metrics.counter(METRIC_C2S_MESSAGES).increment();
             router.route(message, session.channelId());
@@ -104,13 +108,18 @@ public class KcpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
                 removeSession(session);
                 return;
             }
+            if (ChannelRegistry.INSTANCE.isTokenRevoked(channelId, claims.getIssuedAt())) {
+                Metrics.counter(METRIC_AUTH_FAILURE).increment();
+                removeSession(session);
+                return;
+            }
             if (config.getMaxConnectionsPerAccount() > 0
                     && ChannelRegistry.INSTANCE.isActive(channelId)) {
                 Metrics.counter(METRIC_AUTH_FAILURE).increment();
                 removeSession(session);
                 return;
             }
-            session.authenticateAs(channelId);
+            session.authenticateAs(channelId, claims.getIssuedAt());
             ChannelRegistry.INSTANCE.register(channelId, session);
             // 回空载荷（0 长度）作为 auth-ok
             session.sendBytes(new byte[0]);

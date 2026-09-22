@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Date;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -45,6 +46,7 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
     private boolean authenticated;
     private String channelId;
     private ClientEndpoint registeredEndpoint;
+    private Date tokenIssuedAt;
     private long connectionRandom;
     private ScheduledFuture<?> authTimeoutTask;
 
@@ -85,6 +87,10 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
             ctx.close();
             return;
         }
+        if (ChannelRegistry.INSTANCE.isTokenRevoked(channelId, tokenIssuedAt)) {
+            ctx.close();
+            return;
+        }
         if (packet.packetId() == PacketId.HEARTBEAT) {
             ctx.writeAndFlush(NettyFramer.encodeAck(connectionRandom, packet.sendSeq()));
             return;
@@ -113,6 +119,13 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
                 failAuth(ctx);
                 return;
             }
+            if (ChannelRegistry.INSTANCE.isTokenRevoked(channelId, claims.getIssuedAt())) {
+                log.warn("Channel auth failed: token was revoked, channelId={}", channelId);
+                Metrics.counter(METRIC_AUTH_FAILURE).increment();
+                failAuth(ctx);
+                return;
+            }
+            tokenIssuedAt = claims.getIssuedAt();
             // 单账号/单通道并发连接上限：已存在活跃连接时拒绝新连接
             connectionRandom = packet.random();
             ClientEndpoint existing = ChannelRegistry.INSTANCE.get(channelId);

@@ -2,6 +2,7 @@ package com.game.gateway.netty;
 
 import io.micrometer.core.instrument.Metrics;
 
+import java.util.Date;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -15,9 +16,11 @@ public final class ChannelRegistry {
     public static final ChannelRegistry INSTANCE = new ChannelRegistry();
 
     private static final String METRIC_ONLINE = "gateway.online.connections";
+    private static final long REVOCATION_RETENTION_MILLIS = 7L * 24 * 60 * 60 * 1000;
 
     private final ConcurrentHashMap<String, ClientEndpoint> endpoints = new ConcurrentHashMap<>();
-
+    /** 按 channelId 记录 JWT 吊销时间；JWT 本身是无状态的，不能从服务端直接删除。 */
+    private final ConcurrentHashMap<String, Long> revokedAtMillis = new ConcurrentHashMap<>();
     /** 登录请求进入网关的入口时间戳（ns，按 sessionId/channelId），供 S2C 回包时计算网关内登录往返。 */
     private final ConcurrentHashMap<String, Long> loginIngressNanos = new ConcurrentHashMap<>();
 
@@ -72,5 +75,36 @@ public final class ChannelRegistry {
 
     public int size() {
         return endpoints.size();
+    }
+
+    /** 吊销当前 channelId 在指定时间点之前签发的 JWT。 */
+    public void revokeToken(String channelId) {
+        if (channelId != null && !channelId.isBlank()) {
+            revokedAtMillis.put(channelId, System.currentTimeMillis());
+        }
+    }
+
+    /** 判断指定签发时间的 JWT 是否已被吊销；新签发的同 channel token 可以继续使用。 */
+    public boolean isTokenRevoked(String channelId, Date issuedAt) {
+        Long revokedAt = activeRevocation(channelId);
+        return revokedAt != null && (issuedAt == null || issuedAt.getTime() <= revokedAt);
+    }
+
+    void clearTokenRevocation(String channelId) {
+        if (channelId != null) {
+            revokedAtMillis.remove(channelId);
+        }
+    }
+
+    private Long activeRevocation(String channelId) {
+        if (channelId == null || channelId.isBlank()) {
+            return null;
+        }
+        Long revokedAt = revokedAtMillis.get(channelId);
+        if (revokedAt != null && System.currentTimeMillis() - revokedAt >= REVOCATION_RETENTION_MILLIS) {
+            revokedAtMillis.remove(channelId, revokedAt);
+            return null;
+        }
+        return revokedAt;
     }
 }

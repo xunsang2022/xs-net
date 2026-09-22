@@ -93,11 +93,9 @@ class RedisStoreTest {
     }
 
     @Test
-    void destroyWritesHashAndRemovesOnline() {
+    void destroyDeletesPlayerCacheAndIndexes() {
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
-        HashOperations<String, String, String> hashOps = mock(HashOperations.class);
         SetOperations<String, String> setOps = mock(SetOperations.class);
-        doReturn(hashOps).when(redis).opsForHash();
         doReturn(setOps).when(redis).opsForSet();
 
         RedisStore store = new RedisStore(redis);
@@ -107,7 +105,8 @@ class RedisStoreTest {
         state.setOnline(true);
 
         assertTrue(store.destroy("42", state));
-        verify(hashOps).putAll("playerActor:42", state.toHash());
+        verify(redis).delete("playerActor:42");
+        verify(setOps).remove(RedisStore.PLAYER_IDX_KEY, "42");
         verify(setOps).remove(RedisStore.PLAYER_ONLINE_KEY, "42");
     }
 
