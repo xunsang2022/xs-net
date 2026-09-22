@@ -9,7 +9,6 @@ import io.netty.channel.socket.DatagramPacket;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.InetSocketAddress;
-import java.util.Date;
 
 /**
  * KCP 会话：代表一个已认证的客户端 KCP 端点。
@@ -25,7 +24,6 @@ public final class KcpSession implements ClientEndpoint {
     private final KcpConfig config;
     private final Kcp kcp;
     private volatile String channelId;
-    private volatile Date tokenIssuedAt;
     private volatile boolean authenticated;
     private volatile long lastActiveMs;
 
@@ -76,15 +74,10 @@ public final class KcpSession implements ClientEndpoint {
     }
 
     /** 认证通过时写入 channelId 并标记已认证；未认证阶段 channelId 为 null。 */
-    public void authenticateAs(String channelId, Date tokenIssuedAt) {
+    public void authenticateAs(String channelId) {
         this.channelId = channelId;
-        this.tokenIssuedAt = tokenIssuedAt;
         this.authenticated = true;
         this.lastActiveMs = System.currentTimeMillis();
-    }
-
-    public void authenticateAs(String channelId) {
-        authenticateAs(channelId, null);
     }
 
     public boolean isAuthenticated() {
@@ -116,9 +109,6 @@ public final class KcpSession implements ClientEndpoint {
         return channelId;
     }
 
-    public Date tokenIssuedAt() {
-        return tokenIssuedAt;
-    }
 
     @Override
     public String sessionId() {

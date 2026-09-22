@@ -124,6 +124,16 @@ public class DBSyncEngine {
         return persistence.upsert(player);
     }
 
+    /** 同步保存玩家完整快照，供下线流程在删除 Redis 前完成最终落库。 */
+    public boolean saveNow(Long playerId, Map<String, String> snapshot, long version) {
+        DirtyRecord record = new DirtyRecord(
+                playerId,
+                snapshot,
+                Math.max(0L, version - 1L),
+                version);
+        return persistence.upsert(PlayerPO.fromDirtyRecord(record));
+    }
+
     /**
      * 定时批量 UPSERT：按 flushConcurrency 分片并行执行，成功移除脏记录，失败保留重试。
      * 未 start() 时（如单元测试）同步执行。

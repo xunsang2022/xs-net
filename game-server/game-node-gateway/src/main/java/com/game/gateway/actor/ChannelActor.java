@@ -7,7 +7,6 @@ import org.apache.pekko.actor.typed.javadsl.Receive;
 import com.game.gateway.netty.ChannelRegistry;
 import com.game.gateway.netty.ClientEndpoint;
 import com.game.message.actor.S2C;
-import com.game.message.s2c.LogoutResponse;
 import com.xs.core.actor.RpcActor;
 import com.xs.net.message.MessageAble;
 import com.xs.net.message.RequestContext;
@@ -69,10 +68,6 @@ public class ChannelActor extends RpcActor<S2C> {
             RequestContext context = currentRequestContext();
             if (context != null) {
                 netMessage = context.applyTo(netMessage.toBuilder()).build();
-            }
-            if (message instanceof LogoutResponse) {
-                ChannelRegistry.INSTANCE.revokeToken(entityId);
-                log.info("JWT token revoked after logout response: channelId={}", entityId);
             }
             endpoint.write(netMessage);
             S2C_WRITE_NANOS.set(System.nanoTime());

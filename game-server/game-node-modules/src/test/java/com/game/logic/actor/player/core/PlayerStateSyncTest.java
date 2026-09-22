@@ -52,16 +52,12 @@ class PlayerStateSyncTest {
     }
 
     @Test
-    void databaseSyncBackpressurePreventsDestroyCompletion() {
-        DBSyncEngine engine = mock(DBSyncEngine.class);
+    void successfulDestroyCompletionDoesNotRequireDirtyQueueCapacity() {
         Map<String, String> snapshot = Map.of("online", "0", "version", "4");
-        when(engine.submit(42L, snapshot, 4L)).thenReturn(false);
-        LogicContext.setDbSyncEngine(engine);
         PlayerStateSync sync = new PlayerStateSync("42");
 
         boolean completed = sync.completeDestroy(new DestroyResult(snapshot, 4L, true, null));
 
-        assertFalse(completed);
-        verify(engine).submit(eq(42L), eq(snapshot), eq(4L));
+        assertTrue(completed);
     }
 }

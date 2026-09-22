@@ -16,7 +16,6 @@ import io.netty.handler.timeout.IdleStateEvent;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Date;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -35,7 +34,6 @@ final class WebSocketGameHandler extends SimpleChannelInboundHandler<BinaryWebSo
     private boolean authenticated;
     private String channelId;
     private ClientEndpoint registeredEndpoint;
-    private Date tokenIssuedAt;
     private long connectionRandom;
     private ScheduledFuture<?> authTimeoutTask;
 
@@ -81,10 +79,6 @@ final class WebSocketGameHandler extends SimpleChannelInboundHandler<BinaryWebSo
         try {
             PacketFrame packet = NettyFramer.decode(Unpooled.wrappedBuffer(bytes));
             if (packet.random() != connectionRandom) {
-                ctx.close();
-                return;
-            }
-            if (ChannelRegistry.INSTANCE.isTokenRevoked(channelId, tokenIssuedAt)) {
                 ctx.close();
                 return;
             }
@@ -134,12 +128,6 @@ final class WebSocketGameHandler extends SimpleChannelInboundHandler<BinaryWebSo
                 ctx.close();
                 return;
             }
-            if (ChannelRegistry.INSTANCE.isTokenRevoked(resolvedChannelId, claims.getIssuedAt())) {
-                Metrics.counter(METRIC_AUTH_FAILURE).increment();
-                ctx.close();
-                return;
-            }
-            tokenIssuedAt = claims.getIssuedAt();
             connectionRandom = packet.random();
             ClientEndpoint existing = ChannelRegistry.INSTANCE.get(resolvedChannelId);
             if (config.getMaxConnectionsPerAccount() > 0 && existing != null && existing.isActive()) {

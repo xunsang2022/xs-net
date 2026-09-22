@@ -172,14 +172,16 @@ public final class PlayerStateSync {
         timers.cancel(FLUSH_KEY);
     }
 
-    /** 将玩家离线快照写入 Redis，并提交后续数据库同步。 */
+    /** 将玩家最终快照同步保存到数据库，成功后删除 Redis 缓存。 */
     void destroy(Map<String, String> stateSnapshot, long version) {
         RedisStore store = redisStore();
+        DBSyncEngine engine = LogicContext.getDbSyncEngine();
         ExecutorService executor = LogicContext.getRedisIoExecutor();
         CompletableFuture<Boolean> future;
         try {
             future = CompletableFuture.supplyAsync(
-                    () -> store.destroy(playerId, stateSnapshot), executor);
+                    () -> engine.saveNow(Long.parseLong(playerId), stateSnapshot, version)
+                            && store.deletePlayerCache(playerId), executor);
         } catch (RejectedExecutionException exception) {
             services.context().getSelf().tell(new DestroyResult(stateSnapshot, version, false, exception));
             return;
@@ -188,14 +190,10 @@ public final class PlayerStateSync {
                 (success, error) -> new DestroyResult(stateSnapshot, version, success, error));
     }
 
-    /** 完成离线状态写入，并确保最终快照已被数据库同步框架接收。 */
+    /** 完成离线状态保存和 Redis 缓存清理。 */
     boolean completeDestroy(DestroyResult result) {
         if (result.error() != null || !Boolean.TRUE.equals(result.success())) {
             log.error("Failed to destroy player state: playerId={}", playerId, result.error());
-            return false;
-        }
-        if (!submitDatabase(result.stateSnapshot(), result.version())) {
-            log.error("Player destroy state was written to Redis but DB sync queue is full: playerId={}", playerId);
             return false;
         }
         return true;
@@ -208,14 +206,12 @@ public final class PlayerStateSync {
         DBSyncEngine engine = LogicContext.getDbSyncEngine();
         try {
             CompletableFuture.supplyAsync(
-                            () -> store.destroy(playerId, snapshot), executor)
+                            () -> engine.saveNow(Long.parseLong(playerId), snapshot, version)
+                                    && store.deletePlayerCache(playerId), executor)
                     .whenComplete((success, error) -> {
                         if (error != null || !Boolean.TRUE.equals(success)) {
-                            log.error("Failed to persist stopped player state: playerId={}", playerId, error);
-                            return;
-                        }
-                        if (!engine.submit(Long.parseLong(playerId), snapshot, version)) {
-                            log.error("Stopped player state rejected by DB sync queue: playerId={}", playerId);
+                            log.error("Failed to persist stopped player state or delete Redis cache: playerId={}",
+                                    playerId, error);
                         }
                     });
         } catch (RejectedExecutionException exception) {
