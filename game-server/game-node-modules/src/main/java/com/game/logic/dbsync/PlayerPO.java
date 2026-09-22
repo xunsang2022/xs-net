@@ -81,7 +81,8 @@ public class PlayerPO extends XsModel<PlayerPO> {
         captureExpectedVersion();
     }
 
-    public boolean isOnline() {
+    /** Returns whether the persisted online flag is set. */
+    public boolean isOnlineState() {
         return Integer.valueOf(1).equals(online);
     }
 

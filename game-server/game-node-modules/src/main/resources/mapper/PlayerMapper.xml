@@ -30,7 +30,8 @@
             VALUES
             <foreach collection="players" item="player" separator=",">
                 (#{player.id}, #{player.name}, #{player.email}, #{player.online},
-                 #{player.lastLoginAt}, #{player.updatedAt},
+                 CAST(#{player.lastLoginAt} AS TIMESTAMPTZ),
+                 CAST(#{player.updatedAt} AS TIMESTAMPTZ),
                  CAST(#{player.version} AS INTEGER), CAST(#{player.expectedVersion} AS INTEGER))
             </foreach>
         ), upserted AS (

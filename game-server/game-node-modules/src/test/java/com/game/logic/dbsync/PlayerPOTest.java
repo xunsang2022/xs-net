@@ -1,5 +1,7 @@
 package com.game.logic.dbsync;
 
+import org.apache.ibatis.reflection.DefaultReflectorFactory;
+import org.apache.ibatis.reflection.MetaClass;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -31,6 +33,13 @@ class PlayerPOTest {
     }
 
     @Test
+    void exposesOnlineAsAnUnambiguousMybatisProperty() {
+        MetaClass metaClass = MetaClass.forClass(PlayerPO.class, new DefaultReflectorFactory());
+
+        assertEquals(Integer.class, metaClass.getGetterType("online"));
+    }
+
+    @Test
     void tracksDirtyFieldsInOrderAndDeduplicates() {
         PlayerPO player = new PlayerPO();
         player.setProperty(PlayerPO::setName, "alice");
@@ -59,7 +68,7 @@ class PlayerPOTest {
                 .setProperty(PlayerPO::setLastLoginAtMillis, 1700000000000L);
 
         assertEquals(player, result);
-        assertTrue(player.isOnline());
+        assertTrue(player.isOnlineState());
         assertEquals(1700000000000L, player.getLastLoginAtMillis());
         assertEquals(List.of("online", "last_login_at"), player.getDirtyFields());
     }
@@ -91,7 +100,7 @@ class PlayerPOTest {
         assertEquals(42L, restored.getId());
         assertEquals("alice", restored.getName());
         assertEquals("alice@example.com", restored.getEmail());
-        assertTrue(restored.isOnline());
+        assertTrue(restored.isOnlineState());
         assertEquals(1700000000000L, restored.getLastLoginAtMillis());
         assertEquals(1700000001000L, restored.getUpdatedAtMillis());
         assertEquals(7L, restored.getVersionValue());
