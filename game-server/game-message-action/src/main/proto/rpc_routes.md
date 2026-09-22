@@ -6,7 +6,7 @@
 |1000|com.game.message.c2s.LoginRequest|HTTP_RESPONSE||yes|yes|no||
 |1001|com.game.message.c2s.LogoutRequest|REQUEST|com.game.message.actor.logic.PlayerMessage|yes|yes|yes|com.game.message.s2c.LogoutResponse|
 |1002|com.game.message.s2c.LoginResponse|HTTP_RESPONSE|com.game.message.actor.S2C|yes|yes|no||
-|1003|com.game.message.s2c.LogoutResponse|RESPONSE|com.game.message.actor.logic.PlayerMessage|yes|yes|no||
+|1003|com.game.message.s2c.LogoutResponse|RESPONSE|com.game.message.actor.S2C|yes|yes|no||
 |2100|com.game.message.c2s.LogReportRequest|HTTP_RESPONSE||yes|no|no||
 |2101|com.game.message.s2c.LogReportResponse|HTTP_RESPONSE||yes|no|no||
 |3003|com.game.message.c2s.PlayerEnterCommand|INTERNAL|com.game.message.actor.logic.PlayerMessage|no|yes|no||

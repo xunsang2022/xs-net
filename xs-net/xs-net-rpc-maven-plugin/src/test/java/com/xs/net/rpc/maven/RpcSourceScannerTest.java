@@ -31,13 +31,17 @@ class RpcSourceScannerTest {
                     int responseNumber() default 0;
                 }
                 class RpcActor<T> {}
+                @interface Roles { String value(); }
+                @Roles("logic")
                 interface PlayerMessage {}
+                @Roles("gateway")
+                interface S2C {}
                 interface INetMessage {}
                 @Rpc(kind = Rpc.Kind.MESSAGE, number = 8)
                 record HttpResult(@ProtoField(number = 1) String token) implements INetMessage {}
                 @Rpc(kind = Rpc.Kind.REQUEST, requestNumber = 6, responseNumber = 7)
                 record Request(@ProtoField(number = 1) String playerId, @ProtoField(number = 2) Integer level) implements PlayerMessage {}
-                record Response(@ProtoField(number = 1) Long result) implements PlayerMessage {}
+                record Response(@ProtoField(number = 1) Long result) implements S2C {}
                 @Rpc(kind = Rpc.Kind.INTERNAL, number = 9)
                 record Enter(@ProtoField(number = 1) String playerId) implements PlayerMessage {}
                 class PlayerActor extends RpcActor<PlayerMessage> { Response handle(Request request) { return null; } void enter(Enter enter) {} }
@@ -46,6 +50,7 @@ class RpcSourceScannerTest {
         RpcModel model = new RpcSourceScanner().scan(java.util.List.of(source));
         assertEquals(java.util.List.of(6, 7, 8, 9), model.messages().stream().map(MessageModel::number).toList());
         assertEquals("sample.PlayerMessage", model.messages().getFirst().roleType());
+        assertEquals("sample.S2C", model.messages().get(1).roleType());
         assertEquals("sample.PlayerActor", model.messages().getFirst().actorType());
 
         Path target = temporaryDirectory.resolve("target");
@@ -54,21 +59,24 @@ class RpcSourceScannerTest {
 
         String playerProto = java.nio.file.Files.readString(target.resolve("proto/PlayerMessages.proto"));
         String commentProto = java.nio.file.Files.readString(target.resolve("proto/comment.proto"));
+        String s2cProto = java.nio.file.Files.readString(target.resolve("proto/S2Cs.proto"));
         String routesProto = java.nio.file.Files.readString(target.resolve("proto/rpc_routes.proto"));
+        String routesMarkdown = java.nio.file.Files.readString(target.resolve("proto/rpc_routes.md"));
         String registry = java.nio.file.Files.readString(target.resolve("java/com/game/message/rpc/GameRpcMessages.java"));
         String codec = java.nio.file.Files.readString(target.resolve("java/com/game/message/rpc/GeneratedRpcCodec.java"));
         assertTrue(playerProto.contains("message Request"));
-        assertTrue(playerProto.contains("message Response"));
         assertTrue(playerProto.contains("message Enter"));
+        assertTrue(s2cProto.contains("message Response"));
         assertTrue(playerProto.contains("optional string player_id = 1;"));
         // 消息结构上注释消息 ID，CS/SC 均标注
         assertTrue(playerProto.contains("// Request = 6"));
-        assertTrue(playerProto.contains("// Response = 7"));
+        assertTrue(s2cProto.contains("// Response = 7"));
         assertTrue(playerProto.contains("// Enter = 9"));
         assertTrue(commentProto.contains("// HttpResult = 8"));
         assertFalse(playerProto.contains("message HttpResult"));
         assertTrue(commentProto.contains("message HttpResult"));
         assertFalse(commentProto.contains("message Request"));
+        assertTrue(routesMarkdown.contains("|7|sample.Response|RESPONSE|sample.S2C|"));
         assertTrue(routesProto.contains("RPC_REQUEST = 6"));
         assertTrue(routesProto.contains("RPC_RESPONSE = 7"));
         assertTrue(routesProto.contains("RPC_HTTP_RESULT = 8"));

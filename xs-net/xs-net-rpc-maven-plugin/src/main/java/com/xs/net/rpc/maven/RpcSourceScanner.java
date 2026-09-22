@@ -34,6 +34,7 @@ final class RpcSourceScanner {
 
     RpcModel scan(List<Path> sourceDirectories) throws IOException, MojoFailureException {
         Map<String, RecordDeclaration> records = new HashMap<>();
+        Map<String, RecordSource> recordSources = new HashMap<>();
         List<CompilationUnit> units = new ArrayList<>();
         for (Path sourceDirectory : sourceDirectories) {
             if (!Files.isDirectory(sourceDirectory)) {
@@ -44,8 +45,14 @@ final class RpcSourceScanner {
                     CompilationUnit unit = StaticJavaParser.parse(path);
                     units.add(unit);
                     String packageName = unit.getPackageDeclaration().map(value -> value.getNameAsString() + ".").orElse("");
+                    String packageTypeName = packageName.endsWith(".")
+                            ? packageName.substring(0, packageName.length() - 1)
+                            : packageName;
+                    Map<String, String> imports = imports(unit);
                     for (RecordDeclaration record : unit.findAll(RecordDeclaration.class)) {
                         records.put(packageName + record.getNameAsString(), record);
+                        recordSources.put(packageName + record.getNameAsString(),
+                                new RecordSource(record, packageTypeName, imports));
                     }
                 }
             }
@@ -117,10 +124,14 @@ final class RpcSourceScanner {
                             int requestNumber = intAttribute(value, "requestNumber");
                             int responseNumber = intAttribute(value, "responseNumber");
                             String responseDtoType = requireResponse(binding, dtoType, record);
+                            RecordSource responseSource = requireRecordSource(recordSources, responseDtoType);
                             messages.add(message(requestNumber, messageName(dtoType), dtoType, record,
                                     binding.roleType(), Direction.REQUEST, true, binding.actorType(), binding.componentField(), binding.methodName(), responseDtoType));
                             messages.add(message(responseNumber, messageName(responseDtoType), responseDtoType,
-                                    requireRecord(records, responseDtoType), binding.roleType(), Direction.RESPONSE, true,
+                                    responseSource.record(),
+                                    downlinkRole(responseSource.record(), responseSource.packageName(),
+                                            responseSource.imports(), roleInterfaces),
+                                    Direction.RESPONSE, true,
                                     null, null, null, null));
                         } catch (MojoFailureException exception) {
                             throw new ScanException(exception);
@@ -290,12 +301,13 @@ final class RpcSourceScanner {
         };
     }
 
-    private RecordDeclaration requireRecord(Map<String, RecordDeclaration> records, String type) throws MojoFailureException {
-        RecordDeclaration record = records.get(type);
-        if (record == null) {
+    private RecordSource requireRecordSource(Map<String, RecordSource> recordSources, String type)
+            throws MojoFailureException {
+        RecordSource source = recordSources.get(type);
+        if (source == null) {
             throw new MojoFailureException("RPC DTO must be a scanned Java record: " + type);
         }
-        return record;
+        return source;
     }
 
     private String resolveType(String type, String packageName, Map<String, String> imports, Map<String, RecordDeclaration> records)
@@ -396,6 +408,14 @@ final class RpcSourceScanner {
     /** 保存类声明及其源文件的类型解析上下文。 */
     private record SourceType(
             ClassOrInterfaceDeclaration declaration,
+            String packageName,
+            Map<String, String> imports
+    ) {
+    }
+
+    /** 保存 record 声明及其源文件的类型解析上下文。 */
+    private record RecordSource(
+            RecordDeclaration record,
             String packageName,
             Map<String, String> imports
     ) {

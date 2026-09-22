@@ -11,12 +11,6 @@ message CS_Logout {
   optional string session_id = 2;
 }
 
-// SC_Logout = 1003
-message SC_Logout {
-  optional string player_id = 1;
-  optional string session_id = 2;
-}
-
 // PlayerEnterCommand = 3003
 message PlayerEnterCommand {
   optional int64 player_id = 1;

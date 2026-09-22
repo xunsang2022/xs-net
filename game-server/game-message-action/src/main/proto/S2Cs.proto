@@ -12,3 +12,9 @@ message SC_Login {
   optional string player_name = 3;
   optional string token = 4;
 }
+
+// SC_Logout = 1003
+message SC_Logout {
+  optional string player_id = 1;
+  optional string session_id = 2;
+}
