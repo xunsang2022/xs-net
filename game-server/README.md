@@ -30,12 +30,14 @@ Gateway 不直连 Redis 或 PostgreSQL；Login 不创建玩家、不处理游戏
 客户端连接 Gateway TCP 8082 后，第一个帧必须是 UTF-8 JWT。认证成功后，游戏帧使用：
 
 ```text
-len (4B, big-endian, 表示后续消息体字节数) | NetMessage protobuf bytes
-                                                  ├─ rpcNum
-                                                  └─ data
+length(4) | packetId(2) | sendSeq(4) | random(4) |
+headCRC(2) | bodyCRC(2) | body(N)
+                                                   └─ DATA body = NetMessage protobuf bytes
 ```
 
-`NetMessage` 的 `rpcNum` 选择协议契约，`data` 是对应的 Protobuf payload。协议登记、注册和路由过程见 [../xs-net/README.md](../xs-net/README.md)。
+字段均为大端序；`length` 表示 `body` 长度，CRC 使用 CRC-16/CCITT-FALSE，`packetId` 为 `DATA=1`、`ACK=2`、`HELLO=3`、`HEARTBEAT=4`、`ERROR=5`。`NetMessage` 的 `rpcNum` 选择协议契约，`data` 是对应的业务 Protobuf payload。协议登记、注册和路由过程见 [../xs-net/README.md](../xs-net/README.md)。
+
+客户端包头只用于 Gateway 接入侧的分帧、会话和可靠性处理。Gateway 路由后投递给 Logic 的是 `NetMessage`；跨节点部分由 Pekko Artery 使用 Aeron UDP 承载，不会重复携带客户端 XS packet 包头。
 
 ## 配置
 

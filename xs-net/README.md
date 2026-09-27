@@ -28,7 +28,7 @@ xs-net/
 - `AkkaKit` 负责初始化 Cluster Sharding、获取实体引用和投递消息；
 - 节点启动时扫描其 Actor 包。节点拥有的角色初始化为本地实体分片；不拥有的角色初始化为远程代理分片。
 
-远程投递的消息必须能转换为 `NetMessage`，以便 Pekko 跨节点传输。
+远程投递的消息必须能转换为 `NetMessage`，以便 Pekko Artery 跨节点传输；当前游戏节点将 Artery 的底层传输配置为 Aeron UDP。`NetMessage` 由自定义 Pekko serializer 编码为 Protobuf 二进制，Aeron 只负责承载 Artery 的远程帧。
 
 ### SDK 与插件
 
@@ -97,5 +97,5 @@ Actor 的消息接口需由节点角色配置和 RPC 注册表共同约束。完
 
 - 远程分片消息必须具有可用的 RPC 契约；
 - 同一协议编号、Protobuf 类型和 DTO 类型不得重复注册；
-- Gateway wire protocol 为 `4 字节大端长度前缀 + NetMessage protobuf bytes`，长度前缀不属于 `xs-net-message` 的跨节点消息转换；
+- Gateway wire protocol 为 XS packet：`length(4) | packetId(2) | sendSeq(4) | random(4) | headCRC(2) | bodyCRC(2) | body(N)`（大端序），其中 `DATA` 的 `body` 是 `NetMessage protobuf bytes`；该客户端包头不属于 `xs-net-message` 的跨节点消息转换；
 - Logic 节点不使用 Spring Boot，Redis 与 Pekko 由普通 Java 启动流程装配。

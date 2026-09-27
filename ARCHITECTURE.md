@@ -28,7 +28,7 @@ flowchart LR
     Client -- "TCP · protobuf" --> Netty
     Channel -- "Netty 写回" --> Client
     GW -- "HTTP · JWT" --> Login
-    Netty <-- "Pekko Cluster · protobuf" --> Player
+    Netty <-- "Pekko Cluster / Artery(Aeron UDP) · NetMessage protobuf" --> Player
     Player -- "S2C" --> Channel
     Player -- "Redis" --> Redis
     DBSync -- "批量 UPSERT + version" --> PG
@@ -40,13 +40,13 @@ flowchart LR
 ### 上行：客户端到 Logic
 
 1. 客户端连接 Gateway 的 TCP 8082，首个帧发送 UTF-8 JWT；认证通过后，Gateway 将 JWT 中的 `cid` 绑定到 Netty Channel。
-2. 后续游戏消息的 wire protocol 是 `4 字节大端长度前缀 + NetMessage protobuf 字节`。`NetMessage` 内含 `rpcNum` 与 `data`。
+2. 后续游戏消息使用 XS packet：`length(4) | packetId(2) | sendSeq(4) | random(4) | headCRC(2) | bodyCRC(2) | body(N)`，全部为大端序；`DATA` 包的 `body` 是 `NetMessage` Protobuf 字节。TCP/WebSocket/自研 UDP 共用该包头，TCP 通过 `length` 完成拆帧。
 3. Gateway 根据 `rpcNum` 查找协议契约，解码 `data`，提取 `playerId` 后通过 Pekko Cluster Sharding 投递到 Logic 的 `PlayerActor`。
 
 ### 下行：Logic 到客户端
 
 1. `PlayerActor` 将 S2C 消息投递给以 `channelId` 为实体 ID 的 `ChannelActor`。
-2. Gateway 从 `ChannelRegistry` 取得 Netty Channel，编码为 `NetMessage` 并添加长度前缀后写回客户端。
+2. Gateway 从 `ChannelRegistry` 取得 Netty Channel，将 `NetMessage` Protobuf 放入 XS packet 的 `DATA` body 后写回客户端。
 
 ### 认证
 

@@ -80,10 +80,10 @@ TCP、WebSocket 和自研 UDP 共享同一模型：**首个 `HELLO(JWT)` 包 →
   -> ChannelRegistry.register(channelId, TcpClientEndpoint)
   -> gateway.auth.success / gateway.auth.failure / gateway.connection.rejected
 
-后续帧：XS packet(packetId=DATA)，body = NetMessage 字节 -> GatewayMessageRouter.route(body, channelId)
+后续帧：XS packet(packetId=DATA)，body = NetMessage Protobuf 字节 -> GatewayMessageRouter.route(body, channelId)
 ```
 
-注意：由于拆帧在 `AuthHandler` 之前，**JWT 帧同样带 4 字节大端长度前缀**。这一点在 README 的文字描述里没有展开，但实现与 SDK（TypeScript `encodeTcpFrame`）都是如此。
+注意：由于拆帧在 `AuthHandler` 之前，**JWT 帧同样使用 XS packet，前 4 字节是 body 长度字段**，JWT 位于 `HELLO` 包的 body 中。实现与 SDK 都遵循完整 XS packet 格式，而不是简单的“长度前缀 + NetMessage”。
 
 连接断开时 `channelInactive` 从 `ChannelRegistry` 移除并清理认证超时任务。
 
