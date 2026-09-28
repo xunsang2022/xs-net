@@ -6,7 +6,7 @@ import com.game.message.c2s.LogoutRequest;
 import com.game.message.c2s.PlayerEnterCommand;
 import com.game.message.rpc.GameRpcMessages;
 import com.google.protobuf.MessageLite;
-import com.xs.core.akka.AkkaKit;
+import com.xs.kernel.akka.AkkaKit;
 import com.xs.net.message.RpcMessageSpec;
 import com.xs.net.message.RequestContext;
 import com.xs.net.message.RpcRuntime;

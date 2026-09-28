@@ -7,29 +7,25 @@
         <version>0.0.1</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
-    <version>0.0.1</version>
 
-    <artifactId>tool-commons-lang4</artifactId>
+    <artifactId>xs-net-tool-commons-lang4</artifactId>
     <packaging>jar</packaging>
 
-    <name>tool-commons-lang4</name>
+    <name>xs-net-tool-commons-lang4</name>
     <url>http://maven.apache.org</url>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <commons-lang3.version>3.18.0</commons-lang3.version>
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>${commons-lang3.version}</version>
         </dependency>
         <dependency>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
-            <version>${commons-io.version}</version>
         </dependency>
     </dependencies>
 </project>

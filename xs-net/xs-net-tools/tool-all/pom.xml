@@ -7,12 +7,11 @@
         <version>0.0.1</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
-    <version>0.0.1</version>
 
-    <artifactId>tool-all</artifactId>
+    <artifactId>xs-net-tool-all</artifactId>
     <packaging>jar</packaging>
 
-    <name>tool-all</name>
+    <name>xs-net-tool-all</name>
     <url>http://maven.apache.org</url>
 
     <properties>
@@ -28,7 +27,6 @@
         <dependency>
             <groupId>com.xs</groupId>
             <artifactId>tool-luBan-cfg</artifactId>
-            <version>${project.version}</version>
         </dependency>
     </dependencies>
 </project>

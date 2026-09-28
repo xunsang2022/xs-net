@@ -16,7 +16,6 @@
     </modules>
 
     <artifactId>xs-net-tools</artifactId>
-    <version>0.0.1</version>
 
     <packaging>pom</packaging>
     <name>xs-net-tools</name>
@@ -29,15 +28,6 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
-        <lombok.version>1.18.34</lombok.version>
-        <slf4j-api.version>2.0.16</slf4j-api.version>
-        <logback.version>1.5.26</logback.version>
-        <junit.version>4.13.2</junit.version>
-
-        <commons-lang3.version>3.18.0</commons-lang3.version>
-
-        <protobuf-java.version>3.25.5</protobuf-java.version>
-        <commons-io.version>2.16.1</commons-io.version>
     </properties>
 
     <dependencies>
@@ -45,7 +35,6 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>${lombok.version}</version>
             <optional>true</optional>
         </dependency>
 
@@ -53,14 +42,12 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>${slf4j-api.version}</version>
         </dependency>
 
         <!-- Source: https://mvnrepository.com/artifact/ch.qos.logback/logback-classic -->
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>${logback.version}</version>
             <scope>compile</scope>
         </dependency>
 
@@ -68,44 +55,7 @@
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
-            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>junit</groupId>
-                <artifactId>junit</artifactId>
-                <version>${junit.version}</version>
-                <scope>test</scope>
-            </dependency>
-
-            <dependency>
-                <groupId>com.google.protobuf</groupId>
-                <artifactId>protobuf-java</artifactId>
-                <version>${protobuf-java.version}</version>
-            </dependency>
-
-            <!-- 显式管理commons-io版本以修复安全漏洞 -->
-            <dependency>
-                <groupId>commons-io</groupId>
-                <artifactId>commons-io</artifactId>
-                <version>${commons-io.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.commons</groupId>
-                <artifactId>commons-lang3</artifactId>
-                <version>${commons-lang3.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>com.xs</groupId>
-                <artifactId>tool-commons-lang4</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
 </project>

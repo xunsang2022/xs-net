@@ -7,7 +7,7 @@ import org.apache.pekko.actor.typed.javadsl.Receive;
 import com.game.gateway.netty.ChannelRegistry;
 import com.game.gateway.netty.ClientEndpoint;
 import com.game.message.actor.S2C;
-import com.xs.core.actor.RpcActor;
+import com.xs.kernel.actor.RpcActor;
 import com.xs.net.message.MessageAble;
 import com.xs.net.message.RequestContext;
 import com.xs.net.message.pb.NetMessage;

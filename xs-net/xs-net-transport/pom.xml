@@ -15,17 +15,14 @@
         <dependency>
             <groupId>com.xs</groupId>
             <artifactId>xs-net-message</artifactId>
-            <version>0.0.1</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>${slf4j-api.version}</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>5.11.4</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

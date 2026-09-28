@@ -26,7 +26,7 @@
         </dependency>
         <dependency>
             <groupId>com.xs</groupId>
-            <artifactId>xs-net-core</artifactId>
+            <artifactId>xs-net-kernel</artifactId>
             <version>0.0.1</version>
         </dependency>
         <dependency>

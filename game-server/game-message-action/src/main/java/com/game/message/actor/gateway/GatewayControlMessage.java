@@ -1,6 +1,6 @@
 package com.game.message.actor.gateway;
 
-import com.xs.core.actor.node.Roles;
+import com.xs.kernel.actor.node.Roles;
 
 @Roles("gateway")
 public interface GatewayControlMessage {

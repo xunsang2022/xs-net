@@ -4,7 +4,7 @@ import com.game.gateway.netty.ChannelRegistry;
 import com.game.gateway.netty.ClientEndpoint;
 import com.game.message.actor.gateway.GatewayControlMessage;
 import com.game.message.management.DisconnectChannelCommand;
-import com.xs.core.actor.RpcActor;
+import com.xs.kernel.actor.RpcActor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.ActorContext;

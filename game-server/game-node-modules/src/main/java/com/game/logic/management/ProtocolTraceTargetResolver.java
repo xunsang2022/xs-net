@@ -6,7 +6,7 @@ import com.game.logic.actor.scene.SceneActor;
 import com.game.message.actor.logic.GMMessage;
 import com.game.message.actor.logic.PlayerMessage;
 import com.game.message.actor.logic.SceneMessage;
-import com.xs.core.actor.node.Roles;
+import com.xs.kernel.actor.node.Roles;
 import com.xs.net.message.RpcMessageRegistry;
 import com.xs.net.message.RpcMessageSpec;
 import lombok.NonNull;

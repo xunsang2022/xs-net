@@ -19,7 +19,7 @@ import com.game.message.routing.ChannelRoutable;
 import com.game.message.s2c.LoginResponse;
 import com.game.message.s2c.LogoutResponse;
 import com.game.message.scene.PlayerSceneChanged;
-import com.xs.core.actor.ActorServices;
+import com.xs.kernel.actor.ActorServices;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.PostStop;

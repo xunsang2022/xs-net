@@ -17,7 +17,6 @@
     <description>Generate client SDK code into target/code from the server RPC model</description>
 
     <properties>
-        <protobuf.version>3.25.5</protobuf.version>
         <protoc.classifier>windows-x86_64</protoc.classifier>
     </properties>
 
@@ -26,7 +25,7 @@
             <plugin>
                 <groupId>com.xs</groupId>
                 <artifactId>xs-net-rpc-maven-plugin</artifactId>
-                <version>0.0.6</version>
+                <version>${xs-net-rpc-maven-plugin.version}</version>
                 <executions>
                     <execution>
                         <id>generate-sdk-proto</id>

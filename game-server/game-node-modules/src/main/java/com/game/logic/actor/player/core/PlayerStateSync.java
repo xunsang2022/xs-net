@@ -11,7 +11,7 @@ import com.game.logic.dbsync.DBSyncEngine;
 import com.game.logic.dbsync.PlayerPO;
 import com.game.logic.redis.RedisStore;
 import com.game.message.actor.logic.PlayerMessage;
-import com.xs.core.actor.ActorServices;
+import com.xs.kernel.actor.ActorServices;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.ReceiveBuilder;

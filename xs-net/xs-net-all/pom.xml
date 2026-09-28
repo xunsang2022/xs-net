@@ -2,10 +2,16 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <parent>
+        <groupId>com.xs</groupId>
+        <artifactId>xs-net</artifactId>
+        <version>0.0.1</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
     <groupId>com.xs</groupId>
     <artifactId>xs-net-all</artifactId>
     <packaging>jar</packaging>
-    <version>0.0.1</version>
 
     <name>xs-net-all</name>
 
@@ -20,13 +26,11 @@
     <dependencies>
         <dependency>
             <groupId>com.xs</groupId>
-            <artifactId>xs-net-core</artifactId>
-            <version>0.0.1</version>
+            <artifactId>xs-net-kernel</artifactId>
         </dependency>
         <dependency>
             <groupId>com.xs</groupId>
             <artifactId>xs-net-transport</artifactId>
-            <version>0.0.1</version>
         </dependency>
 
     </dependencies>

@@ -1,9 +1,8 @@
 package com.game.battle.actor;
 
 import com.game.message.actor.logic.BattleMessage;
-import com.game.message.battle.BattleCreateCommand;
 import com.google.protobuf.InvalidProtocolBufferException;
-import com.xs.core.akka.RpcDeliveryInterceptor;
+import com.xs.kernel.akka.RpcDeliveryInterceptor;
 import com.xs.net.message.MessageAble;
 import com.xs.net.message.RequestContext;
 import com.xs.net.message.RpcMessageRegistry;

@@ -1,8 +1,8 @@
 package com.game.logic.actor.player.core;
 
 import com.game.message.actor.logic.PlayerMessage;
-import com.xs.core.actor.RpcActor;
-import com.xs.core.actor.node.ActorDispatcher;
+import com.xs.kernel.actor.RpcActor;
+import com.xs.kernel.actor.node.ActorDispatcher;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.ActorContext;

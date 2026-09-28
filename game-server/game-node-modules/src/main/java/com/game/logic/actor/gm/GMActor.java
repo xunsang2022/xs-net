@@ -6,7 +6,7 @@ import com.game.message.actor.logic.GMMessage;
 import com.game.message.actor.logic.PlayerMessage;
 import com.game.message.management.GmKickPlayerCommand;
 import com.game.message.management.GmKickPlayerRequest;
-import com.xs.core.actor.RpcActor;
+import com.xs.kernel.actor.RpcActor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.ActorContext;

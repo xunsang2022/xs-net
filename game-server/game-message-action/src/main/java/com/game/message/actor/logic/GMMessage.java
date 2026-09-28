@@ -1,6 +1,6 @@
 package com.game.message.actor.logic;
 
-import com.xs.core.actor.node.Roles;
+import com.xs.kernel.actor.node.Roles;
 
 @Roles("logic")
 public interface GMMessage {

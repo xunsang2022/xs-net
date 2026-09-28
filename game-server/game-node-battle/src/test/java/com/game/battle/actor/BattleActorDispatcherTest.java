@@ -1,6 +1,6 @@
 package com.game.battle.actor;
 
-import com.xs.core.actor.node.ActorDispatcher;
+import com.xs.kernel.actor.node.ActorDispatcher;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

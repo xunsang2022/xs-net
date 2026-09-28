@@ -2,7 +2,7 @@ package com.game.gateway.management;
 
 import com.game.message.actor.logic.GMMessage;
 import com.game.message.management.GmKickPlayerRequest;
-import com.xs.core.akka.AkkaKit;
+import com.xs.kernel.akka.AkkaKit;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
