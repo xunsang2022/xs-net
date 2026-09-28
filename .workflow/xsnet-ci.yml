@@ -1,0 +1,44 @@
+version: '1.0'
+name: xsnet-ci
+displayName: XS-NET CI
+
+triggers:
+  trigger: auto
+  push:
+    branches:
+      precise:
+        - master
+        - main
+  pr:
+    branches:
+      precise:
+        - master
+        - main
+
+stages:
+  - name: verify
+    displayName: JDK 21 构建验证
+    strategy: naturally
+    trigger: auto
+    executor: []
+    steps:
+      - step: build@maven
+        name: build_maven
+        displayName: 构建并验证全部 Maven 模块
+        # Gitee Go 当前 Maven 构建环境最高列出 JDK 17；下方命令安装项目需要的 JDK 21。
+        jdkVersion: '17'
+        mavenVersion: 3.6.3
+        commands:
+          - |
+            set -eu
+            curl --fail --location --silent --show-error \
+              'https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse' \
+              --output /tmp/temurin-21.tar.gz
+            mkdir -p /tmp/temurin-21
+            tar -xzf /tmp/temurin-21.tar.gz -C /tmp/temurin-21 --strip-components=1
+            export JAVA_HOME=/tmp/temurin-21
+            export PATH="$JAVA_HOME/bin:$PATH"
+            java -version
+            bash ./mvnw --batch-mode --no-transfer-progress clean verify
+        caches:
+          - ~/.m2

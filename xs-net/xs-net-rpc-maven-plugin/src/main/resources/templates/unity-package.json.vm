@@ -1,6 +1,7 @@
 {
   "name": "${name}",
   "version": "${version}",
+  "license": "Apache-2.0",
   "displayName": "${displayName}",
   "description": "${description}",
   "unity": "2021.3",

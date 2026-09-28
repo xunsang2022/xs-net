@@ -7,11 +7,9 @@
 
 ## Maven 构建环境（本仓库）
 
-- 本机没有全局 Maven；统一使用仓库根目录的 `.\mvnw.cmd` 包装脚本，它内部调用 IntelliJ IDEA 自带 Maven。
-
-- `.\mvnw.cmd` 会固定 `JAVA_HOME`（JDK 21）并显式传入 `-Dmaven.repo.local="$env:USERPROFILE\.m2\repository"`，避免 Maven 解析到 `C:\.m2\repository` 导致构建失败。
-
-- 若必须直接调用 Maven，路径为 `F:\Program Files\JetBrains\IntelliJ IDEA 2025.1.1\plugins\maven\lib\maven3\bin\mvn.cmd`（3.9.9），并必须显式传 `-Dmaven.repo.local="$env:USERPROFILE\.m2\repository"`；不要依赖 PATH 中是否存在 `mvn`。
+- 使用仓库根目录的 Maven Wrapper：Windows 运行 `.\mvnw.cmd`，Linux/macOS 运行 `bash ./mvnw`。
+- Wrapper 固定 Maven 3.9.9；项目需要 JDK 21。首次运行会从 Maven Central 下载 Maven，无需安装 IntelliJ IDEA 或全局 Maven。
+- 默认本地依赖仓库为用户目录下的 `.m2/repository`。直接调用 Maven 时也应使用 Maven 3.9.9 和 JDK 21；不要依赖 IDE 私有路径。
 
 # git工作规范
 

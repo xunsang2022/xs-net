@@ -1,6 +1,7 @@
 {
   "name": "@xs-net/game-sdk-cocos",
   "version": "0.0.1",
+  "license": "Apache-2.0",
   "description": "Cocos Creator TypeScript client SDK for XS Net",
   "type": "module",
   "main": "dist/src/index.js",
@@ -11,7 +12,7 @@
       "import": "./dist/src/index.js"
     }
   },
-  "files": ["dist", "proto", "README.md"],
+  "files": ["dist", "proto", "README.md", "THIRD_PARTY_NOTICES.md"],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc",

@@ -12,6 +12,26 @@
     </description>
 
     <name>xs-net</name>
+    <url>https://gitee.com/xs-gitee-2023/xs-net</url>
+
+    <scm>
+        <connection>scm:git:https://gitee.com/xs-gitee-2023/xs-net.git</connection>
+        <developerConnection>scm:git:ssh://git@gitee.com:xs-gitee-2023/xs-net.git</developerConnection>
+        <url>https://gitee.com/xs-gitee-2023/xs-net</url>
+    </scm>
+
+    <issueManagement>
+        <system>Gitee Issues</system>
+        <url>https://gitee.com/xs-gitee-2023/xs-net/issues</url>
+    </issueManagement>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
 
     <modules>
         <module>xs-net-tools</module>

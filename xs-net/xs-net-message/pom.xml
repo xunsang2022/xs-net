@@ -12,7 +12,6 @@
     <packaging>jar</packaging>
 
     <name>xs-net-message</name>
-    <url>http://maven.apache.org</url>
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>

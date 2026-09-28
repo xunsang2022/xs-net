@@ -11,8 +11,8 @@ target/
 
 # Local editor state
 .trae/
-.idea/workspace.xml
-.idea/claudeCodeTabState.xml
+.idea/
+**/.idea/
 
 # Python caches
 __pycache__/
