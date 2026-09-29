@@ -1,7 +1,7 @@
 package com.game.logic.management;
 
 import com.game.logic.actor.gm.GMActor;
-import com.game.logic.actor.player.core.PlayerActor;
+import com.game.logic.actor.player.PlayerActor;
 import com.game.logic.actor.scene.SceneActor;
 import com.game.message.actor.logic.GMMessage;
 import com.game.message.actor.logic.PlayerMessage;

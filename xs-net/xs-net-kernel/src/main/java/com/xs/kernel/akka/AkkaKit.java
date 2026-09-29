@@ -32,7 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @UtilityClass
 public class AkkaKit {
-    /** 分片实体专用调度器：实体 Actor 会做阻塞式 Redis 访问，用大容量线程池提升并发吞吐。 */
+    /** 分片实体专用调度器：实体 Actor 会执行阻塞式 I/O，用大容量线程池提升并发吞吐。 */
     public static final String ENTITY_DISPATCHER = "pekko.actor.xs-entity-dispatcher";
 
     private static final Map<Class<?>, EntityTypeKey<?>> ENTITY_TYPE_KEYS = new ConcurrentHashMap<>();
@@ -176,7 +176,7 @@ public class AkkaKit {
     ) {
         EntityTypeKey<?> typeKey = entityTypeKey(actorCmdClass);
         // 分片实体（PlayerMessage / S2C 通道）统一使用大容量专用调度器，
-        // 实体 Actor 会做阻塞式 Redis 访问，默认 32 线程 fork-join 在高并发下成瓶颈。
+        // 实体 Actor 会执行阻塞式 I/O，默认 32 线程 fork-join 在高并发下成瓶颈。
         sharding.init(Entity.of(typeKey, entityContext -> createEntityContext(entityContext, actorClass))
                 .withRole(roles)
                 .withEntityProps(Props.empty().withDispatcherFromConfig(Objects.requireNonNull(dispatcher, "dispatcher"))));

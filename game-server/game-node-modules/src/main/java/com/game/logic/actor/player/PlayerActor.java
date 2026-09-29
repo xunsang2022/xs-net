@@ -1,5 +1,7 @@
-package com.game.logic.actor.player.core;
+package com.game.logic.actor.player;
 
+import com.game.logic.actor.player.core.PlayerLifecycle;
+import com.game.logic.actor.player.core.PlayerStateSync;
 import com.game.message.actor.logic.PlayerMessage;
 import com.xs.kernel.actor.RpcActor;
 import com.xs.kernel.actor.node.ActorDispatcher;

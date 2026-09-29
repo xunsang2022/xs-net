@@ -1,5 +1,6 @@
 package com.game.logic.dbsync;
 
+import com.game.logic.actor.player.PlayerPO;
 import com.game.logic.context.LogicContext;
 import com.game.logic.context.LogicMetrics;
 import lombok.extern.slf4j.Slf4j;
@@ -19,13 +20,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * 进程内批写器：收集脏记录，定时批量 UPSERT 到 PostgreSQL。
  * 使用 ConcurrentHashMap 收集脏记录，ScheduledExecutorService 定时触发 flush，
- * flush 按 flushConcurrency 分片并行执行 MyBatis-Plus 自定义批量 UPSERT，
+ * flush 按 flushConcurrency 分片并行执行 MyBatis 自定义批量 UPSERT，
  * 成功移除脏记录，失败（异常或乐观锁冲突）保留下一轮重试。
  */
 @Slf4j
 public class DBSyncEngine {
 
-    private final PlayerPersistence persistence;
+    private final PlayerMapper playerMapper;
     private final DBSyncConfig config;
     private final DirtyStateBuffer dirty;
     private final ConcurrentHashMap<Long, Integer> retryAttempts = new ConcurrentHashMap<>();
@@ -36,8 +37,8 @@ public class DBSyncEngine {
     private ScheduledExecutorService scheduler;
     private ExecutorService flushPool;
 
-    public DBSyncEngine(PlayerPersistence persistence, DBSyncConfig config) {
-        this.persistence = persistence;
+    public DBSyncEngine(PlayerMapper playerMapper, DBSyncConfig config) {
+        this.playerMapper = playerMapper;
         this.config = config;
         this.dirty = new DirtyStateBuffer(config.getMaxDirtyRecords(), config.getMaxDirtyBytes());
     }
@@ -116,12 +117,8 @@ public class DBSyncEngine {
      * 相比「INSERT ... ON CONFLICT DO NOTHING + SELECT」省去一次 DB 往返（新玩家登录热路径）。
      */
     public Map<String, String> loadOrCreate(Long playerId) {
-        return persistence.loadOrCreate(playerId);
-    }
-
-    /** Performs one synchronous custom UPSERT for PlayerPO.saveDb(). */
-    public boolean saveNow(PlayerPO player) {
-        return persistence.upsert(player);
+        PlayerPO player = playerMapper.loadOrCreate(playerId, "player-" + playerId);
+        return player.toHash();
     }
 
     /** 同步保存玩家完整快照，供下线流程在删除 Redis 前完成最终落库。 */
@@ -131,7 +128,7 @@ public class DBSyncEngine {
                 snapshot,
                 Math.max(0L, version - 1L),
                 version);
-        return persistence.upsert(PlayerPO.fromDirtyRecord(record));
+        return playerMapper.upsertRecord(record) != null;
     }
 
     /**
@@ -187,8 +184,7 @@ public class DBSyncEngine {
             for (int offset = 0; offset < shard.size(); offset += config.getBatchSize()) {
                 List<DirtyRecord> batch = shard.subList(offset,
                         Math.min(offset + config.getBatchSize(), shard.size()));
-                Set<Long> persistedIds = persistence.upsertBatch(
-                        batch.stream().map(PlayerPO::fromDirtyRecord).toList());
+                List<Long> persistedIds = playerMapper.upsertBatch(batch);
                 for (DirtyRecord record : batch) {
                     if (persistedIds.contains(record.playerId())) {
                         dirty.removeIfVersion(record.playerId(), record.version());

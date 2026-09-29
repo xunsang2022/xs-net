@@ -1,6 +1,7 @@
 package com.game.logic.dbsync;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.game.logic.actor.player.PlayerPO;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
@@ -13,5 +14,7 @@ public interface PlayerMapper extends BaseMapper<PlayerPO> {
     PlayerPO loadOrCreate(@Param("playerId") Long playerId,
                           @Param("defaultName") String defaultName);
 
-    List<PlayerPO> upsertBatch(@Param("players") List<PlayerPO> players);
+    Long upsertRecord(@Param("record") DirtyRecord record);
+
+    List<Long> upsertBatch(@Param("records") List<DirtyRecord> records);
 }

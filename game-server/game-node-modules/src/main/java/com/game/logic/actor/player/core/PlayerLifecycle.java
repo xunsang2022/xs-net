@@ -6,7 +6,7 @@ import com.game.logic.actor.player.message.DestroyResult;
 import com.game.logic.actor.player.message.InitialRedisWriteResult;
 import com.game.logic.actor.player.message.LoadTimeout;
 import com.game.logic.context.LogicContext;
-import com.game.logic.dbsync.PlayerPO;
+import com.game.logic.actor.player.PlayerPO;
 import com.game.logic.scene.PlayerSceneTracker;
 import com.game.message.actor.S2C;
 import com.game.message.actor.gateway.GatewayControlMessage;
@@ -28,6 +28,7 @@ import org.apache.pekko.actor.typed.javadsl.ReceiveBuilder;
 import org.apache.pekko.actor.typed.javadsl.StashBuffer;
 import org.apache.pekko.actor.typed.javadsl.TimerScheduler;
 
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.util.Map;
 
@@ -80,7 +81,7 @@ public final class PlayerLifecycle {
      * @param timers Actor 定时器调度器
      * @param stateSync 玩家状态同步组件
      */
-    PlayerLifecycle(
+    public PlayerLifecycle(
             ActorServices<PlayerMessage> services,
             StashBuffer<PlayerMessage> stash,
             TimerScheduler<PlayerMessage> timers,
@@ -97,7 +98,7 @@ public final class PlayerLifecycle {
      *
      * @param builder 玩家 Actor 的消息接收构建器
      */
-    void registerHandlers(ReceiveBuilder<PlayerMessage> builder) {
+    public void registerHandlers(ReceiveBuilder<PlayerMessage> builder) {
         builder
                 .onMessage(PlayerEnterCommand.class, services.contextual(this::onPlayerEnterMessage))
                 .onMessage(LogoutRequest.class, services.contextual(this::onLogoutMessage))
@@ -378,7 +379,7 @@ public final class PlayerLifecycle {
             state.setProperty(PlayerPO::setName, playerName);
         }
         markOnlineFields();
-        state.saveRedis();
+        LogicContext.getRedisStore().saveRedis(state);
         log.info("PlayerActor enter: playerId={}, channelId={}", services.entityId(), command.channelId());
         sendLoginResponse(command.playerId(), state.getName(), command.channelId());
     }
@@ -390,8 +391,8 @@ public final class PlayerLifecycle {
         }
         phase = Phase.DESTROYING;
         long now = System.currentTimeMillis();
-        state.setProperty(PlayerPO::setOnline, false)
-                .setProperty(PlayerPO::setUpdatedAtMillis, now);
+        state.setProperty(PlayerPO::setOnline, 0)
+                .setProperty(PlayerPO::setUpdatedAt, new Timestamp(now));
         return true;
     }
 
@@ -428,10 +429,10 @@ public final class PlayerLifecycle {
     /** 更新在线状态、登录时间、更新时间和版本号。 */
     private void markOnlineFields() {
         long now = System.currentTimeMillis();
-        state.setProperty(PlayerPO::setOnline, true)
-                .setProperty(PlayerPO::setLastLoginAtMillis, now)
-                .setProperty(PlayerPO::setUpdatedAtMillis, now)
-                .setProperty(PlayerPO::setVersionValue, state.getVersionValue() + 1L);
+        state.setProperty(PlayerPO::setOnline, 1)
+                .setProperty(PlayerPO::setLastLoginAt, new Timestamp(now))
+                .setProperty(PlayerPO::setUpdatedAt, new Timestamp(now))
+                .setProperty(PlayerPO::setVersion, Math.toIntExact(state.getVersionValue() + 1L));
     }
 
     /** 返回当前玩家业务状态，供状态同步组件创建和清理持久化快照。 */

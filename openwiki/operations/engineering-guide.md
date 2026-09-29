@@ -79,6 +79,12 @@ $env:LOGIC_GM_TOKEN = 'replace-with-a-long-random-token'
 
 脚本会打包 `game-node-modules`（`-Build` 或产物缺失时），并以 `--add-opens=java.base/sun.nio.ch=ALL-UNNAMED -Duser.home=<repo>\.log -Darthas.home=<target>\arthas -Darthas.ip=127.0.0.1 -Darthas.httpPort=-1` 启动，标准输出写入 `.log/logic-<时间戳>.log`。
 
+Logic 使用 Spring Boot 非 Web 启动。WSL Ubuntu 24.04 / JRE 21 的一次本机测量中，从相同的 JVM 启动标记到 Shard Region 初始化：原启动约 16.0 秒，迁移后约 20.1 秒，增加约 4.1 秒。此测量未等待配置中的 Pekko seed node 加入（`127.0.0.1:2001` 未运行），不可视为集群就绪时间；Spring Boot 报告的应用上下文启动耗时不等于进程总启动耗时。
+
+### Logic 配置
+
+`game-node-modules/src/main/resources/application.yml` 由 Spring Boot 加载。Redis 使用 `spring.data.redis.*`，PostgreSQL 连接池使用 `spring.datasource.*`；Logic 自有配置绑定到 `game.*`，并支持标准外部配置覆盖（命令行、环境变量及 profile 配置）。Pekko 集群地址仍由 `application.conf` 管理。DBSync、MyBatis Mapper 和日志消费由 `LogicNodeConfiguration` 创建，`LogicNodeRuntime` 负责运行时启动与关闭。
+
 ### 压测客户端
 
 原 `game-client` 模块已移除。登录压测使用统一生成的 Unity 控制台工程：
@@ -111,17 +117,9 @@ dotnet run --project xs-net/xs-net-sdk/target/code/unity/LoadTest/XsNet.LoadTest
 
 ### Logic / Battle
 
-Logic 的 `application.yml` 由 SnakeYAML 手工加载，Battle 只用 `application.conf` + 环境变量。**Logic 的配置来源并不统一**，这是当前最容易被误解的一点：
+Logic 配置由 Spring Boot 外部化配置加载。Redis、数据源分别使用 `spring.data.redis.*` 和 `spring.datasource.*`；线程池、DBSync、管理端点及热配置使用 `game.*` 属性绑定。命令行、环境变量和 profile 配置均可覆盖 YAML。Battle 仍为普通 Java，主要使用 `application.conf` 与 Pekko 环境变量。
 
-| 参数组 | 来源 | 是否支持环境变量 |
-| --- | --- | --- |
-| `game.redis.*` | 仅 `application.yml` | 否 |
-| `game.db.*` | 仅 `application.yml` | 否 |
-| `game.io.*`、`game.storage.sync-interval-ms`、`game.logging.level` | 仅 `application.yml` | 否 |
-| `game.management.metrics.host` / `metrics.port` / `token` / `arthas.home` / `arthas.telnet-port` / `config-reload-interval-ms` | `config(key, envKey, default)` | 是：`LOGIC_METRICS_HOST`、`LOGIC_METRICS_PORT`、`LOGIC_GM_TOKEN`、`LOGIC_ARTHAS_HOME`、`LOGIC_ARTHAS_TELNET_PORT`、`LOGIC_CONFIG_RELOAD_INTERVAL_MS` |
-| `game.pekko.*` | 未在 `application.yml` 中生效 | 由 `application.conf` 的 `PEKKO_HOSTNAME` / `PEKKO_PORT` 覆盖（Battle 另有 `BATTLE_PEKKO_HOSTNAME` / `BATTLE_PEKKO_PORT`） |
-
-对支持环境变量的那组，优先级为系统属性 > 环境变量 > YAML > 内置默认值。对 Redis/DB 组，`deploy/cluster/docker-compose.yml` 中给 Logic 传入的 `REDIS_HOST` / `DB_URL` 目前**不会生效**——这是一个需要修正的部署漂移点，参见本文末的待办。
+`game.pekko.*` 不用于覆盖集群网络地址；Logic 与 Battle 的 hostname / port / seed nodes 仍由各自 `application.conf` 和其中声明的 `PEKKO_HOSTNAME` / `PEKKO_PORT` 环境变量控制。集群部署传入的环境变量需使用 Spring Boot 对应属性名（例如 `SPRING_DATA_REDIS_HOST`、`SPRING_DATASOURCE_URL`），不能假设旧的 `REDIS_HOST` / `DB_URL` 会自动映射。
 
 ### Pekko
 
@@ -197,6 +195,6 @@ Logic 的 `application.yml` 由 SnakeYAML 手工加载，Battle 只用 `applicat
 
 ## 待补充证据与已知漂移
 
-- `deploy/cluster/docker-compose.yml` 给 Logic 传的 `REDIS_HOST` / `DB_URL` 等环境变量在 `GameLogicApplication` 中不会被读取；同时 Logic `application.yml` 的默认 Redis/DB 地址是局域网地址 `172.21.255.41`，容器内不可达。集群拓扑需要先修正这一点才能按 README 验证。
+- `deploy/cluster/docker-compose.yml` 给 Logic 传递的 Redis/DB 环境变量命名仍需与 `spring.data.redis.*` / `spring.datasource.*` 的 Boot 属性映射核对；Logic 默认 Redis/DB 地址为局域网地址 `172.21.255.41`，容器内可能不可达。集群拓扑需要先修正这一点才能按 README 验证。
 - `docs/udp-tcp-kcp-websocket.md` 描述的是 `com.game.gateway.transport.{tcp,udp}` 结构，与当前 `netty` / `kcp` 包不一致。
 - 仓库没有 CI 工作流（`.github/` 下只有 Issue/PR 模板），所有验证依赖本地执行。

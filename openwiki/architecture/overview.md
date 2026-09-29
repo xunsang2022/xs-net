@@ -26,7 +26,7 @@ game-server
   game-message-action    业务协议 record、@Rpc/@ProtoField 注解、路由接口、RPC 注册表装配
   game-node-gateway      Spring Boot：Netty 四协议接入、认证、路由、S2C 回写、GM/Actuator
   game-node-login        Spring Boot：仅签发与校验 JWT
-  game-node-modules      普通 Java：PlayerActor、SceneActor、GMActor、Redis、DBSyncEngine、LogConsumer
+  game-node-modules      Spring Boot（非 Web）：PlayerActor、SceneActor、GMActor、Redis、DBSyncEngine、LogConsumer
   game-node-battle       普通 Java：BattleActor、专用战斗执行器池
 ```
 
@@ -51,9 +51,9 @@ Gateway 还承载 HTTP 管理面：Spring Boot 端口 8080 暴露 Actuator 与 `
 
 只有 `/api/auth/issue` 与 `/api/auth/verify` 两个端点，使用 `JwtUtil` 签发/校验 JWT。`application.yml` 显式排除 `GameFrameworkAutoConfiguration`，因此 Login 不创建 `ActorSystem`，也不是集群成员。它不创建玩家、不处理游戏状态。
 
-### Logic（普通 Java，`game-node-modules`）
+### Logic（Spring Boot 非 Web，`game-node-modules`）
 
-游戏状态与持久化的归属地。`GameLogicApplication` 手工装配 Lettuce/Redis、Hikari/JdbcTemplate、`DBSyncEngine`、`LogConsumer`、Micrometer 与 Pekko，然后启动一个只有一个 `NodeActor` 子节点的 `ActorSystem`（名称为 `game-system`）。节点角色在 `application.conf` 中声明为 `["logic", "system"]`。
+游戏状态与持久化的归属地。`GameLogicApplication` 以非 Web 模式启动 Spring Boot；Boot 管理 Redis、Hikari 数据源及配置绑定，`LogicNodeConfiguration` 提供 MyBatis、DBSync、日志消费和指标组件，`LogicNodeRuntime` 编排初始化并启动 Pekko。Logic 最终启动一个只有一个 `NodeActor` 子节点的 `ActorSystem`（名称为 `game-system`）。节点角色在 `application.conf` 中声明为 `["logic", "system"]`。
 
 Logic 持有的 Actor：
 

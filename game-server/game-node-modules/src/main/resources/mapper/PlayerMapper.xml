@@ -4,7 +4,7 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.game.logic.dbsync.PlayerMapper">
 
-    <select id="upsert" resultType="com.game.logic.dbsync.PlayerPO">
+    <select id="upsert" resultType="com.game.logic.actor.player.PlayerPO">
         INSERT INTO users (id, name, email, online, last_login_at, updated_at, version)
         VALUES (#{id}, #{name}, #{email}, #{online}, #{lastLoginAt}, #{updatedAt}, #{version})
         ON CONFLICT (id) DO UPDATE SET
@@ -18,21 +18,51 @@
         RETURNING id, name, email, online, last_login_at, updated_at, version
     </select>
 
-    <select id="loadOrCreate" resultType="com.game.logic.dbsync.PlayerPO">
+    <select id="loadOrCreate" resultType="com.game.logic.actor.player.PlayerPO">
         INSERT INTO users (id, name, email, online, last_login_at, updated_at, version)
         VALUES (#{playerId}, #{defaultName}, '', 0, NOW(), NOW(), 1)
         ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
         RETURNING id, name, email, online, last_login_at, updated_at, version
     </select>
 
-    <select id="upsertBatch" resultType="com.game.logic.dbsync.PlayerPO">
+    <sql id="dirtyRecordValues">
+        (#{record.playerId},
+         COALESCE(NULLIF(#{record.fields.name}, ''), CONCAT('player-', #{record.playerId})),
+         COALESCE(#{record.fields.email}, ''),
+         COALESCE(NULLIF(#{record.fields.online}, '')::INTEGER, 0),
+         to_timestamp(NULLIF(#{record.fields.last_login_at}, '')::BIGINT / 1000.0),
+         to_timestamp(NULLIF(#{record.fields.updated_at}, '')::BIGINT / 1000.0),
+         CAST(#{record.newVersion} AS INTEGER), CAST(#{record.expectedVersion} AS INTEGER))
+    </sql>
+
+    <select id="upsertRecord" resultType="java.lang.Long">
         WITH input(id, name, email, online, last_login_at, updated_at, new_version, expected_version) AS (
             VALUES
-            <foreach collection="players" item="player" separator=",">
-                (#{player.id}, #{player.name}, #{player.email}, #{player.online},
-                 CAST(#{player.lastLoginAt} AS TIMESTAMPTZ),
-                 CAST(#{player.updatedAt} AS TIMESTAMPTZ),
-                 CAST(#{player.version} AS INTEGER), CAST(#{player.expectedVersion} AS INTEGER))
+            <include refid="dirtyRecordValues"/>
+        ), upserted AS (
+            INSERT INTO users (id, name, email, online, last_login_at, updated_at, version)
+            SELECT id, name, email, online, last_login_at, updated_at, new_version
+            FROM input
+            ON CONFLICT (id) DO UPDATE SET
+                name = EXCLUDED.name,
+                email = EXCLUDED.email,
+                online = EXCLUDED.online,
+                last_login_at = EXCLUDED.last_login_at,
+                updated_at = EXCLUDED.updated_at,
+                version = EXCLUDED.version
+            WHERE users.version = (
+                SELECT expected_version FROM input WHERE input.id = users.id
+            )
+            RETURNING id
+        )
+        SELECT id FROM upserted
+    </select>
+
+    <select id="upsertBatch" resultType="java.lang.Long">
+        WITH input(id, name, email, online, last_login_at, updated_at, new_version, expected_version) AS (
+            VALUES
+            <foreach collection="records" item="record" separator=",">
+                <include refid="dirtyRecordValues"/>
             </foreach>
         ), upserted AS (
             INSERT INTO users (id, name, email, online, last_login_at, updated_at, version)
@@ -48,10 +78,9 @@
             WHERE users.version = (
                 SELECT expected_version FROM input WHERE input.id = users.id
             )
-            RETURNING id, name, email, online, last_login_at, updated_at, version
+            RETURNING id
         )
-        SELECT id, name, email, online, last_login_at, updated_at, version
-        FROM upserted
+        SELECT id FROM upserted
     </select>
 
 </mapper>

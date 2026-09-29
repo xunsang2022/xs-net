@@ -27,25 +27,21 @@ GameGatewayApplication.main
 
 `application.yml` 通过 `spring.autoconfigure.exclude` 排除 `GameFrameworkAutoConfiguration`，因此不创建 ActorSystem。启动只装配 `JwtUtil` 与 `AuthController`。
 
-### Logic / Battle（普通 Java）
+### Logic（Spring Boot，非 Web）
 
 ```text
 GameLogicApplication.main
-  -> 读 application.yml（SnakeYAML 扁平化）
-  -> Lettuce ConnectionFactory + StringRedisTemplate -> RedisStore
-  -> LogicIoExecutors(redis 16 / db 8)
-  -> LogicContext 装配（Redis、执行器、syncIntervalMs）
-  -> Hikari DataSource -> JdbcTemplate -> DBSyncEngine.start()
-  -> PrometheusMeterRegistry -> LogicMetrics
-  -> MessageAble.initialize(GameRpcMessages.INSTANCE)
-  -> LogicPrometheusServer（/metrics + /admin/gm/trace，带管理令牌）
-  -> LogicRuntimeConfiguration（可选，game.config.path 系统属性）
-  -> LogConsumer.start()
+  -> Spring Boot 非 Web 容器（绑定 application.yml / 环境变量 / 命令行配置）
+  -> 自动配置 RedisConnectionFactory + StringRedisTemplate、Hikari DataSource
+  -> LogicNodeConfiguration 创建 RedisStore、MyBatis、DBSync、LogConsumer、指标组件
+  -> LogicNodeRuntime 装配 LogicContext，启动 DBSync、管理端点、热配置和 LogConsumer
   -> ActorSystem("game-system") + NodeActor
-  -> 注册 JVM 关闭钩子：终止 ActorSystem -> 停 LogConsumer -> flush+stop DBSync -> 关配置/指标/连接
+  -> Spring 容器关闭时终止 ActorSystem、停 LogConsumer、flush+stop DBSync 并关闭自有资源
 ```
 
-Battle 的启动更短：初始化 `MessageAble`、构造 `BattleExecutorPool` 与 `BattleCommandIngress`、`AkkaKit.registerDeliveryInterceptor(BattleMessage.class, ingress)`，然后启动 ActorSystem 并在关闭钩子里反注册拦截器。
+Logic 启动耗时对比（WSL Ubuntu 24.04、JRE 21、本地 Redis，同 JVM 参数与应用配置；从 `[BENCHMARK_START]` 到 Shard Region 开始初始化）：普通 Java 基线约 **16.0 秒**，Spring Boot 版本约 **20.1 秒**，本次增加约 **4.1 秒**。Spring Boot 日志中的 `Started ... in 8.336 seconds` 是应用上下文就绪耗时，不包含完整的 Pekko 初始化，也不是进程总启动时间。测量未等待 Pekko 集群加入：测试时配置的 seed node `127.0.0.1:2001` 未运行；基线与新版本均以本地节点及 Shard Region 初始化为终点。该结果只代表这次本机测量。
+
+Battle 的启动仍为普通 Java：初始化 `MessageAble`、构造 `BattleExecutorPool` 与 `BattleCommandIngress`、`AkkaKit.registerDeliveryInterceptor(BattleMessage.class, ingress)`，然后启动 ActorSystem 并在关闭钩子里反注册拦截器。
 
 ### `NodeActor` 做什么
 
@@ -249,7 +245,7 @@ DBSyncEngine（后台，每 bgsave-seconds，默认 3s）
                达到 maxRetryAttempts 后进入 terminalFailures 并记 dbsync.retry.exhausted
 ```
 
-`GameLogicApplication` 关闭时的顺序是：ActorSystem 终止 → `LogConsumer.stop()` → `ioExecutors.close()` → `dbSyncEngine.flush()` → `dbSyncEngine.stop()` → 关配置/指标/Redis/PG。先 flush 再 stop 是保证最后一次快照落库的关键。
+Spring 容器关闭时，`LogicNodeRuntime` 依次终止 ActorSystem、停止 `LogConsumer`、关闭 I/O 执行器、flush 并停止 DBSync，然后关闭热配置与指标 HTTP 服务；Spring 管理的 Redis 和数据源由容器关闭。先 flush 再 stop 是保证最后一次快照落库的关键。
 
 ## 日志事件流
 

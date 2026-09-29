@@ -3,41 +3,36 @@ package com.game.logic.dbsync;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class DBSyncEngineTest {
 
-    private DBSyncEngine newEngine(PlayerPersistence persistence) {
+    private DBSyncEngine newEngine(PlayerMapper playerMapper) {
         DBSyncConfig config = new DBSyncConfig();
         config.setFlushConcurrency(1);
-        return new DBSyncEngine(persistence, config);
+        return new DBSyncEngine(playerMapper, config);
     }
 
     @Test
     void submitMergesDirtyFieldsForSamePlayer() {
-        DBSyncEngine engine = newEngine(mock(PlayerPersistence.class));
-
         Map<String, String> first = new LinkedHashMap<>();
         first.put("name", "alice");
-        engine.submit(42L, first, 1L);
 
         Map<String, String> second = new LinkedHashMap<>();
         second.put("online", "1");
-        engine.submit(42L, second, 2L);
 
         // 通过一次 flush 验证合并结果：脏记录应同时包含 name 与 online，version 更新为 2
-        PlayerPersistence persistence = mock(PlayerPersistence.class);
-        when(persistence.upsertBatch(anyList())).thenReturn(java.util.Set.of(42L));
-        DBSyncEngine engine2 = newEngine(persistence);
+        PlayerMapper playerMapper = mock(PlayerMapper.class);
+        when(playerMapper.upsertBatch(anyList())).thenReturn(List.of(42L));
+        DBSyncEngine engine2 = newEngine(playerMapper);
         engine2.submit(42L, first, 1L);
         engine2.submit(42L, second, 2L);
         engine2.flush();
@@ -47,9 +42,9 @@ class DBSyncEngineTest {
 
     @Test
     void flushRemovesDirtyRecordOnSuccess() {
-        PlayerPersistence persistence = mock(PlayerPersistence.class);
-        when(persistence.upsertBatch(anyList())).thenReturn(java.util.Set.of(42L));
-        DBSyncEngine engine = newEngine(persistence);
+        PlayerMapper playerMapper = mock(PlayerMapper.class);
+        when(playerMapper.upsertBatch(anyList())).thenReturn(List.of(42L));
+        DBSyncEngine engine = newEngine(playerMapper);
 
         engine.submit(42L, Map.of("name", "alice"), 1L);
         engine.flush();
@@ -59,10 +54,10 @@ class DBSyncEngineTest {
 
     @Test
     void flushRetainsDirtyRecordOnOptimisticLockConflict() {
-        PlayerPersistence persistence = mock(PlayerPersistence.class);
+        PlayerMapper playerMapper = mock(PlayerMapper.class);
         // RETURNING 未返回该 ID 表示乐观锁冲突，应保留重试
-        when(persistence.upsertBatch(anyList())).thenReturn(java.util.Set.of());
-        DBSyncEngine engine = newEngine(persistence);
+        when(playerMapper.upsertBatch(anyList())).thenReturn(List.of());
+        DBSyncEngine engine = newEngine(playerMapper);
 
         engine.submit(42L, Map.of("name", "alice"), 1L);
         engine.flush();
@@ -72,9 +67,9 @@ class DBSyncEngineTest {
 
     @Test
     void flushRetainsDirtyRecordOnException() {
-        PlayerPersistence persistence = mock(PlayerPersistence.class);
-        when(persistence.upsertBatch(anyList())).thenThrow(new RuntimeException("db down"));
-        DBSyncEngine engine = newEngine(persistence);
+        PlayerMapper playerMapper = mock(PlayerMapper.class);
+        when(playerMapper.upsertBatch(anyList())).thenThrow(new RuntimeException("db down"));
+        DBSyncEngine engine = newEngine(playerMapper);
 
         engine.submit(42L, Map.of("name", "alice"), 1L);
         engine.flush();
@@ -87,7 +82,7 @@ class DBSyncEngineTest {
         DBSyncConfig config = new DBSyncConfig();
         config.setFlushConcurrency(1);
         config.setMaxDirtyRecords(2);
-        DBSyncEngine engine = new DBSyncEngine(mock(PlayerPersistence.class), config);
+        DBSyncEngine engine = new DBSyncEngine(mock(PlayerMapper.class), config);
 
         assertTrue(engine.submit(1L, Map.of("name", "alice"), 1L));
         assertTrue(engine.submit(2L, Map.of("name", "bob"), 1L));

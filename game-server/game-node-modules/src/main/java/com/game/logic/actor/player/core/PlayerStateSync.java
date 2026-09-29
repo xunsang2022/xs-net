@@ -8,7 +8,7 @@ import com.game.logic.actor.player.message.InitialRedisWriteResult;
 import com.game.logic.actor.player.message.RedisFlushResult;
 import com.game.logic.context.LogicContext;
 import com.game.logic.dbsync.DBSyncEngine;
-import com.game.logic.dbsync.PlayerPO;
+import com.game.logic.actor.player.PlayerPO;
 import com.game.logic.redis.RedisStore;
 import com.game.message.actor.logic.PlayerMessage;
 import com.xs.kernel.actor.ActorServices;
@@ -61,7 +61,7 @@ public final class PlayerStateSync {
      * @param playerId 玩家实体 ID
      * @param timers   Actor 定时器调度器
      */
-    PlayerStateSync(ActorServices<PlayerMessage> services, String playerId, TimerScheduler<PlayerMessage> timers) {
+    public PlayerStateSync(ActorServices<PlayerMessage> services, String playerId, TimerScheduler<PlayerMessage> timers) {
         this.services = services;
         this.playerId = playerId;
         this.timers = timers;
@@ -73,14 +73,14 @@ public final class PlayerStateSync {
      *
      * @param builder 玩家 Actor 的消息接收构建器
      */
-    void registerHandlers(ReceiveBuilder<PlayerMessage> builder) {
+    public void registerHandlers(ReceiveBuilder<PlayerMessage> builder) {
         builder
                 .onMessage(FlushDirty.class, this::onFlushDirty)
                 .onMessage(RedisFlushResult.class, this::onRedisFlushResult);
     }
 
     /** 在 Actor 完成组件创建后绑定生命周期状态提供者。 */
-    void bindLifecycle(PlayerLifecycle lifecycle) {
+    public void bindLifecycle(PlayerLifecycle lifecycle) {
         if (this.lifecycle != null) {
             throw new IllegalStateException("Player lifecycle is already bound");
         }

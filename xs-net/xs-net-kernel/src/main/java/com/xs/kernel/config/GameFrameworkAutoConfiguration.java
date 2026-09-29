@@ -8,6 +8,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 
 /**
  * Game Framework 自动配置类
@@ -21,6 +23,7 @@ public class GameFrameworkAutoConfiguration {
      * 创建 ClusterSharding bean
      */
     @Bean
+    @Lazy
     @ConditionalOnClass(name = "org.apache.pekko.cluster.sharding.typed.javadsl.ClusterSharding")
     public ClusterSharding clusterSharding(ActorSystem<Void> actorSystem) {
         return ClusterSharding.get(actorSystem);
@@ -30,7 +33,9 @@ public class GameFrameworkAutoConfiguration {
      * 创建并配置 ActorSystem bean，供 Spring Boot 应用使用
      * NodeActor 将在 ActorRegisterManager 中通过 SpawnProtocol 创建
      */
-    @Bean
+    @Bean(destroyMethod = "terminate")
+    @Lazy
+    @ConditionalOnMissingBean(ActorSystem.class)
     @ConditionalOnClass(name = "org.apache.pekko.actor.typed.ActorSystem")
     public ActorSystem<Void> actorSystem(GameFrameworkProperties  properties) {
         org.apache.pekko.actor.typed.Behavior<Void> guardianBehavior =

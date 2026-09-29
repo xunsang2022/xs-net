@@ -64,7 +64,6 @@
         <maven-plugin-api.version>3.9.9</maven-plugin-api.version>
         <maven-plugin-annotations.version>3.13.1</maven-plugin-annotations.version>
         <micrometer.version>1.16.0</micrometer.version>
-        <mybatis-plus.version>3.5.4.1</mybatis-plus.version>
         <mockito.version>5.20.0</mockito.version>
         <protobuf.version>3.25.5</protobuf.version>
         <slf4j-api.version>2.0.16</slf4j-api.version>
@@ -119,12 +118,6 @@
                 <groupId>org.lmdbjava</groupId>
                 <artifactId>lmdbjava</artifactId>
                 <version>${lmdbjava.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>com.baomidou</groupId>
-                <artifactId>mybatis-plus-extension</artifactId>
-                <version>${mybatis-plus.version}</version>
             </dependency>
 
             <dependency>

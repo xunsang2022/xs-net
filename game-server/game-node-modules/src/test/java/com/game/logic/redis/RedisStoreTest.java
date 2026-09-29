@@ -2,7 +2,7 @@ package com.game.logic.redis;
 
 import com.game.logic.enums.LogLevel;
 import com.game.logic.enums.LogType;
-import com.game.logic.dbsync.PlayerPO;
+import com.game.logic.actor.player.PlayerPO;
 import com.game.protocol.pb.LogRecordCommand;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -86,7 +86,7 @@ class RedisStoreTest {
         doReturn(setOps).when(redis).opsForSet();
 
         RedisStore store = new RedisStore(redis, playerRedis);
-        PlayerPO state = new PlayerPO().setId(42L).setName("alice").setOnline(true);
+        PlayerPO state = new PlayerPO().setId(42L).setName("alice").setOnline(1);
 
         assertTrue(store.create("42", state));
         verify(hashOps).putAll("playerActor:42", state.toRedisHash());
@@ -102,7 +102,7 @@ class RedisStoreTest {
         PlayerPO state = new PlayerPO();
         state.setId(42L);
         state.setName("alice");
-        state.setOnline(true);
+        state.setOnline(1);
 
         assertTrue(store.destroy("42", state));
         verify(redis).delete("playerActor:42");

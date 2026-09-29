@@ -1,17 +1,49 @@
-# Plain configuration keys for the non-Boot startup flow.
-# GameLogicApplication loads this file via SnakeYAML first; system properties
-# Database and Redis settings are loaded from this file only.
+# Spring Boot configuration for the game logic process.
+spring:
+  main:
+    web-application-type: none
+  data:
+    redis:
+      host: 172.21.255.41
+      port: 6379
+      password: "123456"
+      database: 10
+      lettuce:
+        pool:
+          max-active: 32
+          max-idle: 32
+          min-idle: 4
+  datasource:
+    url: jdbc:postgresql://172.21.255.41:5432/gamedb
+    username: root
+    password: ""
+    hikari:
+      connection-timeout: 5000
+      initialization-fail-timeout: -1
+      maximum-pool-size: 50
+      minimum-idle: 2
+logging:
+  level:
+    root: INFO
 game:
-  redis:
-    host: 172.21.255.41
-    port: 6379
-    password: "123456"
-    database: 10
+  framework:
+    actor-base-packages:
+      - com.game.logic.actor
+      - com.game.message.actor.logic
+      - com.game.message.actor
+    message-base-packages:
+      - com.game.message.actor.logic
+      - com.game.message.actor
   storage:
     sync-interval-ms: 1000
   io:
     redis-threads: 16
     db-threads: 8
+  db:
+    batch-size: 100
+    bgsave-seconds: 3
+    flush-concurrency: 8
+    log-poll-ms: 1000
   logging:
     level: INFO
   management:
@@ -23,16 +55,3 @@ game:
     metrics:
       host: 127.0.0.1
       port: 9090
-  db:
-    url: jdbc:postgresql://172.21.255.41:5432/gamedb
-    username: root
-    password: ""
-    batch-size: 100
-    bgsave-seconds: 3
-    flush-concurrency: 8
-    connection-timeout-ms: 5000
-    max-pool-size: 50
-    min-idle: 2
-  pekko:
-    hostname: 127.0.0.1
-    port: 4001

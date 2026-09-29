@@ -2,7 +2,7 @@ package com.game.logic.redis;
 
 import com.game.logic.enums.LogLevel;
 import com.game.logic.enums.LogType;
-import com.game.logic.dbsync.PlayerPO;
+import com.game.logic.actor.player.PlayerPO;
 import com.game.protocol.pb.LogRecordCommand;
 import lombok.NonNull;
 import org.springframework.data.redis.core.HashOperations;
@@ -27,6 +27,7 @@ public class RedisStore {
     private final StringRedisTemplate redis;
     /** 玩家 PO 专用 JSON Hash 模板；日志和索引仍使用字符串模板。 */
     private final RedisTemplate<String, Object> playerRedis;
+    private final XsModelHashMapper<PlayerPO> playerHashMapper = new XsModelHashMapper<>(PlayerPO.class);
 
     public RedisStore(StringRedisTemplate redis) {
         this(redis, null);
@@ -58,13 +59,15 @@ public class RedisStore {
         if (playerRedis == null) {
             return create(playerId, state.toHash());
         }
-        putHash(playerKey(playerId), state.toRedisHash());
+        putHash(playerKey(playerId), playerHashMapper.toHash(state));
         registerOnline(playerId);
         return true;
     }
 
     public boolean create(String playerId, Map<String, String> fields) {
-        putHash(playerKey(playerId), playerRedis == null ? fields : PlayerPO.redisValues(fields));
+        putHash(playerKey(playerId), playerRedis == null
+                ? fields
+                : playerHashMapper.toHash(playerHashMapper.fromStringHash(fields)));
         registerOnline(playerId);
         return true;
     }
@@ -73,7 +76,7 @@ public class RedisStore {
         if (playerRedis == null) {
             return flushDirty(playerId, state.toHash(state.getDirtyFields()));
         }
-        Map<String, Object> dirty = state.toRedisHash(state.getDirtyFields());
+        Map<String, Object> dirty = playerHashMapper.toHash(state, state.getDirtyFields());
         if (dirty.isEmpty()) {
             return true;
         }
@@ -85,7 +88,9 @@ public class RedisStore {
         if (dirty.isEmpty()) {
             return true;
         }
-        putHash(playerKey(playerId), playerRedis == null ? dirty : PlayerPO.redisValues(dirty));
+        putHash(playerKey(playerId), playerRedis == null
+                ? dirty
+                : playerHashMapper.toHash(playerHashMapper.fromStringHash(dirty)));
         return true;
     }
 
@@ -110,7 +115,7 @@ public class RedisStore {
         if (playerRedis == null) {
             redis.opsForHash().putAll(playerKey(String.valueOf(state.getId())), state.toHash());
         } else {
-            putHash(playerKey(String.valueOf(state.getId())), state.toRedisHash());
+            putHash(playerKey(String.valueOf(state.getId())), playerHashMapper.toHash(state));
         }
         state.clearDirtyMatching(state.toHash());
         return true;
