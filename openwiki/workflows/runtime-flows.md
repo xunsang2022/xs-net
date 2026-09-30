@@ -238,9 +238,9 @@ PlayerActor（每 sync-interval-ms，默认 1000ms）
 
 DBSyncEngine（后台，每 bgsave-seconds，默认 3s）
   -> snapshot(maxDirtyRecords) 过滤终态失败与退避未到期记录
-  -> 按 flushConcurrency 分片，batchUpdate(PlayerUpsertSql.SQL)
-       results[i] > 0 -> removeIfVersion 移除脏记录
-       results[i] == 0 -> 乐观锁冲突，保留重试
+  -> 按 flushConcurrency 分批，PlayerMapper.upsertBatch(records)
+       返回的成功 ID -> removeIfVersion 移除对应脏记录
+       未返回的 ID -> 乐观锁冲突，保留重试
        异常 -> 全部保留，指数退避（初始 retryBackoffMs，上限 60s），
                达到 maxRetryAttempts 后进入 terminalFailures 并记 dbsync.retry.exhausted
 ```

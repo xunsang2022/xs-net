@@ -167,7 +167,7 @@ public record LogoutRequest(
 
 ## 玩家状态模型
 
-`PlayerState` 对应 Redis hash `player:{playerId}`，字段集合固定：`id`、`name`、`email`、`online`、`last_login_at`、`updated_at`、`version`；`markDirty` 只接受这些已知字段，其他值抛 `IllegalArgumentException`。
+`PlayerPO` 对应 Redis hash `player:{playerId}` 和 PostgreSQL `users` 行，持久化字段为 `id`、`name`、`email`、`online`、`last_login_at`、`updated_at`、`version`；`expectedVersion` 是仅供写入时使用的乐观锁字段，不映射到表或 Redis。`PlayerPO` 继承 `GameModel` 并实现 xs-net 的 `XsModel` 契约，`setProperty` 根据 setter 方法引用定位字段、记录脏字段；未知或非持久化字段会被拒绝。Redis Hash 的字段名通过模型支持将 camelCase 转为 snake_case。
 
 生命周期阶段（`PlayerLifecycle.Phase`）：
 
@@ -183,7 +183,7 @@ NEW -> LOADING -> ONLINE -> DESTROYING -> DESTROYED
 - 销毁时 `beginDestroyLifecycle` 要求当前为 `ONLINE`，随后写离线快照并提交数据库同步；
 - `shouldPersistOnStop()` 在 Actor 意外停止时判断是否补偿持久化（`ONLINE` 或 `DESTROYING`）。
 
-`version` 是乐观锁：每次状态变更自增，与 `PlayerUpsertSql` 的 `WHERE version = ?` 配合，`batchUpdate` 返回 0 表示版本冲突，记录保留到下一轮重试。`clearDirtyMatching` 只清除"值仍等于已持久化内容"的字段，避免异步写期间的新修改被误清。
+`version` 是乐观锁：每次状态变更自增。DBSync 通过 `PlayerMapper.upsertBatch` 执行 PostgreSQL UPSERT，并用 `expectedVersion` 判断版本是否匹配；未返回成功 ID 的记录保留到下一轮重试。`clearDirtyMatching` 只清除"值仍等于已持久化内容"的字段，避免异步写期间的新修改被误清。
 
 ## 投递语义与有界性
 

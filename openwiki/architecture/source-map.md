@@ -38,7 +38,7 @@ tags: [xs-net, modules, source-map, maven]
 | `game-message-action` | 库 | 业务 DTO record、`@Rpc`/`@ProtoField`、`PlayerRoutable`/`ChannelRoutable`、角色接口（`PlayerMessage`/`SceneMessage`/`BattleMessage`/`GMMessage`/`S2C`/`GatewayControlMessage`）、`GameRpcConfig`、`.proto` 与 `rpc_routes.md` | `game-server/game-message-action/src/main/` |
 | `game-node-gateway` | Spring Boot | 四协议接入与认证、`GatewayMessageRouter`、`ChannelRegistry`、`ChannelActor`/`GatewayControlActor`、`GmController` | `game-server/game-node-gateway/src/main/java/com/game/gateway/` |
 | `game-node-login` | Spring Boot | `AuthController`（`/api/auth/issue`、`/api/auth/verify`） | `game-server/game-node-login/src/main/java/com/game/login/` |
-| `game-node-modules` | `com.game.GameLogicApplication` | `PlayerActor`/`PlayerLifecycle`/`PlayerStateSync`、`SceneActor`、`GMActor`、`RedisStore`、`DBSyncEngine`、`LogConsumer`、`LogicPrometheusServer`、Arthas 追踪 | `game-server/game-node-modules/src/main/java/com/game/logic/` |
+| `game-node-modules` | Spring Boot 非 Web：`com.game.GameLogicApplication`；运行时：`LogicNodeRuntime` | `PlayerActor`/`PlayerLifecycle`/`PlayerStateSync`、`PlayerPO`/`GameModel`、`SceneActor`、`GMActor`、Redis/MyBatis-Plus/DBSync、`LogConsumer`、`LogicPrometheusServer`、Arthas 追踪 | `game-server/game-node-modules/src/main/java/com/game/logic/` |
 | `game-node-battle` | `com.game.battle.GameBattleApplication` | `BattleActor`、`BattleCommandIngress`、`BattleExecutorPool`、`BattleRuntime`、`BattleState` | `game-server/game-node-battle/src/main/java/com/game/battle/` |
 
 ## 启动与投递入口
@@ -49,7 +49,10 @@ tags: [xs-net, modules, source-map, maven]
 - 网关 UDP/KCP/WebSocket：`.../gateway/netty/UdpServer.java`、`.../gateway/netty/WebSocketServer.java`、`.../gateway/kcp/KcpServer.java`
 - 网关下行写回：`.../gateway/actor/ChannelActor.java`、`.../gateway/netty/ChannelRegistry.java`
 - 登录服务：`game-server/game-node-login/src/main/java/com/game/login/controller/AuthController.java`
-- Logic 装配：`game-server/game-node-modules/src/main/java/com/game/GameLogicApplication.java`
+- Logic 启动入口：`game-server/game-node-modules/src/main/java/com/game/GameLogicApplication.java`
+- Logic Bean 装配与属性绑定：`.../logic/config/LogicNodeConfiguration.java`、`.../logic/config/LogicNodeProperties.java`
+- Logic 运行时生命周期：`.../logic/config/LogicNodeRuntime.java`
+- 玩家模型与 Redis Hash 映射：`.../logic/actor/player/PlayerPO.java`、`.../logic/dbsync/GameModel.java`、`.../logic/redis/XsModelHashMapper.java`
 - 玩家生命周期：`.../logic/actor/player/core/PlayerLifecycle.java`；状态同步：`.../logic/actor/player/core/PlayerStateSync.java`
 - 批写与日志消费：`.../logic/dbsync/DBSyncEngine.java`、`.../logic/dbsync/LogConsumer.java`
 - 战斗节点：`game-server/game-node-battle/src/main/java/com/game/battle/GameBattleApplication.java`
@@ -105,7 +108,7 @@ tags: [xs-net, modules, source-map, maven]
 
 ### 修改状态持久化
 
-`PlayerState`（字段常量与脏标记）、`RedisStore`（key 布局 `player:{id}`、`idx:player`、`player:online`）、`PlayerUpsertSql`、`DBSyncEngine`（批大小、重试、乐观锁）、`deploy/pg-init.sql`（表结构与索引）必须一起看。表结构不一致会导致首次写入失败或flush 重试耗尽。
+`PlayerPO`/`GameModel`（玩家字段、脏标记与 ORM 映射）、`RedisStore`（key 布局 `player:{id}`、`idx:player`、`player:online`）、`PlayerMapper.xml`（PostgreSQL UPSERT）、`DBSyncEngine`（批大小、重试、乐观锁）、`deploy/pg-init.sql`（表结构与索引）必须一起看。表结构不一致会导致首次写入失败或 flush 重试耗尽。
 
 ### 修改 SDK 生成
 

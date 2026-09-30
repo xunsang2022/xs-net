@@ -46,13 +46,13 @@ length(4) | packetId(2) | sendSeq(4) | random(4) | headCRC(2) | bodyCRC(2) | bod
 
 `ActorRegisterManager` 监听 `ContextRefreshedEvent`，在容器刷新完成后触发 `NodeActor.create(properties)`。`GameFrameworkProperties` 的关键配置：`actor-auto-register-enabled`、`message-auto-register-enabled`、`actor-base-packages`、`message-base-packages`。
 
-`SpringUtil`、`ClassScanner`、`ClassUtil` 用于在 Actor 初始化阶段从容器取 `RpcMessageRegistry` 与扫描消息接口。Logic 与 Battle 不是 Spring 应用，它们直接用 `properties.setActorBasePackages(...)` + `NodeActor.create(...)` 复刻这条路径。
+`SpringUtil`、`ClassScanner`、`ClassUtil` 用于在 Actor 初始化阶段从容器取 `RpcMessageRegistry` 与扫描消息接口。Gateway 与 Logic 使用 Spring Boot；Logic 的 `GameLogicApplication` 以非 Web 模式运行，`LogicNodeRuntime` 在配置与业务 Bean 就绪后取得框架创建的 `ActorSystem` 并等待终止。Battle 仍是普通 Java 启动，通过 `properties.setActorBasePackages(...)` + `NodeActor.create(...)` 注册节点。
 
 Login 是唯一刻意排除该自动配置的 Spring 应用：它不需要集群与 Actor 系统。
 
 ## Redis
 
-接入方式为 Lettuce + 连接池（`maxTotal=32`、`maxIdle=32`、`minIdle=4`），通过 `LogicContext` 静态装配，键空间如下：
+Logic 通过 Spring Boot 的 `spring.data.redis.*` 配置 Redis/Lettuce 连接池；`LogicNodeConfiguration` 提供玩家状态用的 `RedisTemplate<String, Object>`，以字符串序列化 key、以 Jackson JSON 序列化 hash value。`RedisStore` 通过 `LogicContext` 静态装配，键空间如下：
 
 | 键 | 类型 | 用途 |
 | --- | --- | --- |
@@ -66,7 +66,7 @@ Login 是唯一刻意排除该自动配置的 Spring 应用：它不需要集群
 
 ## PostgreSQL
 
-Hikari 数据源参数集中在 `game.db.*`：`url`、`username`、`password`、`connection-timeout-ms`、`max-pool-size`、`min-idle`，另外 `initializationFailTimeout = -1` 允许数据库暂时不可用时不阻塞启动。
+Logic 使用 Spring Boot 的 `spring.datasource.*` 创建 Hikari 数据源；连接池参数位于 `spring.datasource.hikari.*`。MyBatis-Plus 的 `SqlSessionFactory`、Mapper 与 `DBSyncEngine` 由 `LogicNodeConfiguration` 提供，玩家写入路径使用 `PlayerMapper` 和 XML Mapper。
 
 表结构由 `deploy/pg-init.sql` 初始化（Docker Compose 首次创建空库时执行）：
 
@@ -74,7 +74,7 @@ Hikari 数据源参数集中在 `game.db.*`：`url`、`username`、`password`、
 - `log_events(id, source_stream_id, player_id, type, level, message, created_at)`，其中 `source_stream_id` 有唯一索引用于幂等消费；
 - `idx_log_events_player_created(player_id, created_at DESC)`。
 
-玩家写入使用单条 `INSERT ... ON CONFLICT ... RETURNING`（`DBSyncEngine.loadOrCreate`）与批量 UPSERT（`PlayerUpsertSql`）。改动这里必须同步 `PlayerState` 的字段集合与 `deploy/pg-init.sql`。
+玩家运行时模型 `PlayerPO` 同时映射 `users` 表并承载 Actor 状态；它继承 `GameModel`（MyBatis-Plus `Model`），实现 xs-net 的持久化无关 `XsModel` 契约。通用字段访问、脏字段跟踪和 Hash 转换由 `XsModelSupport` 提供，`XsModelHashMapper` 负责 Redis Hash 与模型互转。玩家加载/创建和批量写入分别由 `PlayerMapper.loadOrCreate`、`PlayerMapper.upsertBatch` 执行。改动字段时必须同步检查 `PlayerPO`、`PlayerMapper.xml` 与 `deploy/pg-init.sql`。
 
 ## 可观测性
 

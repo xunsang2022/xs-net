@@ -152,7 +152,7 @@ Logic 配置由 Spring Boot 外部化配置加载。Redis、数据源分别使�
 | 连接建立后没有 S2C | `ChannelRegistry` 是否有活跃 endpoint；`gateway.s2c.dropped` 是否增长；客户端是否与服务端 `max-frame-length` 一致 |
 | 上行消息静默丢失 | 依次看 `gateway.ingress.rejected{reason=capacity\|expired}`、`xs.rpc.routing.rejected{reason}`、`xs.rpc.actor.envelope.dropped{reason}`；未知 `rpcNum` 只打印 WARN 不打指标 |
 | 登录卡住或 Actor 反复停止 | Redis/PostgreSQL 是否可达；`LOAD_TIMEOUT_MS = 3000` 是否触发；缓存读失败会转 DB，DB 也失败才停止 Actor |
-| 状态不落库 | `dbsync.dirty.size` / `dbsync.dirty.bytes` 是否增长；`dbsync.flush.failures` 与 `dbsync.retry.exhausted`；`users` 表结构与 `PlayerUpsertSql` 是否一致；乐观锁冲突是否持续 |
+| 状态不落库 | `dbsync.dirty.size` / `dbsync.dirty.bytes` 是否增长；`dbsync.flush.failures` 与 `dbsync.retry.exhausted`；`users` 表结构与 `PlayerMapper.xml` 是否一致；乐观锁冲突是否持续 |
 | 日志丢失或重复 | `log:events:dead-letter` 是否有坏消息；消费者组 `db-sync` 的 pending 列表；`source_stream_id` 唯一索引是否存在 |
 | 实体分布不均或投递失败 | 角色是否在目标节点注册；`@Roles` 与 `@ActorDispatcher` 是否齐全；是否存在"只实现了 `@Rpc` 但没有 Actor 处理方法"的消息（构建期就会失败） |
 | 文档与实现对不上 | `docs/udp-tcp-kcp-websocket.md` 引用的 `com.game.gateway.transport.tcp.*` 已不存在；以 `com.game.gateway.netty` 与 `com.game.gateway.kcp` 为准 |
@@ -189,7 +189,7 @@ Logic 配置由 Spring Boot 外部化配置加载。Redis、数据源分别使�
 - **战斗独立化**：`feat(battle): add sharded battle actor` → `feat(battle): add serialized battle executor` → `refactor(battle): split battle actor into dedicated service`；
 - **SDK 统一生成**：`feat(sdk): unify multi-language SDK generation` → `refactor(sdk): consolidate client SDK templates` → Cocos 目标与自定义输出根目录；
 - **协议元数据**：`feat(rpc): generate route metadata and protocol reports`；
-- **当前最新**：`feat(actor): 支持组件级 RPC 处理并拆分玩家状态逻辑`——引入 `ActorServices` 与 `RpcHandlerMetadata.componentField`，把 `PlayerActor` 拆成 `PlayerLifecycle` + `PlayerStateSync`，并新增 `resolveCreateMethod` 的 `create(String)` 形态。
+- **当前最新**：`refactor(logic): 迁移 Logic 启动与持久化架构`——Logic 改为 Spring Boot 非 Web 启动并将装配、生命周期编排迁入配置与运行时 Bean；玩家状态统一使用 `PlayerPO`/`GameModel`/`XsModel`，Redis Hash 与 PostgreSQL Mapper 共用该模型。
 
 这条脉络解释了仓库当前的几个取舍：没有独立注册中心（依赖 Pekko Cluster）、没有可靠投递（改用有界缓冲 + 指标 + 最终一致快照）、业务逻辑与传输实现分离（框架不依赖 Netty）。
 
