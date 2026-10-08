@@ -1,3 +1,5 @@
+> **Logic 说明（以当前代码为准）**：Logic 是普通 Java 进程（`GameLogicApplication`），不是 Spring Web 应用。它以非 Web 方式创建并装配 Spring `ApplicationContext`，由 `LogicNodeRuntime` 负责 Redis、Hikari/JdbcTemplate、`DBSyncEngine`、`LogConsumer`、指标和 Pekko `ActorSystem` 的启动与关闭编排。启动顺序为：读取 `application.yml` -> 初始化 Redis/执行器与 `LogicContext` -> 启动 DBSync、指标和日志消费 -> 注册 RPC -> 启动 `game-system` 与 `NodeActor`；关闭时先终止 ActorSystem，再停止日志消费，flush 并停止 DBSync，最后释放配置、指标、Redis/PG 连接。Logic 不提供 HTTP 业务端口，Prometheus 与 GM trace 由独立的 `LogicPrometheusServer` 提供。
+
 ---
 type: Architecture Overview
 title: 运行时架构
