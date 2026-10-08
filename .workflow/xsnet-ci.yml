@@ -16,22 +16,21 @@ stages:
     trigger: auto
     executor: []
     steps:
-      - step: shell@bash
+      - step: command@bash
         name: publish_openwiki
         displayName: 发布 openwiki 文档
-        commands:
-          - |
-            set -eu
-            test -n "${GITEE_WIKI_TOKEN:-}" || { echo "GITEE_WIKI_TOKEN is required"; exit 1; }
-            rm -rf /tmp/xs-net-wiki
-            git clone "https://oauth2:${GITEE_WIKI_TOKEN}@gitee.com/xs-gitee-2023/xs-net.wiki.git" /tmp/xs-net-wiki
-            find /tmp/xs-net-wiki -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-            cp -R openwiki/. /tmp/xs-net-wiki/
-            cd /tmp/xs-net-wiki
-            git config user.name "gitee-ci"
-            git config user.email "gitee-ci@users.noreply.gitee.com"
-            git add -A
-            if ! git diff --cached --quiet; then
-              git commit -m "docs: sync openwiki from xs-net ${GIT_COMMIT:-unknown}"
-              git push origin HEAD
-            fi
+        command: |
+          set -eu
+          test -n "${GITEE_WIKI_TOKEN:-}" || { echo "GITEE_WIKI_TOKEN is required"; exit 1; }
+          rm -rf /tmp/xs-net-wiki
+          git clone "https://oauth2:${GITEE_WIKI_TOKEN}@gitee.com/xs-gitee-2023/xs-net.wiki.git" /tmp/xs-net-wiki
+          find /tmp/xs-net-wiki -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -R openwiki/. /tmp/xs-net-wiki/
+          cd /tmp/xs-net-wiki
+          git config user.name "gitee-ci"
+          git config user.email "gitee-ci@users.noreply.gitee.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: sync openwiki from xs-net ${GIT_COMMIT:-unknown}"
+            git push origin HEAD
+          fi
