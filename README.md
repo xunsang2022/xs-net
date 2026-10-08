@@ -2,7 +2,7 @@
 
 XS-NET 是面向 Java 游戏服务端的框架与示例工作区，围绕 Apache Pekko Typed/Cluster、RPC 消息契约、Protobuf 和多平台客户端 SDK 构建。
 
-[English](README_EN.md) · [架构说明](ARCHITECTURE.md) · [SDK 生成说明](docs/sdk-generation.md) · [贡献指南](CONTRIBUTING.md) · [变更记录](CHANGELOG.md) · [安全报告](SECURITY.md) · [第三方许可证](THIRD_PARTY_NOTICES.md)
+[English](README_EN.md) · [架构说明](ARCHITECTURE.md) · [OpenWiki](openwiki/index.md) · [SDK 生成说明](openwiki/integrations/sdk-generation.md) · [贡献指南](CONTRIBUTING.md) · [变更记录](CHANGELOG.md) · [安全报告](SECURITY.md) · [第三方许可证](THIRD_PARTY_NOTICES.md)
 
 ## 项目组成
 
@@ -41,7 +41,7 @@ Windows PowerShell：
 bash ./mvnw -pl xs-net -am clean verify
 ```
 
-首次构建会下载 Maven 依赖。SDK 代码由 Maven 插件生成；生成说明见 [docs/sdk-generation.md](docs/sdk-generation.md)。
+首次构建会下载 Maven 依赖。SDK 代码由 Maven 插件生成；生成说明见 [OpenWiki SDK 生成说明](openwiki/integrations/sdk-generation.md)。
 
 ## 本地运行示例
 
@@ -55,7 +55,7 @@ docker compose up -d
 
 ## 持续集成
 
-Gitee Go 工作流位于 `.workflow/xsnet-ci.yml`，会在向 `master`/`main` 推送或创建目标为这些分支的 PR 时构建并验证整个 Maven 工作区。GitHub Actions 配置位于 `.github/workflows/build.yml`，用于 GitHub 镜像。
+Gitee Go 工作流位于 `.workflow/xsnet-ci.yml`，会在向 `master`/`main` 推送时将 `openwiki/` 同步到独立的 Gitee Wiki 仓库。Maven/JDK 验证在本地执行。
 
 ## 使用与参与
 

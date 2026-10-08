@@ -155,7 +155,7 @@ Logic 配置由 Spring Boot 外部化配置加载。Redis、数据源分别使�
 | 状态不落库 | `dbsync.dirty.size` / `dbsync.dirty.bytes` 是否增长；`dbsync.flush.failures` 与 `dbsync.retry.exhausted`；`users` 表结构与 `PlayerMapper.xml` 是否一致；乐观锁冲突是否持续 |
 | 日志丢失或重复 | `log:events:dead-letter` 是否有坏消息；消费者组 `db-sync` 的 pending 列表；`source_stream_id` 唯一索引是否存在 |
 | 实体分布不均或投递失败 | 角色是否在目标节点注册；`@Roles` 与 `@ActorDispatcher` 是否齐全；是否存在"只实现了 `@Rpc` 但没有 Actor 处理方法"的消息（构建期就会失败） |
-| 文档与实现对不上 | `docs/udp-tcp-kcp-websocket.md` 引用的 `com.game.gateway.transport.tcp.*` 已不存在；以 `com.game.gateway.netty` 与 `com.game.gateway.kcp` 为准 |
+| 文档与实现对不上 | 先看 [传输协议说明](../integrations/transport.md)，实现路径以 `com.game.gateway.netty` 与 `com.game.gateway.kcp` 为准 |
 
 ## 按变更区域的验证矩阵
 
@@ -196,5 +196,5 @@ Logic 配置由 Spring Boot 外部化配置加载。Redis、数据源分别使�
 ## 待补充证据与已知漂移
 
 - `deploy/cluster/docker-compose.yml` 给 Logic 传递的 Redis/DB 环境变量命名仍需与 `spring.data.redis.*` / `spring.datasource.*` 的 Boot 属性映射核对；Logic 默认 Redis/DB 地址为局域网地址 `172.21.255.41`，容器内可能不可达。集群拓扑需要先修正这一点才能按 README 验证。
-- `docs/udp-tcp-kcp-websocket.md` 描述的是 `com.game.gateway.transport.{tcp,udp}` 结构，与当前 `netty` / `kcp` 包不一致。
+- 传输协议说明已归档到 [OpenWiki](../integrations/transport.md)，后续只维护该页面；实现路径以当前 `netty` / `kcp` 包为准。
 - 仓库没有 CI 工作流（`.github/` 下只有 Issue/PR 模板），所有验证依赖本地执行。

@@ -1,8 +1,15 @@
+---
+type: Integration Guide
+title: SDK 统一生成流程
+description: 从 Java RPC 契约生成 Unity、TypeScript、Cocos Creator 与 C++ 客户端 SDK 的流程、边界和验证方式。
+resource: scripts/Generate-Sdks.ps1
+tags: [xs-net, sdk, code-generation]
+---
 # SDK 统一生成流程
 
 ## 设计原则
 
-XS-NET 参考 io-net 的生成方式，不把 Unity、TypeScript、Cocos Creator、C++ 维护成仓库根目录下的四个独立 SDK 工程。SDK 生成能力属于 `xs-net/xs-net-sdk` 模块：
+XS-NET 不把 Unity、TypeScript、Cocos Creator、C++ 维护成仓库根目录下的四个独立 SDK 工程，SDK 生成能力统一属于 `xs-net/xs-net-sdk` 模块：
 
 ```text
 xs-net/xs-net-sdk/
@@ -72,36 +79,6 @@ xs-net/xs-net-sdk/target/code/unity  xs-net/xs-net-sdk/target/code/typescript  x
 - C++ 在 `xs-net/xs-net-sdk/target/code/cpp` 中执行 CMake 配置和构建。
 
 Unity 的 `Runtime/Networking/NetMessage.cs` 是手写运行时，因此 Unity 生成阶段不输出 `net_message.proto` 的 C# 类型；TypeScript 和 C++ 会生成框架 Proto 类型。
-
-## 与 io-net 的对应关系
-
-io-net 的思路是：
-
-```text
-Java 注解类型和源码注释
-        ↓
-JProtobuf 分析与 Proto 元数据
-        ↓
-Action / Broadcast Document
-        ↓
-模板生成客户端业务 API
-```
-
-XS-NET 当前对应为：
-
-```text
-Java RPC / DTO
-        ↓
-RPC 源码扫描器
-        ↓
-规范 Proto 和路由元数据
-        ↓
-统一 SDK 生成器 + 语言模板
-        ↓
-target/code 下的客户端产物
-```
-
-两者共同点是：服务端模型是唯一协议来源，生成结果属于 `target`，客户端语言不是四个独立的服务端工程。当前差异是 io-net 还会生成高层 Action、广播、监听器和示例 API，而 XS-NET 目前主要生成 Protobuf 消息类型，并复用各语言的手写网络运行时。Cocos Creator 目标复用 TypeScript 的协议代码，并额外提供 `CocosWebSocketTransport`。
 
 ## 工具要求
 

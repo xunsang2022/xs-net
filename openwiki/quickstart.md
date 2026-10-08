@@ -121,5 +121,5 @@ Logic：Redis（player:{id} 状态 + log:events Streams）-> DBSyncEngine / LogC
 ## 待补充证据
 
 - **真实集群的端到端验证**：`deploy/cluster/README.md` 给出了双 Gateway + 双 Logic 的拓扑与压测步骤，但仓库内没有 CI 或脚本化的结果记录，跨节点分片再平衡的实际数据仍待补齐。
-- **传输文档与实现的偏移**：`docs/udp-tcp-kcp-websocket.md` 引用的 `com.game.gateway.transport.tcp.*` 类名已不存在，当前实现位于 `com.game.gateway.netty` 与 `com.game.gateway.kcp`。该文档需要随实现一起更新。
+- **传输协议说明**：详见 [TCP、UDP、KCP 与 WebSocket](integrations/transport.md)，实现路径以当前 `com.game.gateway.netty` 与 `com.game.gateway.kcp` 包为准。
 - **Battle 节点的持久化与恢复**：`BattleExecutorPool` 目前只在内存中维护战斗运行时，崩溃后的战斗状态恢复路径尚未在源码中体现。
