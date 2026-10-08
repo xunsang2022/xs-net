@@ -16,44 +16,28 @@ triggers:
         - main
 
 stages:
-  - name: verify
-    displayName: JDK 21 构建验证
+  - name: sync_wiki
+    displayName: 同步 OpenWiki 到 Gitee Wiki
     strategy: naturally
     trigger: auto
     executor: []
     steps:
-      - step: build@maven
-        name: build_maven
-        displayName: 构建并验证全部 Maven 模块
-        # Gitee Go 当前 Maven 构建环境最高列出 JDK 17；下方命令安装项目需要的 JDK 21。
-        jdkVersion: '17'
-        mavenVersion: 3.6.3
+      - step: shell@bash
+        name: publish_openwiki
+        displayName: 发布 openwiki 文档
         commands:
           - |
             set -eu
-            curl --fail --location --silent --show-error \
-              'https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse' \
-              --output /tmp/temurin-21.tar.gz
-            mkdir -p /tmp/temurin-21
-            tar -xzf /tmp/temurin-21.tar.gz -C /tmp/temurin-21 --strip-components=1
-            export JAVA_HOME=/tmp/temurin-21
-            export PATH="$JAVA_HOME/bin:$PATH"
-            java -version
-            bash ./mvnw --batch-mode --no-transfer-progress clean verify
-            if [ "${GITEE_GIT_EVENT:-push}" = "push" ]; then
-              test -n "${GITEE_WIKI_TOKEN:-}" || { echo "GITEE_WIKI_TOKEN is required"; exit 1; }
-              rm -rf /tmp/xs-net-wiki
-              git clone "https://oauth2:${GITEE_WIKI_TOKEN}@gitee.com/xs-gitee-2023/xs-net.wiki.git" /tmp/xs-net-wiki
-              find /tmp/xs-net-wiki -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-              cp -R openwiki/. /tmp/xs-net-wiki/
-              cd /tmp/xs-net-wiki
-              git config user.name "gitee-ci"
-              git config user.email "gitee-ci@users.noreply.gitee.com"
-              git add -A
-              if ! git diff --cached --quiet; then
-                git commit -m "docs: sync openwiki from xs-net ${GIT_COMMIT:-unknown}"
-                git push origin HEAD
-              fi
+            test -n "${GITEE_WIKI_TOKEN:-}" || { echo "GITEE_WIKI_TOKEN is required"; exit 1; }
+            rm -rf /tmp/xs-net-wiki
+            git clone "https://oauth2:${GITEE_WIKI_TOKEN}@gitee.com/xs-gitee-2023/xs-net.wiki.git" /tmp/xs-net-wiki
+            find /tmp/xs-net-wiki -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+            cp -R openwiki/. /tmp/xs-net-wiki/
+            cd /tmp/xs-net-wiki
+            git config user.name "gitee-ci"
+            git config user.email "gitee-ci@users.noreply.gitee.com"
+            git add -A
+            if ! git diff --cached --quiet; then
+              git commit -m "docs: sync openwiki from xs-net ${GIT_COMMIT:-unknown}"
+              git push origin HEAD
             fi
-        caches:
-          - ~/.m2
