@@ -9,12 +9,6 @@ triggers:
       precise:
         - master
         - main
-  pr:
-    branches:
-      precise:
-        - master
-        - main
-
 stages:
   - name: sync_wiki
     displayName: 同步 OpenWiki 到 Gitee Wiki
