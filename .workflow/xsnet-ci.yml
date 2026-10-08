@@ -16,9 +16,11 @@ stages:
     trigger: auto
     executor: []
     steps:
-      - step: build@bash
+      - step: build@maven
         name: publish_openwiki
         displayName: 发布 openwiki 文档
+        jdkVersion: '17'
+        mavenVersion: 3.6.3
         commands:
           - |
             set -eu
