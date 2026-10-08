@@ -24,9 +24,9 @@ stages:
         commands:
           - |
             set -eu
-            test -n "${XSNET_WIKI_TOKEN:-}" || { echo "XSNET_WIKI_TOKEN is required"; exit 1; }
+            source_workspace="$PWD"
             rm -rf /tmp/xs-net-wiki
-            git clone "https://oauth2:${XSNET_WIKI_TOKEN}@gitee.com/xs-gitee-2023/xs-net.wiki.git" /tmp/xs-net-wiki
+            git clone "https://gitee.com/xs-gitee-2023/xs-net.wiki.git" /tmp/xs-net-wiki
             find /tmp/xs-net-wiki -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
             cp -R openwiki/. /tmp/xs-net-wiki/
             cd /tmp/xs-net-wiki
@@ -35,5 +35,11 @@ stages:
             git add -A
             if ! git diff --cached --quiet; then
               git commit -m "docs: sync openwiki from xs-net ${GIT_COMMIT:-unknown}"
-              git push origin HEAD
+              wiki_auth_header="$(git -C "$source_workspace" config --get http.https://gitee.com/.extraheader || true)"
+              if [ -n "$wiki_auth_header" ]; then
+                git -c "http.https://gitee.com/.extraheader=$wiki_auth_header" push origin HEAD
+              else
+                test -n "${XSNET_WIKI_TOKEN:-}" || { echo "Gitee checkout credentials unavailable; set XSNET_WIKI_TOKEN"; exit 1; }
+                git push "https://oauth2:${XSNET_WIKI_TOKEN}@gitee.com/xs-gitee-2023/xs-net.wiki.git" HEAD
+              fi
             fi
