@@ -9,34 +9,63 @@ import lombok.experimental.UtilityClass;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 
-@UtilityClass
-public class MessageAble {
+/**
+ * 消息能力工具类，提供网络消息与业务消息之间的转换功能。
+ * 支持字节数组、NetMessage、ActionMessage之间的相互转换。
+ */
+public final class MessageAble {
+    /** RPC消息注册表，用于管理所有RPC消息规范 */
     private static volatile RpcMessageRegistry registry;
+    /** RPC信封工厂，用于创建RPC消息信封 */
     private static volatile RpcEnvelopeFactory envelopeFactory;
 
+    /**
+     * 初始化消息能力工具，设置RPC消息注册表和信封工厂。
+     *
+     * @param messageRegistry RPC消息注册表
+     * @param messageEnvelopeFactory RPC信封工厂
+     */
     public static void initialize(RpcMessageRegistry messageRegistry, RpcEnvelopeFactory messageEnvelopeFactory) {
         registry = messageRegistry;
         envelopeFactory = messageEnvelopeFactory;
     }
 
+    /**
+     * 初始化消息能力工具，仅设置RPC消息注册表。
+     *
+     * @param messageRegistry RPC消息注册表
+     */
     public static void initialize(RpcMessageRegistry messageRegistry) {
         registry = messageRegistry;
         envelopeFactory = null;
     }
 
+    /**
+     * 检查消息能力工具是否已初始化。
+     *
+     * @return 如果已初始化返回true，否则返回false
+     */
     public static boolean isInitialized() {
         return registry != null;
     }
 
+    /**
+     * 获取当前RPC消息注册表。
+     *
+     * @return RPC消息注册表
+     */
     public static RpcMessageRegistry registry() {
         return registry;
     }
 
-    /// net byte -> net dto
-    ///  ----------------消息协议格式---------------------
-    ///   packetLength | rpcNum | errorCode | body
-    ///      int          int       int       byte[]
-    /// --------------------------------------------------
+    /**
+     * 将网络字节数组转换为NetMessage对象。
+     * 消息协议格式：packetLength(4字节) | rpcNum(4字节) | errorCode(4字节) | body(变长)
+     *
+     * @param bytes 网络字节数组
+     * @return NetMessage对象
+     * @throws InvalidProtocolBufferException 如果字节数组长度不足或解析失败
+     */
     public static NetMessage toNetMessage(byte[] bytes) throws InvalidProtocolBufferException {
         if (bytes == null || bytes.length < 12) {
             throw new InvalidProtocolBufferException("Frame too short: " + (bytes == null ? 0 : bytes.length));
@@ -44,12 +73,25 @@ public class MessageAble {
         return NetMessage.parseFrom(ByteBuffer.wrap(bytes, 12, bytes.length - 12));
     }
 
-    /// net dto -> action message dto
+    /**
+     * 将NetMessage对象转换为业务消息对象。
+     *
+     * @param netMessage 网络消息对象
+     * @return 业务消息对象
+     * @throws InvalidProtocolBufferException 如果解析失败
+     */
     public static Object toActionMessage(NetMessage netMessage) throws InvalidProtocolBufferException {
         return toActionMessage(netMessage, requireRegistry(), envelopeFactory);
     }
 
-    /// net dto -> action message dto, using the supplied registry
+    /**
+     * 将NetMessage对象转换为业务消息对象，使用指定的注册表。
+     *
+     * @param netMessage 网络消息对象
+     * @param messageRegistry RPC消息注册表
+     * @return 业务消息对象
+     * @throws InvalidProtocolBufferException 如果解析失败
+     */
     public static Object toActionMessage(
             NetMessage netMessage,
             RpcMessageRegistry messageRegistry
@@ -76,10 +118,25 @@ public class MessageAble {
         return messageEnvelopeFactory.create(rpcNum, payload);
     }
 
+    /**
+     * 将业务消息对象转换为NetMessage对象。
+     *
+     * @param message 业务消息对象
+     * @return NetMessage对象
+     * @throws IllegalArgumentException 如果消息类型未知
+     */
     public static NetMessage toNetMessage(Object message) {
         return toNetMessage(message, requireRegistry());
     }
 
+    /**
+     * 将业务消息对象转换为NetMessage对象，使用指定的注册表。
+     *
+     * @param message 业务消息对象
+     * @param messageRegistry RPC消息注册表
+     * @return NetMessage对象
+     * @throws IllegalArgumentException 如果消息类型未知
+     */
     public static NetMessage toNetMessage(Object message, RpcMessageRegistry messageRegistry) {
         Objects.requireNonNull(message, "message");
         RpcMessageRegistry registry = requireRegistry(messageRegistry);
@@ -96,11 +153,25 @@ public class MessageAble {
                 .build();
     }
 
-    /// action message dto -> net message dto
+    /**
+     * 将RPC消息对象转换为NetMessage对象。
+     *
+     * @param message RPC消息对象
+     * @return NetMessage对象
+     * @throws IllegalArgumentException 如果消息类型未知或负载类型不匹配
+     */
     public static NetMessage toNetMessage(RpcMessage message) {
         return toNetMessage(message, requireRegistry());
     }
 
+    /**
+     * 将RPC消息对象转换为NetMessage对象，使用指定的注册表。
+     *
+     * @param message RPC消息对象
+     * @param messageRegistry RPC消息注册表
+     * @return NetMessage对象
+     * @throws IllegalArgumentException 如果消息类型未知或负载类型不匹配
+     */
     public static NetMessage toNetMessage(RpcMessage message, RpcMessageRegistry messageRegistry) {
         Objects.requireNonNull(message, "message");
         RpcMessageRegistry registry = requireRegistry(messageRegistry);
@@ -119,11 +190,13 @@ public class MessageAble {
                 .build();
     }
 
-    ///  net message dto -> net byte
-    ///  ----------------消息协议格式---------------------
-    ///   packetLength | rpcNum | errorCode | body
-    ///      int          int       int       byte[]
-    /// --------------------------------------------------
+    /**
+     * 将NetMessage对象转换为网络字节数组。
+     * 消息协议格式：packetLength(4字节) | rpcNum(4字节) | errorCode(4字节) | body(变长)
+     *
+     * @param netMessage 网络消息对象
+     * @return 网络字节数组
+     */
     public static byte[] toNetByteMsg(NetMessage netMessage) {
         int rpcNumber = netMessage.getRpcNum();
         byte[] data = netMessage.toByteArray();
@@ -141,6 +214,14 @@ public class MessageAble {
         return bytes;
     }
 
+    /**
+     * 将字节数组转换为NetMessage对象，支持带帧头或不带帧头的格式。
+     *
+     * @param bytes 字节数组
+     * @param framed 是否带帧头（packetLength字段）
+     * @return NetMessage对象
+     * @throws InvalidProtocolBufferException 如果解析失败
+     */
     public static NetMessage toNetMessage(byte[] bytes, boolean framed) throws InvalidProtocolBufferException {
         if (!framed) {
             return NetMessage.parseFrom(bytes);
@@ -148,6 +229,12 @@ public class MessageAble {
         return toNetMessage(bytes);
     }
 
+    /**
+     * 获取必需的RPC消息注册表，如果未初始化则抛出异常。
+     *
+     * @return RPC消息注册表
+     * @throws IllegalStateException 如果注册表未初始化
+     */
     private static RpcMessageRegistry requireRegistry() {
         RpcMessageRegistry value = registry;
         if (value == null) {

@@ -2,7 +2,7 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.game.logic.dbsync.PlayerMapper">
+<mapper namespace="com.game.logic.actor.player.PlayerMapper">
 
     <select id="upsert" resultType="com.game.logic.actor.player.PlayerPO">
         INSERT INTO users (id, name, email, online, last_login_at, updated_at, version)

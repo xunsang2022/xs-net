@@ -1,11 +1,12 @@
 package com.game;
 
 import com.game.comment.config.CommentConfig;
+import com.game.message.rpc.GameRpcConfig;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Import;
 
-@Import({CommentConfig.class})
+@Import({CommentConfig.class, GameRpcConfig.class})
 @SpringBootApplication(scanBasePackages = "com.game.login")
 public class LoginApplication {
     public static void main(String[] args) {

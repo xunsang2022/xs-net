@@ -39,8 +39,6 @@ public class ChannelActor extends RpcActor<S2C> {
     public ChannelActor(ActorContext<S2C> context, String entityId) {
         super(context, entityId);
         this.entityId = entityId;
-
-        log.info("ChannelActor created: {}", this.entityId);
     }
 
     public static Behavior<S2C> create(String entityId) {

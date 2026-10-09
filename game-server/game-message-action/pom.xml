@@ -45,20 +45,20 @@
                 <groupId>com.xs</groupId>
                 <artifactId>xs-net-rpc-maven-plugin</artifactId>
                 <version>0.0.6</version>
+                <configuration>
+                    <sourceDirectories>
+                        <sourceDirectory>${project.basedir}/src/main/java</sourceDirectory>
+                        <sourceDirectory>${project.basedir}/../game-node-modules/src/main/java</sourceDirectory>
+                        <sourceDirectory>${project.basedir}/../game-node-battle/src/main/java</sourceDirectory>
+                    </sourceDirectories>
+                    <protoOutputDirectory>${project.basedir}/src/main/proto</protoOutputDirectory>
+                </configuration>
                 <executions>
                     <execution>
                         <id>generate-rpc</id>
                         <goals>
                             <goal>generate</goal>
                         </goals>
-                        <configuration>
-                            <sourceDirectories>
-                                <sourceDirectory>${project.basedir}/src/main/java</sourceDirectory>
-                                <sourceDirectory>${project.basedir}/../game-node-modules/src/main/java</sourceDirectory>
-                                <sourceDirectory>${project.basedir}/../game-node-battle/src/main/java</sourceDirectory>
-                            </sourceDirectories>
-                            <protoOutputDirectory>${project.basedir}/src/main/proto</protoOutputDirectory>
-                        </configuration>
                     </execution>
                 </executions>
             </plugin>

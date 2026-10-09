@@ -1,10 +1,10 @@
 package com.game.logic.config;
 
+import com.game.eventsourcing.DBSyncEngine;
+import com.game.eventsourcing.LogConsumer;
 import com.game.logic.context.LogicContext;
 import com.game.logic.context.LogicIoExecutors;
 import com.game.logic.context.LogicMetrics;
-import com.game.logic.dbsync.DBSyncEngine;
-import com.game.logic.dbsync.LogConsumer;
 import com.game.logic.management.GmProtocolTraceService;
 import com.game.logic.management.ProcessArthasTraceClient;
 import com.game.logic.management.ProtocolTraceTargetResolver;
@@ -13,6 +13,7 @@ import com.game.logic.redis.RedisStore;
 import com.game.message.rpc.GameRpcMessages;
 import com.xs.net.message.MessageAble;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pekko.actor.typed.ActorSystem;
 import org.springframework.beans.factory.ObjectProvider;
@@ -28,8 +29,8 @@ import java.util.Map;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable {
-
     private final RedisConnectionFactory connectionFactory;
     private final StringRedisTemplate redisTemplate;
     private final RedisStore redisStore;
@@ -45,30 +46,17 @@ public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable {
     private volatile LogicPrometheusServer prometheusServer;
     private volatile LogicRuntimeConfiguration runtimeConfiguration;
 
-    public LogicNodeRuntime(
-            RedisConnectionFactory connectionFactory,
-            StringRedisTemplate redisTemplate,
-            RedisStore redisStore,
-            LogicIoExecutors ioExecutors,
-            DBSyncEngine dbSyncEngine,
-            LogConsumer logConsumer,
-            PrometheusMeterRegistry meterRegistry,
-            LogicMetrics logicMetrics,
-            LogicNodeProperties properties,
-            ObjectProvider<ActorSystem<Void>> actorSystemProvider
-    ) {
-        this.connectionFactory = connectionFactory;
-        this.redisTemplate = redisTemplate;
-        this.redisStore = redisStore;
-        this.ioExecutors = ioExecutors;
-        this.dbSyncEngine = dbSyncEngine;
-        this.logConsumer = logConsumer;
-        this.meterRegistry = meterRegistry;
-        this.logicMetrics = logicMetrics;
-        this.properties = properties;
-        this.actorSystemProvider = actorSystemProvider;
-    }
-
+    /**
+     * Spring Boot 启动入口，按顺序初始化逻辑节点所有核心组件。
+     * <ol>
+     *   <li>将 Redis、线程池、同步引擎、监控等基础组件注入 {@link LogicContext} 静态上下文</li>
+     *   <li>启动 DB 同步引擎、RPC 消息协议、管理端点、运行时配置、日志消费者</li>
+     *   <li>创建 Pekko Actor 系统，正式进入游戏逻辑处理</li>
+     * </ol>
+     *
+     * @param args 命令行参数（未使用）
+     * @throws Exception 初始化过程中任何组件启动失败
+     */
     @Override
     public void run(ApplicationArguments args) throws Exception {
         LogicContext.setConnectionFactory(connectionFactory);
@@ -91,6 +79,12 @@ public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable {
         actorSystem = actorSystemProvider.getObject();
     }
 
+    /**
+     * 阻塞等待 Actor 系统终止。
+     * <p>调用此方法会一直阻塞直到 Actor 系统完全关闭，通常用于主线程等待应用退出。</p>
+     *
+     * @throws IllegalStateException 如果 Actor 系统尚未启动
+     */
     public void awaitTermination() {
         ActorSystem<Void> system = actorSystem;
         if (system == null) {
@@ -99,6 +93,12 @@ public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable {
         system.getWhenTerminated().toCompletableFuture().join();
     }
 
+    /**
+     * 启动管理端点，包括 Prometheus 监控服务和 Arthas 协议追踪。
+     * <p>创建 GM 协议追踪服务（基于 Arthas），并启动 Prometheus HTTP 端点暴露监控指标。</p>
+     *
+     * @throws IllegalStateException 如果 Prometheus 端点启动失败（如端口被占用）
+     */
     private void startManagementEndpoints() {
         GmProtocolTraceService traceService = new GmProtocolTraceService(
                 new ProtocolTraceTargetResolver(GameRpcMessages.INSTANCE),
@@ -117,6 +117,11 @@ public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable {
         }
     }
 
+    /**
+     * 启动运行时配置加载。
+     * <p>从系统属性中加载 {@link LogicRuntimeConfiguration}，并按配置的间隔定期重新加载，
+     * 支持运行时动态调整参数（如日志级别、同步间隔）。</p>
+     */
     private void startRuntimeConfiguration() {
         runtimeConfiguration = LogicRuntimeConfiguration.fromSystemProperty(this::applyRuntimeConfiguration);
         if (runtimeConfiguration != null) {
@@ -124,6 +129,12 @@ public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable {
         }
     }
 
+    /**
+     * 获取 Arthas 诊断工具的安装目录路径。
+     * <p>优先读取系统属性 {@code arthas.home}，若未设置或为空，则回退到配置文件中的指定路径。</p>
+     *
+     * @return Arthas 安装目录的 Path 对象
+     */
     private Path arthasHome() {
         String home = System.getProperty("arthas.home");
         if (home == null || home.isBlank()) {
@@ -132,6 +143,17 @@ public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable {
         return Path.of(home);
     }
 
+    /**
+     * 应用运行时配置变更。
+     * <p>处理动态配置更新，包括：</p>
+     * <ul>
+     *   <li>{@code game.storage.sync-interval-ms} - 数据同步间隔（毫秒）</li>
+     *   <li>{@code game.logging.level} - 应用日志级别</li>
+     * </ul>
+     *
+     * @param settings 配置键值对映射
+     * @throws IllegalArgumentException 如果同步间隔格式不正确
+     */
     private void applyRuntimeConfiguration(Map<String, String> settings) {
         String syncInterval = settings.get("game.storage.sync-interval-ms");
         if (syncInterval != null && !syncInterval.isBlank()) {
@@ -145,6 +167,18 @@ public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable {
         LogbackLevelUpdater.updateApplicationLevel(settings.get("game.logging.level"));
     }
 
+    /**
+     * 关闭逻辑节点，释放所有资源。
+     * <p>按顺序执行以下清理操作：</p>
+     * <ol>
+     *   <li>终止 Actor 系统并等待其完全关闭</li>
+     *   <li>停止日志消费者</li>
+     *   <li>关闭 IO 线程池</li>
+     *   <li>刷新并停止 DB 同步引擎</li>
+     *   <li>关闭运行时配置加载器</li>
+     *   <li>关闭 Prometheus 监控端点</li>
+     * </ol>
+     */
     @Override
     public void close() {
         ActorSystem<Void> system = actorSystem;

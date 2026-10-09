@@ -38,7 +38,6 @@ public class AuthController {
         }
         String token = jwtUtil.generateToken(String.valueOf(request.getPlayerId()), channelId);
         long expiresAt = System.currentTimeMillis() + jwtUtil.getExpirationMillis();
-        log.info("Issued token: playerId={}, channelId={}", request.getPlayerId(), channelId);
         return ResponseEntity.ok(new TokenResponse(token, expiresAt));
     }
 

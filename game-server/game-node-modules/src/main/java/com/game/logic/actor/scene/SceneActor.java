@@ -8,14 +8,12 @@ import com.game.message.scene.SceneJoinCommand;
 import com.game.message.scene.SceneLeaveCommand;
 import com.xs.kernel.actor.RpcActor;
 import com.xs.kernel.actor.node.ActorDispatcher;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.ActorContext;
 import org.apache.pekko.actor.typed.javadsl.Behaviors;
 import org.apache.pekko.actor.typed.javadsl.Receive;
 
 /** 维护场景成员关系并通知玩家场景状态变化的 Actor。 */
-@Slf4j
 @ActorDispatcher("pekko.actor.scene-dispatcher")
 public final class SceneActor extends RpcActor<SceneMessage> {
 
@@ -40,8 +38,6 @@ public final class SceneActor extends RpcActor<SceneMessage> {
     private Behavior<SceneMessage> onJoin(SceneJoinCommand command) {
         if (membership.join(command.playerId())) {
             sendRpc(PlayerMessage.class, new PlayerSceneChanged(entityId(), true), String.valueOf(command.playerId()));
-            log.info("Player joined scene: sceneId={}, playerId={}, members={}",
-                    entityId(), command.playerId(), membership.size());
         }
         return this;
     }
@@ -49,8 +45,6 @@ public final class SceneActor extends RpcActor<SceneMessage> {
     private Behavior<SceneMessage> onLeave(SceneLeaveCommand command) {
         if (membership.leave(command.playerId())) {
             sendRpc(PlayerMessage.class, new PlayerSceneChanged(entityId(), false), String.valueOf(command.playerId()));
-            log.info("Player left scene: sceneId={}, playerId={}, members={}",
-                    entityId(), command.playerId(), membership.size());
         }
         return this;
     }

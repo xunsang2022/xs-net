@@ -115,7 +115,6 @@ public class KcpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
             // 回空载荷（0 长度）作为 auth-ok
             session.sendBytes(new byte[0]);
             Metrics.counter(METRIC_AUTH_SUCCESS).increment();
-            log.debug("KCP session authenticated: channelId={}, remote={}", channelId, session.remote());
         } catch (Exception e) {
             Metrics.counter(METRIC_AUTH_FAILURE).increment();
             log.error("KCP auth error", e);
@@ -145,13 +144,11 @@ public class KcpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
                         ChannelRegistry.INSTANCE.remove(session.channelId());
                     }
                     sessions.remove(entry.getKey(), session);
-                    log.info("KCP session idle timeout, removed: {}", session);
                     continue;
                 }
                 if (!session.isAuthenticated()
                         && idle > config.getAuthTimeoutSeconds() * 1000L) {
                     sessions.remove(entry.getKey(), session);
-                    log.info("KCP session auth timeout, removed: {}", session);
                 }
             }
         }

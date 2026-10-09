@@ -7,11 +7,7 @@ import com.game.message.routing.PlayerRoutable;
 import com.game.message.actor.logic.PlayerMessage;
 
 /** 客户端请求玩家登出并关闭当前会话的请求消息。 */
-@Rpc(
-        kind = Rpc.Kind.REQUEST,
-        requestNumber = 1001,
-        responseNumber = 1003
-)
+@Rpc(kind = Rpc.Kind.MESSAGE, number = 1001)
 public record LogoutRequest(
         @ProtoField(number = 1) String playerId,
         @ProtoField(number = 2) String sessionId

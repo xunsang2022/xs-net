@@ -1,7 +1,7 @@
 package com.game.logic.redis;
 
-import com.game.logic.enums.LogLevel;
-import com.game.logic.enums.LogType;
+import com.game.eventsourcing.LogLevel;
+import com.game.eventsourcing.LogType;
 import com.game.logic.actor.player.PlayerPO;
 import com.game.protocol.pb.LogRecordCommand;
 import org.junit.jupiter.api.Test;

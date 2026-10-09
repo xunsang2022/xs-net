@@ -1,13 +1,14 @@
 package com.game.logic.config;
 
+import com.game.eventsourcing.DBSyncConfig;
+import com.game.eventsourcing.DBSyncEngine;
+import com.game.eventsourcing.DirtyRecord;
+import com.game.eventsourcing.LogConsumer;
+import com.game.eventsourcing.LogEventMapper;
+import com.game.eventsourcing.MybatisPersistenceConfiguration;
+import com.game.logic.actor.player.PlayerMapper;
 import com.game.logic.context.LogicIoExecutors;
 import com.game.logic.context.LogicMetrics;
-import com.game.logic.dbsync.DBSyncConfig;
-import com.game.logic.dbsync.DBSyncEngine;
-import com.game.logic.dbsync.LogConsumer;
-import com.game.logic.dbsync.LogEventMapper;
-import com.game.logic.dbsync.MybatisPersistenceConfiguration;
-import com.game.logic.dbsync.PlayerMapper;
 import com.game.logic.redis.RedisStore;
 import io.micrometer.prometheusmetrics.PrometheusConfig;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
@@ -23,6 +24,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.JacksonJsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
+import java.util.List;
+import java.util.Map;
 import javax.sql.DataSource;
 
 @Configuration(proxyBeanMethods = false)
@@ -68,7 +71,9 @@ public class LogicNodeConfiguration {
 
     @Bean
     public SqlSessionFactory sqlSessionFactory(DataSource dataSource) {
-        return MybatisPersistenceConfiguration.create(dataSource);
+        return MybatisPersistenceConfiguration.create(dataSource,
+                List.of(PlayerMapper.class),
+                List.of("mapper/PlayerMapper.xml"));
     }
 
     @Bean
@@ -87,8 +92,24 @@ public class LogicNodeConfiguration {
     }
 
     @Bean
-    public DBSyncEngine dbSyncEngine(PlayerMapper playerMapper, DBSyncConfig config) {
-        return new DBSyncEngine(playerMapper, config);
+    public DBSyncEngine dbSyncEngine(PlayerMapper playerMapper, DBSyncConfig config, LogicMetrics logicMetrics) {
+        DBSyncEngine.PersistenceCallback persistenceCallback = new DBSyncEngine.PersistenceCallback() {
+            @Override
+            public Long upsertRecord(DirtyRecord record) {
+                return playerMapper.upsertRecord(record);
+            }
+            @Override
+            public List<Long> upsertBatch(List<DirtyRecord> records) {
+                return playerMapper.upsertBatch(records);
+            }
+        };
+        DBSyncEngine.LoadCallback loadCallback = new DBSyncEngine.LoadCallback() {
+            @Override
+            public Map<String, String> loadOrCreate(Long recordId) {
+                return playerMapper.loadOrCreate(recordId, "player-" + recordId).toHash();
+            }
+        };
+        return new DBSyncEngine(config, logicMetrics, persistenceCallback, loadCallback);
     }
 
     @Bean
@@ -104,8 +125,7 @@ public class LogicNodeConfiguration {
     }
 
     @Bean
-    public LogicMetrics logicMetrics(PrometheusMeterRegistry meterRegistry,
-                                     DBSyncEngine dbSyncEngine) {
-        return new LogicMetrics(meterRegistry, dbSyncEngine);
+    public LogicMetrics logicMetrics(PrometheusMeterRegistry meterRegistry) {
+        return new LogicMetrics(meterRegistry);
     }
 }

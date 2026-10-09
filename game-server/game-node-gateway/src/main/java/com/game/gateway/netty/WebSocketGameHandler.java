@@ -146,7 +146,6 @@ final class WebSocketGameHandler extends SimpleChannelInboundHandler<BinaryWebSo
             cancelAuthTimeout();
             ctx.writeAndFlush(new BinaryWebSocketFrame(NettyFramer.encodeAck(connectionRandom, 0)));
             Metrics.counter(METRIC_AUTH_SUCCESS).increment();
-            log.info("WebSocket channel authenticated: channelId={}", channelId);
         } catch (Exception exception) {
             Metrics.counter(METRIC_AUTH_FAILURE).increment();
             log.error("WebSocket authentication failed", exception);

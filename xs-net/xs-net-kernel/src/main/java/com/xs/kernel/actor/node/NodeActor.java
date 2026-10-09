@@ -47,11 +47,27 @@ public class NodeActor extends AbstractBehavior<Command> {
 
         RpcMessageRegistry messageRegistry = null;
         if (!MessageAble.isInitialized()) {
-            try {
-                messageRegistry = SpringUtil.getBean(RpcMessageRegistry.class);
-                MessageAble.initialize(messageRegistry);
-            } catch (Exception e) {
-                log.error("Failed to initialize RpcMessageRegistry from Spring", e);
+            // 重试机制：等待 Spring 容器完全初始化
+            int maxRetries = 10;
+            int retryDelayMs = 100;
+            for (int i = 0; i < maxRetries; i++) {
+                try {
+                    messageRegistry = SpringUtil.getBean(RpcMessageRegistry.class);
+                    MessageAble.initialize(messageRegistry);
+                    break;
+                } catch (Exception e) {
+                    if (i < maxRetries - 1) {
+                        log.debug("Waiting for RpcMessageRegistry bean initialization, retry {}/{}", i + 1, maxRetries);
+                        try {
+                            Thread.sleep(retryDelayMs);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+                    } else {
+                        log.error("Failed to initialize RpcMessageRegistry from Spring after {} retries", maxRetries, e);
+                    }
+                }
             }
         }
         if (messageRegistry == null) {

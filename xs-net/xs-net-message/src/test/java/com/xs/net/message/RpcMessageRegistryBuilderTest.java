@@ -23,7 +23,7 @@ public class RpcMessageRegistryBuilderTest extends TestCase {
                 NetMessage.getDefaultInstance().getParserForType(),
                 String.class,
                 TestRole.class,
-                RpcMessageDirection.REQUEST,
+                RpcMessageDirection.INTERNAL,
                 true,
                 true,
                 false,

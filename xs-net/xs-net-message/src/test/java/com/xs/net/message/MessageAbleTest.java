@@ -37,7 +37,7 @@ public class MessageAbleTest extends TestCase {
             public List<RpcMessageSpec<? extends MessageLite>> all() {
                 return List.of(spec);
             }
-        }, (rpcNum, payload) -> new TestRpcMessage(rpcNum, payload));
+        }, TestRpcMessage::new);
     }
 
     public void testFrameRoundTrip() throws Exception {

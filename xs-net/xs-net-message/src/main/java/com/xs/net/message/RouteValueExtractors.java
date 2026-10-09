@@ -15,10 +15,20 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RouteValueExtractors {
     private static final Map<MethodKey, Method> METHODS = new ConcurrentHashMap<>();
 
+    /**
+     * 创建玩家ID提取器。
+     *
+     * @return 玩家ID提取器
+     */
     public static RouteValueExtractor playerId() {
         return message -> invoke(message, "playerId");
     }
 
+    /**
+     * 创建频道ID提取器，优先使用channelId，如果为null则使用sessionId。
+     *
+     * @return 频道ID提取器
+     */
     public static RouteValueExtractor channelId() {
         return message -> {
             String channelId = invoke(message, "channelId");
@@ -26,6 +36,13 @@ public class RouteValueExtractors {
         };
     }
 
+    /**
+     * 通过反射调用消息对象的指定方法获取路由值。
+     *
+     * @param message 消息对象
+     * @param methodName 方法名
+     * @return 路由值，如果方法不存在或调用失败返回null
+     */
     private static String invoke(Object message, String methodName) {
         if (message == null) {
             return null;

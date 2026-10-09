@@ -110,8 +110,17 @@ final class RpcSourceScanner {
                         try {
                             String kind = enumAttribute(value, "kind");
                             if ("MESSAGE".equals(kind)) {
+                                // MESSAGE 类型：尝试查找 handler，如果有则关联
+                                MethodBinding binding = handlerByDto.get(dtoType);
+                                String roleType = binding != null ? binding.roleType()
+                                        : downlinkRole(record, packageName, imports, roleInterfaces);
+                                String responseDtoType = binding != null ? binding.responseDtoType() : null;
                                 messages.add(message(intAttribute(value, "number"), messageName(dtoType), dtoType,
-                                        record, downlinkRole(record, packageName, imports, roleInterfaces), Direction.HTTP_RESPONSE, true, null, null, null, null));
+                                        record, roleType, Direction.HTTP_RESPONSE, true,
+                                        binding != null ? binding.actorType() : null,
+                                        binding != null ? binding.componentField() : null,
+                                        binding != null ? binding.methodName() : null,
+                                        responseDtoType));
                                 return;
                             }
                             MethodBinding binding = requireHandler(handlerByDto, dtoType, record);
@@ -121,18 +130,7 @@ final class RpcSourceScanner {
                                         record, binding.roleType(), Direction.INTERNAL, false, binding.actorType(), binding.componentField(), binding.methodName(), null));
                                 return;
                             }
-                            int requestNumber = intAttribute(value, "requestNumber");
-                            int responseNumber = intAttribute(value, "responseNumber");
-                            String responseDtoType = requireResponse(binding, dtoType, record);
-                            RecordSource responseSource = requireRecordSource(recordSources, responseDtoType);
-                            messages.add(message(requestNumber, messageName(dtoType), dtoType, record,
-                                    binding.roleType(), Direction.REQUEST, true, binding.actorType(), binding.componentField(), binding.methodName(), responseDtoType));
-                            messages.add(message(responseNumber, messageName(responseDtoType), responseDtoType,
-                                    responseSource.record(),
-                                    downlinkRole(responseSource.record(), responseSource.packageName(),
-                                            responseSource.imports(), roleInterfaces),
-                                    Direction.RESPONSE, true,
-                                    null, null, null, null));
+                            throw new MojoFailureException("Unsupported RPC kind: " + kind);
                         } catch (MojoFailureException exception) {
                             throw new ScanException(exception);
                         }
@@ -162,14 +160,6 @@ final class RpcSourceScanner {
                     + dtoType + "; a handler in an actor extending RpcActor<Role> with single parameter of this type is required");
         }
         return binding;
-    }
-
-    private String requireResponse(MethodBinding binding, String dtoType, RecordDeclaration record) throws MojoFailureException {
-        if (binding.responseDtoType() == null) {
-            throw new MojoFailureException("@Rpc handler must return a response DTO that is a scanned record: "
-                    + dtoType);
-        }
-        return binding.responseDtoType();
     }
 
     private void requireRole(RecordDeclaration record, String roleType, String packageName, Map<String, String> imports)
@@ -281,7 +271,7 @@ final class RpcSourceScanner {
                 }
                 protoType(field.javaType());
             }
-            if ((message.direction() == Direction.REQUEST || message.direction() == Direction.INTERNAL)
+            if (message.direction() == Direction.INTERNAL
                     && (message.roleType() == null || message.actorType() == null || message.handlerMethod() == null)) {
                 throw new MojoFailureException("RPC handler must belong to an actor extending RpcActor<Role>: " + message.name());
             }

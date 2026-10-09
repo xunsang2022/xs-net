@@ -2,8 +2,8 @@ package com.game.logic.actor.player.core;
 
 import com.game.logic.actor.player.message.RedisFlushResult;
 import com.game.logic.actor.player.message.DestroyResult;
+import com.game.eventsourcing.DBSyncEngine;
 import com.game.logic.context.LogicContext;
-import com.game.logic.dbsync.DBSyncEngine;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 

@@ -24,11 +24,9 @@ class RpcSourceScannerTest {
                 package sample;
                 @interface ProtoField { int number(); }
                 @interface Rpc {
-                    enum Kind { MESSAGE, INTERNAL, REQUEST }
-                    Kind kind() default Kind.REQUEST;
+                    enum Kind { MESSAGE, INTERNAL }
+                    Kind kind() default Kind.MESSAGE;
                     int number() default 0;
-                    int requestNumber() default 0;
-                    int responseNumber() default 0;
                 }
                 class RpcActor<T> {}
                 @interface Roles { String value(); }
@@ -39,12 +37,13 @@ class RpcSourceScannerTest {
                 interface INetMessage {}
                 @Rpc(kind = Rpc.Kind.MESSAGE, number = 8)
                 record HttpResult(@ProtoField(number = 1) String token) implements INetMessage {}
-                @Rpc(kind = Rpc.Kind.REQUEST, requestNumber = 6, responseNumber = 7)
+                @Rpc(kind = Rpc.Kind.MESSAGE, number = 6)
                 record Request(@ProtoField(number = 1) String playerId, @ProtoField(number = 2) Integer level) implements PlayerMessage {}
+                @Rpc(kind = Rpc.Kind.MESSAGE, number = 7)
                 record Response(@ProtoField(number = 1) Long result) implements S2C {}
                 @Rpc(kind = Rpc.Kind.INTERNAL, number = 9)
                 record Enter(@ProtoField(number = 1) String playerId) implements PlayerMessage {}
-                class PlayerActor extends RpcActor<PlayerMessage> { Response handle(Request request) { return null; } void enter(Enter enter) {} }
+                class PlayerActor extends RpcActor<PlayerMessage> { void request(Request request) {} void enter(Enter enter) {} }
                 """);
 
         RpcModel model = new RpcSourceScanner().scan(java.util.List.of(source));
@@ -76,13 +75,13 @@ class RpcSourceScannerTest {
         assertFalse(playerProto.contains("message HttpResult"));
         assertTrue(commentProto.contains("message HttpResult"));
         assertFalse(commentProto.contains("message Request"));
-        assertTrue(routesMarkdown.contains("|7|sample.Response|RESPONSE|sample.S2C|"));
+        assertTrue(routesMarkdown.contains("|7|sample.Response|HTTP_RESPONSE|sample.S2C|"));
         assertTrue(routesProto.contains("RPC_REQUEST = 6"));
         assertTrue(routesProto.contains("RPC_RESPONSE = 7"));
         assertTrue(routesProto.contains("RPC_HTTP_RESULT = 8"));
         assertTrue(routesProto.contains("RPC_ENTER = 9"));
         assertTrue(registry.contains("RpcMessageRegistryBuilder"));
-        assertTrue(registry.contains("new com.xs.net.message.RpcHandlerMetadata(\"sample.PlayerActor\", \"handle\", sample.Request.class, sample.Response.class)"));
+        assertTrue(registry.contains("new com.xs.net.message.RpcHandlerMetadata(\"sample.PlayerActor\", \"request\", sample.Request.class, null)"));
         assertTrue(registry.contains("new com.xs.net.message.RpcHandlerMetadata(\"sample.PlayerActor\", \"enter\", sample.Enter.class, null)"));
         assertTrue(codec.contains("RpcPayloadCodec<sample.Request"));
         assertTrue(java.nio.file.Files.isRegularFile(target.resolve("java/com/game/message/rpc/GeneratedRpcHandlers.java")));
@@ -95,18 +94,17 @@ class RpcSourceScannerTest {
                 package sample;
                 @interface ProtoField { int number(); }
                 @interface Rpc {
-                    enum Kind { MESSAGE, INTERNAL, REQUEST }
-                    Kind kind() default Kind.REQUEST;
+                    enum Kind { MESSAGE, INTERNAL }
+                    Kind kind() default Kind.MESSAGE;
                     int number() default 0;
-                    int requestNumber() default 0;
-                    int responseNumber() default 0;
                 }
                 class RpcActor<T> {}
                 interface PlayerMessage {}
-                @Rpc(kind = Rpc.Kind.REQUEST, requestNumber = 6, responseNumber = 7)
+                @Rpc(kind = Rpc.Kind.MESSAGE, number = 6)
                 record Request(@ProtoField(number = 1) String playerId) implements PlayerMessage {}
+                @Rpc(kind = Rpc.Kind.MESSAGE, number = 7)
                 record Response(@ProtoField(number = 1) String result) implements PlayerMessage {}
-                class PlayerActor extends RpcActor<PlayerMessage> { Response handle(Request request) { return null; } }
+                class PlayerActor extends RpcActor<PlayerMessage> { void request(Request request) {} }
                 """);
 
         RpcModel model = new RpcSourceScanner().scan(java.util.List.of(source));
@@ -128,11 +126,9 @@ class RpcSourceScannerTest {
                 package sample;
                 @interface ProtoField { int number(); }
                 @interface Rpc {
-                    enum Kind { MESSAGE, INTERNAL, REQUEST }
-                    Kind kind() default Kind.REQUEST;
+                    enum Kind { MESSAGE, INTERNAL }
+                    Kind kind() default Kind.MESSAGE;
                     int number() default 0;
-                    int requestNumber() default 0;
-                    int responseNumber() default 0;
                 }
                 class RpcActor<T> {}
                 interface PlayerMessage {}
@@ -166,11 +162,9 @@ class RpcSourceScannerTest {
                 package sample;
                 @interface ProtoField { int number(); }
                 @interface Rpc {
-                    enum Kind { MESSAGE, INTERNAL, REQUEST }
+                    enum Kind { MESSAGE, INTERNAL }
                     Kind kind() default Kind.MESSAGE;
                     int number() default 0;
-                    int requestNumber() default 0;
-                    int responseNumber() default 0;
                 }
                 @Rpc(kind = Rpc.Kind.MESSAGE, number = 1) record One(@ProtoField(number = 1) String value) {}
                 @Rpc(kind = Rpc.Kind.MESSAGE, number = 1) record Two(@ProtoField(number = 1) String value) {}
@@ -187,11 +181,9 @@ class RpcSourceScannerTest {
         writeString(source.resolve("sample/Invalid.java"), """
                 package sample;
                 @interface Rpc {
-                    enum Kind { MESSAGE, INTERNAL, REQUEST }
+                    enum Kind { MESSAGE, INTERNAL }
                     Kind kind() default Kind.MESSAGE;
                     int number() default 0;
-                    int requestNumber() default 0;
-                    int responseNumber() default 0;
                 }
                 @Rpc(kind = Rpc.Kind.MESSAGE, number = 1) record Invalid(String value) {}
                 """);

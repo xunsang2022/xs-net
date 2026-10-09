@@ -4,17 +4,16 @@ spring:
     web-application-type: none
   data:
     redis:
-      host: 172.21.255.41
+      host: 127.0.0.1
       port: 6379
-      password: "123456"
-      database: 10
+      database: 0
       lettuce:
         pool:
           max-active: 32
           max-idle: 32
           min-idle: 4
   datasource:
-    url: jdbc:postgresql://172.21.255.41:5432/gamedb
+    url: jdbc:postgresql://localhost:5432/gamedb
     username: root
     password: ""
     hikari:

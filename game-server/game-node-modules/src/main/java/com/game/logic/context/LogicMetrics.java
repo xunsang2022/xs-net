@@ -1,6 +1,6 @@
 package com.game.logic.context;
 
-import com.game.logic.dbsync.DBSyncEngine;
+import com.game.eventsourcing.SyncMetrics;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -8,12 +8,13 @@ import io.micrometer.core.instrument.Timer;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 逻辑服运行指标：DBSyncEngine flush 延迟、dirty 深度、失败计数。
  * 由 GameLogicApplication 装配 MeterRegistry 后创建，并注册到 LogicContext。
  */
-public final class LogicMetrics {
+public final class LogicMetrics implements SyncMetrics {
 
     private final Timer flushTimer;
     private final Counter flushFailureCounter;
@@ -25,8 +26,10 @@ public final class LogicMetrics {
     private final Timer loginRedisCreateTimer;
     private final Timer loginLogicTotalTimer;
     private final AtomicLong loginS2cSendNanos = new AtomicLong(0L);
+    private final AtomicInteger dirtySize = new AtomicInteger(0);
+    private final AtomicLong dirtyBytes = new AtomicLong(0L);
 
-    public LogicMetrics(MeterRegistry registry, DBSyncEngine dbSyncEngine) {
+    public LogicMetrics(MeterRegistry registry) {
         this.flushTimer = Timer.builder("dbsync.flush.duration")
                 .description("DBSyncEngine flush 耗时")
                 .register(registry);
@@ -54,26 +57,42 @@ public final class LogicMetrics {
         Gauge.builder("login.s2c.send.nano", loginS2cSendNanos, AtomicLong::get)
                 .description("PlayerActor ready to send S2C when nanoTime()")
                 .register(registry);
-        Gauge.builder("dbsync.dirty.size", dbSyncEngine, DBSyncEngine::dirtySize)
+        Gauge.builder("dbsync.dirty.size", dirtySize, AtomicInteger::get)
                 .description("当前待同步脏记录数")
                 .register(registry);
-        Gauge.builder("dbsync.dirty.bytes", dbSyncEngine, DBSyncEngine::dirtyBytes)
+        Gauge.builder("dbsync.dirty.bytes", dirtyBytes, AtomicLong::get)
                 .description("当前待同步脏记录估算字节数")
                 .register(registry);
     }
 
-    /** 上报一次 flush 耗时（纳秒）。 */
+    @Override
     public void recordFlush(long durationNanos) {
         flushTimer.record(durationNanos, TimeUnit.NANOSECONDS);
     }
 
-    /** 上报一次 flush 分片失败。 */
+    @Override
     public void recordFlushFailure() {
         flushFailureCounter.increment();
     }
 
+    @Override
     public void recordRetryExhausted() {
         retryExhaustedCounter.increment();
+    }
+
+    @Override
+    public int dirtySize() {
+        return dirtySize.get();
+    }
+
+    @Override
+    public long dirtyBytes() {
+        return dirtyBytes.get();
+    }
+
+    public void updateDirtyMetrics(int size, long bytes) {
+        dirtySize.set(size);
+        dirtyBytes.set(bytes);
     }
 
     public void recordLoginRedisLoad(long durationNanos, boolean cacheHit) {

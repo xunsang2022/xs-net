@@ -56,7 +56,7 @@ final class RpcArtifactGenerator {
             view.put("roleClass", message.roleType() == null ? "null" : message.roleType() + ".class");
             view.put("direction", message.direction().name());
             view.put("publicVisible", message.publicVisible());
-            view.put("isRequest", message.direction() == Direction.REQUEST);
+            view.put("isRequest", false);
             view.put("playerRoutingRequired", playerRoutingRequired(message));
             view.put("channelRoutingRequired", channelRoutingRequired(message));
             view.put("codecName", codecName(message));
@@ -128,7 +128,7 @@ final class RpcArtifactGenerator {
     }
 
     private boolean channelRoutingRequired(MessageModel message) {
-        return message.direction() == Direction.REQUEST && message.responseDtoType() != null;
+        return message.responseDtoType() != null;
     }
 
     private boolean playerRoutingRequired(MessageModel message) {

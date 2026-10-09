@@ -115,7 +115,6 @@ public final class PlayerLifecycle {
     /** 处理玩家进入消息，并按生命周期决定忽略、暂存或执行登录。 */
     private Behavior<PlayerMessage> onPlayerEnterMessage(PlayerEnterCommand command) {
         if (isStopping()) {
-            log.info("Player enter ignored while entity is stopping: playerId={}", services.entityId());
             return Behaviors.same();
         }
         if (isLoading()) {
@@ -133,12 +132,9 @@ public final class PlayerLifecycle {
             return Behaviors.same();
         }
         if (isDestroying()) {
-            log.info("Duplicate logout ignored while player state is being persisted: playerId={}",
-                    services.entityId());
             return Behaviors.same();
         }
         if (isOnline()) {
-            log.info("PlayerActor logout: playerId={}", services.entityId());
             pendingLogout = request;
             beginDestroy();
             return Behaviors.same();
@@ -150,8 +146,6 @@ public final class PlayerLifecycle {
     /** 处理 GM 踢人指令，通知网关断开频道后进入销毁流程。 */
     private Behavior<PlayerMessage> onGmKickPlayer(GmKickPlayerCommand command) {
         if (!isOnline()) {
-            log.info("GM kick ignored because player is not online: requestId={}, playerId={}",
-                    command.requestId(), services.entityId());
             return Behaviors.same();
         }
         if (pendingChannelId != null && !pendingChannelId.isBlank()) {
@@ -160,8 +154,6 @@ public final class PlayerLifecycle {
                     Long.parseLong(services.entityId()),
                     command.reason()), pendingChannelId);
         }
-        log.info("GM kick executed: requestId={}, playerId={}, operator={}",
-                command.requestId(), services.entityId(), command.operator());
         beginDestroy();
         return Behaviors.same();
     }
@@ -169,18 +161,12 @@ public final class PlayerLifecycle {
     /** 处理玩家场景成员关系变化，并忽略离线或过期的场景消息。 */
     private Behavior<PlayerMessage> onSceneChanged(PlayerSceneChanged command) {
         if (!isOnline()) {
-            log.info("Scene membership ignored because player is offline: playerId={}", services.entityId());
             return Behaviors.same();
         }
-        boolean changed = command.joined()
-                ? sceneTracker.join(command.sceneId())
-                : sceneTracker.leave(command.sceneId());
-        if (changed) {
-            log.info("Player scene changed: playerId={}, sceneId={}",
-                    services.entityId(), sceneTracker.currentSceneId());
+        if (command.joined()) {
+            sceneTracker.join(command.sceneId());
         } else {
-            log.info("Ignoring stale scene leave: playerId={}, sceneId={}, currentSceneId={}",
-                    services.entityId(), command.sceneId(), sceneTracker.currentSceneId());
+            sceneTracker.leave(command.sceneId());
         }
         return Behaviors.same();
     }
@@ -253,7 +239,6 @@ public final class PlayerLifecycle {
         state.clearDirty();
         markOnline();
         stateSync.startFlushTimer();
-        log.info("PlayerActor loaded: playerId={}", services.entityId());
         sendLoginResponse(result.playerId(), state.getName(), pendingChannelId);
         LogicContext.getLogicMetrics().recordLoginLogicTotal(System.nanoTime() - loginStartedNanos);
         return stash.unstashAll(Behaviors.same());
@@ -295,7 +280,6 @@ public final class PlayerLifecycle {
     /** Actor 停止时，为仍需保存的玩家状态安排补偿持久化。 */
     private Behavior<PlayerMessage> onPostStop() {
         if (shouldPersistOnStop()) {
-            log.info("PlayerActor stopping, scheduling state persistence: playerId={}", services.entityId());
             stateSync.persistStopped(immutableCopy(state.toHash()), state.getVersionValue());
         }
         return Behaviors.same();
@@ -380,7 +364,6 @@ public final class PlayerLifecycle {
         }
         markOnlineFields();
         LogicContext.getRedisStore().saveRedis(state);
-        log.info("PlayerActor enter: playerId={}, channelId={}", services.entityId(), command.channelId());
         sendLoginResponse(command.playerId(), state.getName(), command.channelId());
     }
 

@@ -8,17 +8,12 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.SOURCE)
 @Target({ElementType.RECORD_COMPONENT, ElementType.TYPE})
 public @interface Rpc {
-    Kind kind() default Kind.REQUEST;
+    Kind kind() default Kind.MESSAGE;
 
     int number() default 0;
 
-    int requestNumber() default 0;
-
-    int responseNumber() default 0;
-
     enum Kind {
         MESSAGE,
-        INTERNAL,
-        REQUEST
+        INTERNAL
     }
 }

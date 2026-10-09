@@ -1,18 +1,18 @@
 package com.xs.kernel.spring;
 
 import lombok.NonNull;
+import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
-import org.springframework.context.ApplicationListener;
+import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.event.ContextRefreshedEvent;
 
 @Configuration
-public class SpringUtil implements ApplicationListener<@NonNull ContextRefreshedEvent> {
+public class SpringUtil implements ApplicationContextAware {
     private static ApplicationContext context = null;
 
     @Override
-    public void onApplicationEvent(@NonNull ContextRefreshedEvent event) {
-        SpringUtil.context = event.getApplicationContext();
+    public void setApplicationContext(@NonNull ApplicationContext applicationContext) throws BeansException {
+        SpringUtil.context = applicationContext;
     }
 
     public static <T> T getBean(Class<T> clazz) {

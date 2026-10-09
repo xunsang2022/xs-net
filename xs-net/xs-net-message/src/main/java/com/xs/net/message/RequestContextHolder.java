@@ -17,10 +17,24 @@ import java.util.function.Supplier;
 public class RequestContextHolder {
     private static final ThreadLocal<RequestContext> CURRENT = new ThreadLocal<>();
 
+    /**
+     * 获取当前线程的请求上下文。
+     *
+     * @return 当前请求上下文，如果未设置返回null
+     */
     public static RequestContext current() {
         return CURRENT.get();
     }
 
+    /**
+     * 在指定请求上下文中执行操作，并同步更新MDC。
+     * 执行完成后恢复原有的上下文和MDC，避免线程池复用造成traceId串线。
+     *
+     * @param context 请求上下文
+     * @param action 要执行的操作
+     * @param <T> 返回值类型
+     * @return 操作返回值
+     */
     public static <T> T call(RequestContext context, Supplier<T> action) {
         RequestContext previous = CURRENT.get();
         Map<String, String> previousMdc = MDC.getCopyOfContextMap();

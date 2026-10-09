@@ -109,7 +109,6 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
             channel.writeAndFlush(new DatagramPacket(
                     UdpReliableLayer.encode(UdpReliableLayer.TYPE_ACK, 0, connectionRandom, null), sender));
             Metrics.counter(METRIC_AUTH_SUCCESS).increment();
-            log.debug("UDP session authenticated: channelId={}, remote={}", channelId, sender);
         } catch (Exception e) {
             Metrics.counter(METRIC_AUTH_FAILURE).increment();
             log.error("UDP auth error", e);
@@ -137,8 +136,6 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
                 if (now - session.lastActiveMs() > config.getSessionIdleTimeoutSeconds() * 1000L) {
                     ChannelRegistry.INSTANCE.remove(session.channelId(), session);
                     sessions.remove(entry.getKey(), session);
-                    log.info("UDP session idle timeout, removed: channelId={}, remote={}",
-                            session.channelId(), entry.getKey());
                 }
             }
         }

@@ -132,7 +132,6 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
             cancelAuthTimeout();
             ctx.writeAndFlush(NettyFramer.encodeAck(connectionRandom, 0));
             Metrics.counter(METRIC_AUTH_SUCCESS).increment();
-            log.info("Channel authenticated: channelId={}", channelId);
         } catch (Exception e) {
             log.error("Channel auth error", e);
             Metrics.counter(METRIC_AUTH_FAILURE).increment();
@@ -166,7 +165,6 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
         cancelAuthTimeout();
         if (channelId != null && registeredEndpoint != null) {
             ChannelRegistry.INSTANCE.remove(channelId, registeredEndpoint);
-            log.info("Channel closed: channelId={}", channelId);
         }
         ctx.fireChannelInactive();
     }

@@ -24,8 +24,6 @@ record FieldModel(int number, String name, String javaType) {
 }
 
 enum Direction {
-    REQUEST,
-    RESPONSE,
     INTERNAL,
     HTTP_RESPONSE
 }

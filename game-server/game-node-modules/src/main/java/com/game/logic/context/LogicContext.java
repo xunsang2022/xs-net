@@ -1,35 +1,42 @@
 package com.game.logic.context;
 
-import com.game.logic.dbsync.DBSyncEngine;
-import com.game.logic.dbsync.LogConsumer;
+import com.game.eventsourcing.DBSyncEngine;
+import com.game.eventsourcing.LogConsumer;
 import com.game.logic.redis.RedisStore;
 import io.micrometer.core.instrument.MeterRegistry;
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.util.concurrent.ExecutorService;
 
 /**
- * Static wiring point for the non-Spring-Boot logic node startup flow.
+ * 非 Spring Boot逻辑节点启动流程的静态接线点。
  */
 public final class LogicContext {
-
+    @Setter
     private static volatile RedisConnectionFactory connectionFactory;
+    @Setter
     private static volatile StringRedisTemplate redisTemplate;
+    @Setter
     private static volatile RedisStore redisStore;
+    @Setter
     private static volatile DBSyncEngine dbSyncEngine;
+    @Setter
     private static volatile LogConsumer logConsumer;
+    @Setter
     private static volatile MeterRegistry meterRegistry;
+    @Setter
     private static volatile LogicMetrics logicMetrics;
+    @Setter
     private static volatile ExecutorService redisIoExecutor;
+    @Setter
     private static volatile ExecutorService dbIoExecutor;
+    @Getter
     private static volatile long syncIntervalMs = 1000L;
 
     private LogicContext() {
-    }
-
-    public static void setConnectionFactory(RedisConnectionFactory factory) {
-        connectionFactory = factory;
     }
 
     public static RedisConnectionFactory getConnectionFactory() {
@@ -40,20 +47,12 @@ public final class LogicContext {
         return factory;
     }
 
-    public static void setRedisTemplate(StringRedisTemplate template) {
-        redisTemplate = template;
-    }
-
     public static StringRedisTemplate getRedisTemplate() {
         StringRedisTemplate template = redisTemplate;
         if (template == null) {
             throw new IllegalStateException("StringRedisTemplate has not been initialized");
         }
         return template;
-    }
-
-    public static void setDbSyncEngine(DBSyncEngine engine) {
-        dbSyncEngine = engine;
     }
 
     public static DBSyncEngine getDbSyncEngine() {
@@ -64,20 +63,12 @@ public final class LogicContext {
         return engine;
     }
 
-    public static void setLogConsumer(LogConsumer consumer) {
-        logConsumer = consumer;
-    }
-
     public static LogConsumer getLogConsumer() {
         LogConsumer consumer = logConsumer;
         if (consumer == null) {
             throw new IllegalStateException("LogConsumer has not been initialized");
         }
         return consumer;
-    }
-
-    public static void setRedisStore(RedisStore store) {
-        redisStore = store;
     }
 
     public static RedisStore getRedisStore() {
@@ -88,20 +79,12 @@ public final class LogicContext {
         return store;
     }
 
-    public static void setRedisIoExecutor(ExecutorService executor) {
-        redisIoExecutor = executor;
-    }
-
     public static ExecutorService getRedisIoExecutor() {
         ExecutorService executor = redisIoExecutor;
         if (executor == null) {
             throw new IllegalStateException("Redis IO executor has not been initialized");
         }
         return executor;
-    }
-
-    public static void setDbIoExecutor(ExecutorService executor) {
-        dbIoExecutor = executor;
     }
 
     public static ExecutorService getDbIoExecutor() {
@@ -116,24 +99,12 @@ public final class LogicContext {
         syncIntervalMs = Math.max(1L, intervalMs);
     }
 
-    public static long getSyncIntervalMs() {
-        return syncIntervalMs;
-    }
-
-    public static void setMeterRegistry(MeterRegistry registry) {
-        meterRegistry = registry;
-    }
-
     public static MeterRegistry getMeterRegistry() {
         MeterRegistry registry = meterRegistry;
         if (registry == null) {
             throw new IllegalStateException("MeterRegistry has not been initialized");
         }
         return registry;
-    }
-
-    public static void setLogicMetrics(LogicMetrics metrics) {
-        logicMetrics = metrics;
     }
 
     public static LogicMetrics getLogicMetrics() {
