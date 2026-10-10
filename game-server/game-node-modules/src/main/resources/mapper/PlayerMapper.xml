@@ -2,9 +2,9 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.game.logic.actor.player.PlayerMapper">
+<mapper namespace="com.game.logic.actor.player.db.PlayerMapper">
 
-    <select id="upsert" resultType="com.game.logic.actor.player.PlayerPO">
+    <select id="upsert" resultType="com.game.logic.actor.player.db.PlayerPO">
         INSERT INTO users (id, name, email, online, last_login_at, updated_at, version)
         VALUES (#{id}, #{name}, #{email}, #{online}, #{lastLoginAt}, #{updatedAt}, #{version})
         ON CONFLICT (id) DO UPDATE SET
@@ -18,7 +18,7 @@
         RETURNING id, name, email, online, last_login_at, updated_at, version
     </select>
 
-    <select id="loadOrCreate" resultType="com.game.logic.actor.player.PlayerPO">
+    <select id="loadOrCreate" resultType="com.game.logic.actor.player.db.PlayerPO">
         INSERT INTO users (id, name, email, online, last_login_at, updated_at, version)
         VALUES (#{playerId}, #{defaultName}, '', 0, NOW(), NOW(), 1)
         ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
@@ -26,8 +26,8 @@
     </select>
 
     <sql id="dirtyRecordValues">
-        (#{record.playerId},
-         COALESCE(NULLIF(#{record.fields.name}, ''), CONCAT('player-', #{record.playerId})),
+        (#{record.entityId},
+         COALESCE(NULLIF(#{record.fields.name}, ''), CONCAT('player-', #{record.entityId})),
          COALESCE(#{record.fields.email}, ''),
          COALESCE(NULLIF(#{record.fields.online}, '')::INTEGER, 0),
          to_timestamp(NULLIF(#{record.fields.last_login_at}, '')::BIGINT / 1000.0),

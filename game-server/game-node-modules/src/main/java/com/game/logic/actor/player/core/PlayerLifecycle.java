@@ -6,7 +6,7 @@ import com.game.logic.actor.player.message.DestroyResult;
 import com.game.logic.actor.player.message.InitialRedisWriteResult;
 import com.game.logic.actor.player.message.LoadTimeout;
 import com.game.logic.context.LogicContext;
-import com.game.logic.actor.player.PlayerPO;
+import com.game.logic.actor.player.db.PlayerPO;
 import com.game.logic.scene.PlayerSceneTracker;
 import com.game.message.actor.S2C;
 import com.game.message.actor.gateway.GatewayControlMessage;
@@ -139,7 +139,7 @@ public final class PlayerLifecycle {
             beginDestroy();
             return Behaviors.same();
         }
-        sendResponse(onLogout(request), request);
+        sendResponse(new LogoutResponse(request.playerId(), request.sessionId()), request);
         return Behaviors.stopped();
     }
 
@@ -272,7 +272,7 @@ public final class PlayerLifecycle {
         LogoutRequest request = pendingLogout;
         pendingLogout = null;
         if (request != null) {
-            sendResponse(onLogout(request), request);
+            sendResponse(new LogoutResponse(request.playerId(), request.sessionId()), request);
         }
         return Behaviors.stopped();
     }
@@ -283,11 +283,6 @@ public final class PlayerLifecycle {
             stateSync.persistStopped(immutableCopy(state.toHash()), state.getVersionValue());
         }
         return Behaviors.same();
-    }
-
-    /** 将登出请求映射为登出响应。 */
-    private LogoutResponse onLogout(LogoutRequest request) {
-        return new LogoutResponse(request.playerId(), request.sessionId());
     }
 
     /** 向请求频道发送 RPC 响应，并校验频道和响应类型。 */

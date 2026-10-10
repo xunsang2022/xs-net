@@ -1,8 +1,8 @@
 package com.game.logic.redis;
 
-import com.game.eventsourcing.LogLevel;
-import com.game.eventsourcing.LogType;
-import com.game.logic.actor.player.PlayerPO;
+import com.game.eventsourcing.log.LogLevel;
+import com.game.eventsourcing.log.LogType;
+import com.game.logic.actor.player.db.PlayerPO;
 import com.game.protocol.pb.LogRecordCommand;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -89,7 +89,7 @@ class RedisStoreTest {
         PlayerPO state = new PlayerPO().setId(42L).setName("alice").setOnline(1);
 
         assertTrue(store.create("42", state));
-        verify(hashOps).putAll("playerActor:42", state.toRedisHash());
+        verify(hashOps).putAll("playerActor:42", new XsModelHashMapper<>(PlayerPO.class).toHash(state));
     }
 
     @Test

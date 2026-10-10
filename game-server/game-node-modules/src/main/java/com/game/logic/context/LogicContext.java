@@ -1,7 +1,7 @@
 package com.game.logic.context;
 
-import com.game.eventsourcing.DBSyncEngine;
-import com.game.eventsourcing.LogConsumer;
+import com.game.eventsourcing.sync.DBSyncEngineRegistry;
+import com.game.eventsourcing.log.LogConsumer;
 import com.game.logic.redis.RedisStore;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.Getter;
@@ -22,7 +22,7 @@ public final class LogicContext {
     @Setter
     private static volatile RedisStore redisStore;
     @Setter
-    private static volatile DBSyncEngine dbSyncEngine;
+    private static volatile DBSyncEngineRegistry dbSyncEngineRegistry;
     @Setter
     private static volatile LogConsumer logConsumer;
     @Setter
@@ -55,12 +55,12 @@ public final class LogicContext {
         return template;
     }
 
-    public static DBSyncEngine getDbSyncEngine() {
-        DBSyncEngine engine = dbSyncEngine;
-        if (engine == null) {
-            throw new IllegalStateException("DBSyncEngine has not been initialized");
+    public static DBSyncEngineRegistry getDbSyncEngineRegistry() {
+        DBSyncEngineRegistry registry = dbSyncEngineRegistry;
+        if (registry == null) {
+            throw new IllegalStateException("DBSyncEngineRegistry has not been initialized");
         }
-        return engine;
+        return registry;
     }
 
     public static LogConsumer getLogConsumer() {

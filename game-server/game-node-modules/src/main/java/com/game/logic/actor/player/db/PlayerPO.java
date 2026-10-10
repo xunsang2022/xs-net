@@ -1,10 +1,10 @@
-package com.game.logic.actor.player;
+package com.game.logic.actor.player.db;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.game.eventsourcing.GameModel;
+import com.game.eventsourcing.persistence.GameModel;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.Accessors;

@@ -1,8 +1,8 @@
 package com.game.logic.redis;
 
-import com.game.eventsourcing.LogLevel;
-import com.game.eventsourcing.LogType;
-import com.game.logic.actor.player.PlayerPO;
+import com.game.eventsourcing.log.LogLevel;
+import com.game.eventsourcing.log.LogType;
+import com.game.logic.actor.player.db.PlayerPO;
 import com.game.protocol.pb.LogRecordCommand;
 import lombok.NonNull;
 import org.springframework.data.redis.core.HashOperations;

@@ -6,9 +6,10 @@ import com.game.logic.actor.player.message.DestroyResult;
 import com.game.logic.actor.player.message.FlushDirty;
 import com.game.logic.actor.player.message.InitialRedisWriteResult;
 import com.game.logic.actor.player.message.RedisFlushResult;
-import com.game.eventsourcing.DBSyncEngine;
+import com.game.eventsourcing.sync.DBSyncEngineRegistry;
 import com.game.logic.context.LogicContext;
-import com.game.logic.actor.player.PlayerPO;
+import com.game.logic.actor.player.db.PlayerMapper;
+import com.game.logic.actor.player.db.PlayerPO;
 import com.game.logic.redis.RedisStore;
 import com.game.message.actor.logic.PlayerMessage;
 import com.xs.kernel.actor.ActorServices;
@@ -30,6 +31,9 @@ public final class PlayerStateSync {
 
     /** 玩家脏数据定时刷新消息的唯一键。 */
     private static final Object FLUSH_KEY = new Object();
+
+    /** 玩家在同步引擎中的实体类型标识。 */
+    private static final String ENTITY_TYPE = PlayerMapper.PLAYER_ENTITY_TYPE;
 
     /** 玩家实体 ID。 */
     private final String playerId;
@@ -114,14 +118,14 @@ public final class PlayerStateSync {
 
     /** 从数据库异步读取或创建玩家状态。 */
     void loadFromDatabase(Long entityPlayerId) {
-        DBSyncEngine engine = LogicContext.getDbSyncEngine();
+        DBSyncEngineRegistry registry = LogicContext.getDbSyncEngineRegistry();
         ExecutorService executor = LogicContext.getDbIoExecutor();
         CompletableFuture<Map<String, String>> future;
         try {
             future = CompletableFuture.supplyAsync(() -> {
                 long started = System.nanoTime();
                 try {
-                    return engine.loadOrCreate(entityPlayerId);
+                    return registry.loadOrCreate(ENTITY_TYPE, entityPlayerId);
                 } finally {
                     LogicContext.getLogicMetrics().recordLoginDatabaseLoad(System.nanoTime() - started);
                 }
@@ -175,12 +179,12 @@ public final class PlayerStateSync {
     /** 将玩家最终快照同步保存到数据库，成功后删除 Redis 缓存。 */
     void destroy(Map<String, String> stateSnapshot, long version) {
         RedisStore store = redisStore();
-        DBSyncEngine engine = LogicContext.getDbSyncEngine();
+        DBSyncEngineRegistry registry = LogicContext.getDbSyncEngineRegistry();
         ExecutorService executor = LogicContext.getRedisIoExecutor();
         CompletableFuture<Boolean> future;
         try {
             future = CompletableFuture.supplyAsync(
-                    () -> engine.saveNow(Long.parseLong(playerId), stateSnapshot, version)
+                    () -> registry.saveNow(ENTITY_TYPE, Long.parseLong(playerId), stateSnapshot, version)
                             && store.deletePlayerCache(playerId), executor);
         } catch (RejectedExecutionException exception) {
             services.context().getSelf().tell(new DestroyResult(stateSnapshot, version, false, exception));
@@ -203,10 +207,10 @@ public final class PlayerStateSync {
     void persistStopped(Map<String, String> snapshot, long version) {
         RedisStore store = redisStore();
         ExecutorService executor = LogicContext.getRedisIoExecutor();
-        DBSyncEngine engine = LogicContext.getDbSyncEngine();
+        DBSyncEngineRegistry registry = LogicContext.getDbSyncEngineRegistry();
         try {
             CompletableFuture.supplyAsync(
-                            () -> engine.saveNow(Long.parseLong(playerId), snapshot, version)
+                            () -> registry.saveNow(ENTITY_TYPE, Long.parseLong(playerId), snapshot, version)
                                     && store.deletePlayerCache(playerId), executor)
                     .whenComplete((success, error) -> {
                         if (error != null || !Boolean.TRUE.equals(success)) {
@@ -301,7 +305,8 @@ public final class PlayerStateSync {
 
     /** 提交完整玩家快照到数据库同步框架。 */
     private boolean submitDatabase(Map<String, String> snapshot, long version) {
-        return LogicContext.getDbSyncEngine().submit(Long.parseLong(playerId), snapshot, version);
+        return LogicContext.getDbSyncEngineRegistry()
+                .submit(ENTITY_TYPE, Long.parseLong(playerId), snapshot, version);
     }
 
     /** 延迟获取 Redis 状态访问对象。 */

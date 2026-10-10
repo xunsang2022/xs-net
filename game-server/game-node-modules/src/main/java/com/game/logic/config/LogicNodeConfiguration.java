@@ -1,12 +1,13 @@
 package com.game.logic.config;
 
-import com.game.eventsourcing.DBSyncConfig;
-import com.game.eventsourcing.DBSyncEngine;
-import com.game.eventsourcing.DirtyRecord;
-import com.game.eventsourcing.LogConsumer;
-import com.game.eventsourcing.LogEventMapper;
-import com.game.eventsourcing.MybatisPersistenceConfiguration;
-import com.game.logic.actor.player.PlayerMapper;
+import com.game.eventsourcing.sync.DBSyncConfig;
+import com.game.eventsourcing.sync.DBSyncEngine;
+import com.game.eventsourcing.sync.DBSyncEngineRegistry;
+import com.game.eventsourcing.sync.EntityPersistenceRouter;
+import com.game.eventsourcing.log.LogConsumer;
+import com.game.eventsourcing.log.LogEventMapper;
+import com.game.eventsourcing.persistence.MybatisPersistenceConfiguration;
+import com.game.logic.actor.player.db.PlayerMapper;
 import com.game.logic.context.LogicIoExecutors;
 import com.game.logic.context.LogicMetrics;
 import com.game.logic.redis.RedisStore;
@@ -92,24 +93,28 @@ public class LogicNodeConfiguration {
     }
 
     @Bean
-    public DBSyncEngine dbSyncEngine(PlayerMapper playerMapper, DBSyncConfig config, LogicMetrics logicMetrics) {
-        DBSyncEngine.PersistenceCallback persistenceCallback = new DBSyncEngine.PersistenceCallback() {
-            @Override
-            public Long upsertRecord(DirtyRecord record) {
-                return playerMapper.upsertRecord(record);
-            }
-            @Override
-            public List<Long> upsertBatch(List<DirtyRecord> records) {
-                return playerMapper.upsertBatch(records);
-            }
-        };
-        DBSyncEngine.LoadCallback loadCallback = new DBSyncEngine.LoadCallback() {
-            @Override
-            public Map<String, String> loadOrCreate(Long recordId) {
-                return playerMapper.loadOrCreate(recordId, "player-" + recordId).toHash();
-            }
-        };
-        return new DBSyncEngine(config, logicMetrics, persistenceCallback, loadCallback);
+    public EntityPersistenceRouter entityPersistenceRouter(PlayerMapper playerMapper) {
+        return new EntityPersistenceRouter(List.of(playerMapper));
+    }
+
+    /**
+     * 默认共享引擎：承载所有未单独注册独立引擎的实体（当前为 player）。
+     */
+    @Bean
+    public DBSyncEngine defaultDbSyncEngine(EntityPersistenceRouter entityPersistenceRouter,
+                                            DBSyncConfig config,
+                                            LogicMetrics logicMetrics) {
+        return new DBSyncEngine(config, logicMetrics.engineMetrics("default"),
+                entityPersistenceRouter, entityPersistenceRouter);
+    }
+
+    /**
+     * 引擎路由表：特殊实体按 entityType 挂独立引擎，其余统一走默认共享引擎。
+     * 例如新增 guild 实体独立引擎时：new DBSyncEngineRegistry(defaultDbSyncEngine, Map.of("guild", guildDbSyncEngine))。
+     */
+    @Bean
+    public DBSyncEngineRegistry dbSyncEngineRegistry(DBSyncEngine defaultDbSyncEngine) {
+        return new DBSyncEngineRegistry(defaultDbSyncEngine, Map.of());
     }
 
     @Bean

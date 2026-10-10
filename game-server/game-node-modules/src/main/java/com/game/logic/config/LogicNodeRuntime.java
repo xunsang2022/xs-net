@@ -1,7 +1,7 @@
 package com.game.logic.config;
 
-import com.game.eventsourcing.DBSyncEngine;
-import com.game.eventsourcing.LogConsumer;
+import com.game.eventsourcing.sync.DBSyncEngineRegistry;
+import com.game.eventsourcing.log.LogConsumer;
 import com.game.logic.context.LogicContext;
 import com.game.logic.context.LogicIoExecutors;
 import com.game.logic.context.LogicMetrics;
@@ -35,7 +35,7 @@ public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable {
     private final StringRedisTemplate redisTemplate;
     private final RedisStore redisStore;
     private final LogicIoExecutors ioExecutors;
-    private final DBSyncEngine dbSyncEngine;
+    private final DBSyncEngineRegistry dbSyncEngineRegistry;
     private final LogConsumer logConsumer;
     private final PrometheusMeterRegistry meterRegistry;
     private final LogicMetrics logicMetrics;
@@ -65,11 +65,11 @@ public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable {
         LogicContext.setRedisIoExecutor(ioExecutors.redisIoExecutor());
         LogicContext.setDbIoExecutor(ioExecutors.dbIoExecutor());
         LogicContext.setSyncIntervalMs(properties.getStorage().getSyncIntervalMs());
-        LogicContext.setDbSyncEngine(dbSyncEngine);
+        LogicContext.setDbSyncEngineRegistry(dbSyncEngineRegistry);
         LogicContext.setMeterRegistry(meterRegistry);
         LogicContext.setLogicMetrics(logicMetrics);
 
-        dbSyncEngine.start();
+        dbSyncEngineRegistry.startAll();
         MessageAble.initialize(GameRpcMessages.INSTANCE);
         startManagementEndpoints();
         startRuntimeConfiguration();
@@ -188,8 +188,8 @@ public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable {
         }
         logConsumer.stop();
         ioExecutors.close();
-        dbSyncEngine.flush();
-        dbSyncEngine.stop();
+        dbSyncEngineRegistry.flushAll();
+        dbSyncEngineRegistry.stopAll();
         LogicRuntimeConfiguration configuration = runtimeConfiguration;
         if (configuration != null) {
             configuration.close();
