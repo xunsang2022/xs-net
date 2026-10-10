@@ -1,6 +1,7 @@
-package com.game.eventsourcing;
+package com.game.eventsourcing.log;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.game.eventsourcing.sync.DBSyncConfig;
 import io.micrometer.core.instrument.Metrics;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.stream.Consumer;

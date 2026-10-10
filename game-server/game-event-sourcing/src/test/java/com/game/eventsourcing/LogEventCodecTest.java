@@ -1,7 +1,11 @@
 package com.game.eventsourcing;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.game.eventsourcing.LogEventCodec.LogEvent;
+import com.game.eventsourcing.log.LogEventCodec;
+import com.game.eventsourcing.log.LogEventCodec.LogEvent;
+import com.game.eventsourcing.log.LogLevel;
+import com.game.eventsourcing.log.LogStreamRecord;
+import com.game.eventsourcing.log.LogType;
 import com.game.protocol.pb.LogRecordCommand;
 import org.junit.jupiter.api.Test;
 

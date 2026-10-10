@@ -1,4 +1,4 @@
-package com.game.eventsourcing;
+package com.game.eventsourcing.sync;
 
 import lombok.Data;
 
@@ -23,4 +23,13 @@ public class DBSyncConfig {
     private long retryBackoffMs = 250L;
     /** 日志轮询间隔（毫秒） */
     private long logPollMs = 1000;
+
+    /** 单个分片 flush 的超时（毫秒），超时则取消并走重试 */
+    private long flushTimeoutMs = 30_000L;
+    /** stop() 等待线程池终止的超时（毫秒） */
+    private long shutdownTimeoutMs = 10_000L;
+    /** 指数退避单次延迟上限（毫秒） */
+    private long maxRetryBackoffMs = 60_000L;
+    /** 终态失败记录的保留期（毫秒），超过后回收 buffer 容量 */
+    private long quarantineRetentionMs = 30 * 60_000L; // 30 分钟
 }

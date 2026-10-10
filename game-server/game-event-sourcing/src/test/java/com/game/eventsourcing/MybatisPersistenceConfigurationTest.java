@@ -1,5 +1,7 @@
 package com.game.eventsourcing;
 
+import com.game.eventsourcing.log.LogEventMapper;
+import com.game.eventsourcing.persistence.MybatisPersistenceConfiguration;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.Test;
 

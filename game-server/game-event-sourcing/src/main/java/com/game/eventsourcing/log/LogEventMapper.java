@@ -1,4 +1,4 @@
-package com.game.eventsourcing;
+package com.game.eventsourcing.log;
 
 import org.apache.ibatis.annotations.Param;
 

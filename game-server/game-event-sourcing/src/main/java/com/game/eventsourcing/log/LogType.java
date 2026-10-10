@@ -1,4 +1,4 @@
-package com.game.eventsourcing;
+package com.game.eventsourcing.log;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

@@ -1,4 +1,4 @@
-package com.game.eventsourcing;
+package com.game.eventsourcing.persistence;
 
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;

@@ -1,4 +1,4 @@
-package com.game.eventsourcing;
+package com.game.eventsourcing.log;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
