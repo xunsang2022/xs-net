@@ -8,7 +8,7 @@ import com.xs.kernel.model.XsModelSupport;
 
 import java.lang.reflect.Field;
 
-/** MyBatis-Plus ActiveRecord base with xs-net's persistence-agnostic model API. */
+
 public abstract class GameModel<M extends GameModel<M>> extends Model<M> implements XsModel<M> {
 
     private static final XsModelSupport.FieldMapper FIELD_MAPPER = new XsModelSupport.FieldMapper() {

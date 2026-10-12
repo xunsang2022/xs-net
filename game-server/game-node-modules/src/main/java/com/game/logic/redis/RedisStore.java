@@ -4,6 +4,8 @@ import com.game.eventsourcing.log.LogLevel;
 import com.game.eventsourcing.log.LogType;
 import com.game.logic.actor.player.db.PlayerPO;
 import com.game.protocol.pb.LogRecordCommand;
+import com.xs.kernel.model.RedisKey;
+import com.xs.kernel.model.XsModel;
 import lombok.NonNull;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -186,5 +188,46 @@ public class RedisStore {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    /**
+     * 根据 @RedisKey 注解从 Redis 加载 XsModel 实例。
+     *
+     * @param entityId 实体 ID
+     * @param type     模型类型
+     * @return 模型实例，如果 Redis 中不存在则返回 null
+     */
+    public <T extends XsModel<T>> T loadModel(String entityId, Class<T> type) {
+        RedisKey annotation = type.getAnnotation(RedisKey.class);
+        if (annotation == null) {
+            throw new IllegalArgumentException("Model must be annotated with @RedisKey: " + type.getName());
+        }
+        String key = annotation.value() + entityId;
+        Map<?, ?> entries = playerHash().entries(key);
+        if (entries.isEmpty()) {
+            return null;
+        }
+        Map<String, String> hash = new HashMap<>();
+        for (Map.Entry<?, ?> entry : entries.entrySet()) {
+            hash.put(String.valueOf(entry.getKey()), textValue(entry.getValue()));
+        }
+        XsModelHashMapper<T> mapper = new XsModelHashMapper<>(type);
+        return mapper.fromStringHash(hash);
+    }
+
+    /**
+     * 将 XsModel 实例保存到 Redis。
+     *
+     * @param model    模型实例
+     * @param entityId 实体 ID
+     */
+    public <T extends XsModel<T>> void saveModel(XsModel<T> model, String entityId) {
+        RedisKey annotation = model.getClass().getAnnotation(RedisKey.class);
+        if (annotation == null) {
+            throw new IllegalArgumentException("Model must be annotated with @RedisKey: " + model.getClass().getName());
+        }
+        String key = annotation.value() + entityId;
+        XsModelHashMapper<T> mapper = new XsModelHashMapper<>((Class<T>) model.getClass());
+        putHash(key, mapper.toHash((T) model));
     }
 }

@@ -21,6 +21,7 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 import org.apache.pekko.japi.function.Function;
 
+/// Actor 的编解码能力
 public abstract class RpcActor<M> extends AbstractBehavior<M> {
 
     private static final String METRIC_ENVELOPE_DROPPED = "xs.rpc.actor.envelope.dropped";

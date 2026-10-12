@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.game.eventsourcing.persistence.GameModel;
+import com.xs.kernel.model.RedisKey;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.Accessors;
@@ -17,6 +18,7 @@ import java.sql.Timestamp;
  * <p>属性方法引用、脏字段跟踪和通用 Hash 转换由 xs-net 的
  * {@link com.xs.kernel.model.XsModel} 提供；本类只声明玩家数据和乐观锁字段。</p>
  */
+@RedisKey("playerActor:")
 @TableName("users")
 @Data
 @Accessors(chain = true)

@@ -2,10 +2,8 @@ package com.game.logic.management;
 
 import com.game.logic.actor.gm.GMActor;
 import com.game.logic.actor.player.PlayerActor;
-import com.game.logic.actor.scene.SceneActor;
 import com.game.message.actor.logic.GMMessage;
 import com.game.message.actor.logic.PlayerMessage;
-import com.game.message.actor.logic.SceneMessage;
 import com.xs.kernel.actor.node.Roles;
 import com.xs.net.message.RpcMessageRegistry;
 import com.xs.net.message.RpcMessageSpec;
@@ -17,10 +15,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public final class ProtocolTraceTargetResolver {
 
-    private static final Map<Integer, Integer> PROTOCOL_ALIASES = Map.of(1000, 3003);
     private static final Map<Class<?>, Class<?>> ACTORS_BY_ROLE = Map.of(
             PlayerMessage.class, PlayerActor.class,
-            SceneMessage.class, SceneActor.class,
             GMMessage.class, GMActor.class
     );
 
@@ -29,8 +25,7 @@ public final class ProtocolTraceTargetResolver {
     private final RpcMessageRegistry registry;
 
     public ProtocolTraceTarget resolve(int protocolNumber) {
-        int effectiveProtocolNumber = PROTOCOL_ALIASES.getOrDefault(protocolNumber, protocolNumber);
-        RpcMessageSpec<?> spec = registry.find(effectiveProtocolNumber);
+        RpcMessageSpec<?> spec = registry.find(protocolNumber);
         if (spec == null) {
             throw new IllegalArgumentException("Unknown protocol number: " + protocolNumber);
         }
@@ -48,7 +43,7 @@ public final class ProtocolTraceTargetResolver {
         }
         return new ProtocolTraceTarget(
                 protocolNumber,
-                effectiveProtocolNumber,
+                protocolNumber,
                 spec.dtoClass(),
                 actorType,
                 handlerMethod(actorType, spec, protocolNumber));

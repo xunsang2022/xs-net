@@ -3,7 +3,6 @@ package com.game.gateway.netty;
 import com.game.message.actor.logic.PlayerMessage;
 import com.game.message.c2s.LoginRequest;
 import com.game.message.c2s.LogoutRequest;
-import com.game.message.c2s.PlayerEnterCommand;
 import com.game.message.rpc.GameRpcMessages;
 import com.google.protobuf.MessageLite;
 import com.xs.kernel.akka.AkkaKit;
@@ -101,20 +100,6 @@ public final class GatewayMessageRouter {
         if (context.expired()) {
             Metrics.counter("gateway.ingress.rejected", "reason", "expired").increment();
             log.warn("Gateway ingress rejected because request deadline expired: traceId={}", context.traceId());
-            return;
-        }
-        if (actionMessage instanceof LoginRequest login) {
-            String channelId = authenticatedChannelId(context, login.sessionId());
-            ChannelRegistry.INSTANCE.recordLoginIngress(channelId, System.nanoTime());
-            PlayerEnterCommand command = new PlayerEnterCommand(
-                    Long.parseLong(login.playerId()), login.playerName(), channelId);
-            AkkaKit.tell(GameRpcMessages.INSTANCE, PlayerMessage.class, command, playerId, context);
-            return;
-        }
-        if (actionMessage instanceof LogoutRequest logout) {
-            String channelId = authenticatedChannelId(context, logout.sessionId());
-            LogoutRequest authenticatedLogout = new LogoutRequest(logout.playerId(), channelId);
-            AkkaKit.tell(GameRpcMessages.INSTANCE, PlayerMessage.class, authenticatedLogout, playerId, context);
             return;
         }
         AkkaKit.tell(GameRpcMessages.INSTANCE, PlayerMessage.class, (PlayerMessage) actionMessage, playerId, context);

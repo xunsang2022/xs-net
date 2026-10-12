@@ -13,13 +13,6 @@ message LogRecordCommand {
   optional int64 player_id = 4;
 }
 
-// CS_Login = 1000
-message CS_Login {
-  optional string player_id = 1;
-  optional string player_name = 2;
-  optional string session_id = 3;
-}
-
 // CS_LogReport = 2100
 message CS_LogReport {
   optional string session_id = 1;

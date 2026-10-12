@@ -80,4 +80,9 @@ public interface XsModel<M extends XsModel<M>> {
     default void fromHash(Map<?, ?> fields) {
         xsModelSupport().fromHash(fields);
     }
+
+    /** 返回用于乐观锁的版本值，默认 0。子类可覆盖。 */
+    default long getVersionValue() {
+        return 0L;
+    }
 }

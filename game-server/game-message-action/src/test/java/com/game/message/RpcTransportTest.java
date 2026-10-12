@@ -1,7 +1,6 @@
 package com.game.message;
 
 import com.game.message.s2c.LogoutResponse;
-import com.game.message.c2s.PlayerEnterCommand;
 import com.game.message.battle.BattleCreateCommand;
 import com.game.message.battle.BattleEndCommand;
 import com.game.message.battle.BattleInputCommand;
@@ -10,9 +9,6 @@ import com.game.message.battle.BattleLeaveCommand;
 import com.game.message.management.GmKickPlayerCommand;
 import com.game.message.management.GmKickPlayerRequest;
 import com.game.message.rpc.GameRpcMessages;
-import com.game.message.scene.PlayerSceneChanged;
-import com.game.message.scene.SceneJoinCommand;
-import com.game.message.scene.SceneLeaveCommand;
 import com.xs.net.message.MessageAble;
 import com.xs.net.message.pb.NetMessage;
 import com.xs.net.message.serializer.NetMessageSerializer;
@@ -30,15 +26,6 @@ public class RpcTransportTest {
     }
 
     @Test
-    public void loginToLogicTransport() throws Exception {
-        PlayerEnterCommand enter = new PlayerEnterCommand(42L, "alice", "ch-1");
-
-        Object decoded = transport(enter);
-        assertTrue(decoded instanceof NetMessage);
-        assertEquals(3003, ((NetMessage) decoded).getRpcNum());
-    }
-
-    @Test
     public void logicToGatewayTransport() throws Exception {
         LogoutResponse logout = new LogoutResponse("42", "s-1");
 
@@ -48,12 +35,9 @@ public class RpcTransportTest {
     }
 
     @Test
-    public void managementAndSceneMessagesTransportBetweenNodes() throws Exception {
+    public void managementMessagesTransportBetweenNodes() throws Exception {
         assertTrue(transport(new GmKickPlayerRequest("request-1", 42L, "operator", "reason", 100L)) instanceof NetMessage);
         assertTrue(transport(new GmKickPlayerCommand("request-1", "operator", "reason", 100L)) instanceof NetMessage);
-        assertTrue(transport(new SceneJoinCommand(42L)) instanceof NetMessage);
-        assertTrue(transport(new SceneLeaveCommand(42L)) instanceof NetMessage);
-        assertTrue(transport(new PlayerSceneChanged("scene-1", true)) instanceof NetMessage);
     }
 
     @Test

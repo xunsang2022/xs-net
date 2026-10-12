@@ -34,7 +34,7 @@ public final class LogicContext {
     @Setter
     private static volatile ExecutorService dbIoExecutor;
     @Getter
-    private static volatile long syncIntervalMs = 1000L;
+    private static volatile int syncIntervalMs = 1000;
 
     private LogicContext() {
     }
@@ -95,8 +95,8 @@ public final class LogicContext {
         return executor;
     }
 
-    public static void setSyncIntervalMs(long intervalMs) {
-        syncIntervalMs = Math.max(1L, intervalMs);
+    public static void setSyncIntervalMs(int intervalMs) {
+        syncIntervalMs = Math.max(1, intervalMs);
     }
 
     public static MeterRegistry getMeterRegistry() {

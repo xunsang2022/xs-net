@@ -66,6 +66,18 @@ public final class ActorServices<M> {
         return message -> contextualizer.contextual(message, ignored -> checkedHandler.apply(message));
     }
 
+    /** 为消息处理方法恢复当前 RPC 请求上下文（带类型提示）。 */
+    public <T extends M> Function<T, Behavior<M>> contextual(Class<T> type, Function<T, Behavior<M>> handler) {
+        Function<T, Behavior<M>> checkedHandler = Objects.requireNonNull(handler, "handler");
+        return message -> contextualizer.contextual(message, ignored -> checkedHandler.apply(message));
+    }
+
+    /** 直接为单条消息恢复 RPC 请求上下文并执行处理。 */
+    public <T extends M> Behavior<M> contextualize(T message, Function<T, Behavior<M>> handler) {
+        Function<T, Behavior<M>> checkedHandler = Objects.requireNonNull(handler, "handler");
+        return contextualizer.contextual(message, ignored -> checkedHandler.apply(message));
+    }
+
     /** 向目标实体发送 RPC 消息。 */
     public void sendRpc(Class<?> roleClass, Object message, String targetEntityId) {
         rpcSender.send(

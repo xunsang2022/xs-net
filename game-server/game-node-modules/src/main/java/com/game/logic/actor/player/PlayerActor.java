@@ -1,7 +1,8 @@
 package com.game.logic.actor.player;
 
-import com.game.logic.actor.player.core.PlayerLifecycle;
-import com.game.logic.actor.player.core.PlayerStateSync;
+import com.game.logic.actor.core.ActorServerSync;
+import com.game.logic.actor.player.core.PlayerInfo;
+import com.game.logic.actor.player.db.PlayerMapper;
 import com.game.message.actor.logic.PlayerMessage;
 import com.xs.kernel.actor.RpcActor;
 import com.xs.kernel.actor.node.ActorDispatcher;
@@ -18,14 +19,11 @@ import org.apache.pekko.actor.typed.javadsl.TimerScheduler;
 @Slf4j
 @ActorDispatcher("pekko.actor.player-dispatcher")
 public class PlayerActor extends RpcActor<PlayerMessage> {
-
     /** 登录加载期间最多暂存的玩家消息数量。 */
     private static final int STASH_CAPACITY = 512;
 
     /** 玩家行为和生命周期处理组件。 */
-    private final PlayerLifecycle lifecycle;
-    /** 玩家 Redis、数据库和异步状态同步组件。 */
-    private final PlayerStateSync stateSync;
+    private final PlayerInfo lifecycle;
 
     /**
      * 创建玩家 Actor。
@@ -42,9 +40,8 @@ public class PlayerActor extends RpcActor<PlayerMessage> {
             TimerScheduler<PlayerMessage> timers
     ) {
         super(context, entityId);
-        this.stateSync = new PlayerStateSync(this.services, entityId, timers);
-        this.lifecycle = new PlayerLifecycle(this.services, stash, timers, stateSync);
-        this.stateSync.bindLifecycle(lifecycle);
+        ActorServerSync stateSync = new ActorServerSync();
+        this.lifecycle = new PlayerInfo(this.services, stateSync, timers);
     }
 
     /**
@@ -68,7 +65,6 @@ public class PlayerActor extends RpcActor<PlayerMessage> {
     public Receive<PlayerMessage> createReceive() {
         ReceiveBuilder<PlayerMessage> builder = newRpcReceiveBuilder();
         lifecycle.registerHandlers(builder);
-        stateSync.registerHandlers(builder);
         return builder.build();
     }
 }

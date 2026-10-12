@@ -37,8 +37,7 @@ public final class XsModelHashMapper<T extends XsModel<T>> implements HashMapper
     }
 
     public T fromStringHash(Map<String, String> hash) {
-        Map<String, Object> values = new LinkedHashMap<>();
-        values.putAll(hash);
+        Map<String, Object> values = new LinkedHashMap<>(hash);
         return fromHash(values);
     }
 

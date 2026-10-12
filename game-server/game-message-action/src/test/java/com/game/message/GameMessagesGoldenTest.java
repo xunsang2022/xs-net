@@ -5,7 +5,6 @@ import com.game.protocol.pb.CS_Login;
 import com.game.protocol.pb.CS_LogReport;
 import com.game.protocol.pb.CS_Logout;
 import com.game.protocol.pb.LogRecordCommand;
-import com.game.protocol.pb.PlayerEnterCommand;
 import com.game.protocol.pb.RpcRoute;
 import com.game.protocol.pb.SC_Login;
 import com.game.protocol.pb.SC_LogReport;
@@ -67,11 +66,6 @@ public class GameMessagesGoldenTest {
                 .setResult(0)
                 .setLogId(77L)
                 .build());
-        assertGolden("PlayerEnter", PlayerEnterCommand.newBuilder()
-                .setPlayerId(1001L)
-                .setPlayerName("alice")
-                .setChannelId("ch-1")
-                .build());
     }
 
     @Test
@@ -84,7 +78,7 @@ public class GameMessagesGoldenTest {
         }
         assertEquals(Set.of(
                 999, 1000, 1001, 1002, 1003, 2100, 2101,
-                3003, 3004, 3005, 3006, 3007, 3008,
+                3004, 3005,
                 3010, 3011, 3012, 3013, 3014, 3015
         ), rpcNums);
         assertNotNull(GameRpcMessages.INSTANCE.find(1000));
@@ -95,17 +89,11 @@ public class GameMessagesGoldenTest {
     public void routerEnumRegistersGroupMessages() {
         assertEquals(1001, RpcRoute.RPC_CS_LOGOUT.getNumber());
         assertEquals(1003, RpcRoute.RPC_SC_LOGOUT.getNumber());
-        assertEquals(3003, RpcRoute.RPC_PLAYER_ENTER_COMMAND.getNumber());
         assertEquals(3004, RpcRoute.RPC_CS_GM_KICK_PLAYER.getNumber());
         assertEquals(3005, RpcRoute.RPC_GM_KICK_PLAYER_COMMAND.getNumber());
-        assertEquals(3006, RpcRoute.RPC_SCENE_JOIN_COMMAND.getNumber());
-        assertEquals(3007, RpcRoute.RPC_SCENE_LEAVE_COMMAND.getNumber());
-        assertEquals(3008, RpcRoute.RPC_PLAYER_SCENE_CHANGED.getNumber());
         assertEquals(RpcRoute.RPC_CS_LOGOUT, RpcRoute.forNumber(1001));
         assertEquals(RpcRoute.RPC_SC_LOGOUT, RpcRoute.forNumber(1003));
-        assertEquals(RpcRoute.RPC_PLAYER_ENTER_COMMAND, RpcRoute.forNumber(3003));
         assertEquals(RpcRoute.RPC_CS_GM_KICK_PLAYER, RpcRoute.forNumber(3004));
-        assertEquals(RpcRoute.RPC_PLAYER_SCENE_CHANGED, RpcRoute.forNumber(3008));
         assertEquals(RpcRoute.RPC_BATTLE_CREATE_COMMAND, RpcRoute.forNumber(3010));
         assertEquals(RpcRoute.RPC_BATTLE_INPUT_COMMAND, RpcRoute.forNumber(3013));
     }

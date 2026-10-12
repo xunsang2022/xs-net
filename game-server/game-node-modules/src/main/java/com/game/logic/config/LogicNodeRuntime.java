@@ -158,7 +158,7 @@ public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable {
         String syncInterval = settings.get("game.storage.sync-interval-ms");
         if (syncInterval != null && !syncInterval.isBlank()) {
             try {
-                LogicContext.setSyncIntervalMs(Long.parseLong(syncInterval));
+                LogicContext.setSyncIntervalMs(Integer.parseInt(syncInterval));
             } catch (NumberFormatException exception) {
                 throw new IllegalArgumentException(
                         "game.storage.sync-interval-ms must be a positive integer", exception);

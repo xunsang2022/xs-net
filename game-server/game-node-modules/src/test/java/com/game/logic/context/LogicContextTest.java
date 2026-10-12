@@ -26,11 +26,11 @@ class LogicContextTest {
 
     @Test
     void syncIntervalDefaultsAndClampsToPositive() {
-        assertEquals(1000L, LogicContext.getSyncIntervalMs());
-        LogicContext.setSyncIntervalMs(250L);
-        assertEquals(250L, LogicContext.getSyncIntervalMs());
-        LogicContext.setSyncIntervalMs(0L);
-        assertEquals(1L, LogicContext.getSyncIntervalMs());
-        LogicContext.setSyncIntervalMs(1000L);
+        assertEquals(1000, LogicContext.getSyncIntervalMs());
+        LogicContext.setSyncIntervalMs(250);
+        assertEquals(250, LogicContext.getSyncIntervalMs());
+        LogicContext.setSyncIntervalMs(0);
+        assertEquals(1, LogicContext.getSyncIntervalMs());
+        LogicContext.setSyncIntervalMs(1000);
     }
 }

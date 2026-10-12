@@ -15,7 +15,7 @@ public class LogicNodeProperties {
 
     @Data
     public static class Storage {
-        private long syncIntervalMs = 1000L;
+        private int syncIntervalMs = 1000;
     }
 
     @Data
