@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.game.eventsourcing.persistence.GameModel;
+import com.game.message.annotation.ProtoField;
 import com.xs.kernel.model.RedisKey;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -23,15 +24,24 @@ import java.sql.Timestamp;
 @Data
 @Accessors(chain = true)
 @EqualsAndHashCode(callSuper = true, exclude = "expectedVersion")
+@ProtoRecord(classType = "com.game.message.s2c.PlayerInfoData", number = 2102)
 public class PlayerPO extends GameModel<PlayerPO> {
 
+
     @TableId(value = "id", type = IdType.INPUT)
+    @ProtoField(number = 1)
     private Long id;
+    @ProtoField(number = 2)
     private String name;
+    @ProtoField(number = 3)
     private String email;
+    @ProtoField(number = 4)
     private Integer online;
+    @ProtoField(number = 5)
     private Timestamp lastLoginAt;
+    @ProtoField(number = 6)
     private Timestamp updatedAt;
+    @ProtoField(number = 7)
     private Integer version;
 
     @TableField(exist = false)

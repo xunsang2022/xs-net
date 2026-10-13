@@ -11,16 +11,27 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 final class RpcArtifactGenerator {
     void generate(RpcModel model, Path protoDirectory, Path javaDirectory, String protoPackage,
                   String protoJavaPackage, String generatedJavaPackage) throws Exception {
         Map<String, List<MessageModel>> messagesByProtoFile = messagesByProtoFile(model);
+        Map<String, String> messageProtoFiles = messageProtoFiles(model);
         clearProtoDirectory(protoDirectory);
         VelocityRenderer renderer = new VelocityRenderer();
         for (Map.Entry<String, List<MessageModel>> entry : messagesByProtoFile.entrySet()) {
-            write(protoDirectory.resolve(entry.getKey()), renderer.render("templates/proto.vm",
-                    protoContext(protoPackage, protoJavaPackage, entry.getValue())));
+            Map<String, Object> context = protoContext(protoPackage, protoJavaPackage, entry.getValue());
+            context.put("usesNested", entry.getValue().stream().anyMatch(message ->
+                    message.fields().stream().anyMatch(field -> field.nestedType() != null)));
+            context.put("nestedMessages", List.of());
+            context.put("imports", protoImports(entry.getKey(), entry.getValue(), messageProtoFiles));
+            write(protoDirectory.resolve(entry.getKey()), renderer.render("templates/proto.vm", context));
+        }
+        if (!model.nestedMessages().isEmpty()) {
+            Map<String, Object> context = protoContext(protoPackage, protoJavaPackage, List.of());
+            context.put("nestedMessages", templateNestedMessages(model.nestedMessages()));
+            write(protoDirectory.resolve("rpc_nested.proto"), renderer.render("templates/proto.vm", context));
         }
         // 路由表以 proto 枚举存放：消息号 <-> 消息名，供客户端/服务端引用协议号
         write(protoDirectory.resolve("rpc_routes.proto"), renderer.render("templates/rpc_routes.vm",
@@ -32,9 +43,15 @@ final class RpcArtifactGenerator {
         registryContext.put("generatedPackage", generatedJavaPackage);
         registryContext.put("protoJavaPackage", protoJavaPackage);
         registryContext.put("messages", templateMessages(model.messages()));
+        registryContext.put("nestedMessages", templateNestedMessages(model.nestedMessages()));
         write(packageDirectory.resolve("GameRpcMessages.java"), renderer.render("templates/GameRpcMessages.vm", registryContext));
         write(packageDirectory.resolve("GeneratedRpcCodec.java"), renderer.render("templates/GeneratedRpcCodec.vm", registryContext));
         write(packageDirectory.resolve("GeneratedRpcHandlers.java"), renderer.render("templates/GeneratedRpcHandlers.vm", registryContext));
+        for (GeneratedRecordModel record : model.generatedRecords()) {
+            Path recordDirectory = record.packageName().isEmpty()
+                    ? javaDirectory : javaDirectory.resolve(record.packageName().replace('.', '/'));
+            write(recordDirectory.resolve(record.typeName() + ".java"), record.source());
+        }
     }
 
     private Map<String, Object> protoContext(String protoPackage, String protoJavaPackage, List<MessageModel> messages)
@@ -43,7 +60,34 @@ final class RpcArtifactGenerator {
         context.put("protoPackage", protoPackage);
         context.put("protoJavaPackage", protoJavaPackage);
         context.put("messages", templateMessages(messages));
+        context.put("imports", List.of());
         return context;
+    }
+
+    private Map<String, String> messageProtoFiles(RpcModel model) {
+        Map<String, String> messageProtoFiles = new HashMap<>();
+        for (MessageModel message : model.messages()) {
+            messageProtoFiles.put(message.name(), protoFileName(message));
+        }
+        return messageProtoFiles;
+    }
+
+    /** 收集当前 proto 文件引用到的、定义在其他 proto 文件中的消息类型。 */
+    private List<String> protoImports(String protoFile, List<MessageModel> messages,
+                                      Map<String, String> messageProtoFiles) {
+        Set<String> imports = new java.util.TreeSet<>();
+        for (MessageModel message : messages) {
+            for (FieldModel field : message.fields()) {
+                if (field.messageType() == null) {
+                    continue;
+                }
+                String definingFile = messageProtoFiles.get(field.messageType());
+                if (definingFile != null && !definingFile.equals(protoFile)) {
+                    imports.add(definingFile);
+                }
+            }
+        }
+        return List.copyOf(imports);
     }
 
     private List<Map<String, Object>> templateMessages(List<MessageModel> messages) throws MojoFailureException {
@@ -72,19 +116,40 @@ final class RpcArtifactGenerator {
         return views;
     }
 
+    private List<Map<String, Object>> templateNestedMessages(List<NestedMessageModel> messages) throws MojoFailureException {
+        List<Map<String, Object>> views = new ArrayList<>();
+        for (NestedMessageModel message : messages) {
+            Map<String, Object> view = new LinkedHashMap<>();
+            view.put("name", message.name());
+            view.put("dtoType", message.dtoType());
+            view.put("fields", templateFields(message.fields()));
+            view.put("decodeArgs", decodeArgs(message.fields()));
+            views.add(view);
+        }
+        return views;
+    }
+
     private List<Map<String, Object>> templateFields(List<FieldModel> fields) throws MojoFailureException {
         List<Map<String, Object>> views = new ArrayList<>();
-        for (FieldModel field : fields) {
+        for (FieldModel field : fields.stream().sorted(Comparator.comparingInt(FieldModel::number)).toList()) {
             Map<String, Object> view = new LinkedHashMap<>();
             view.put("name", field.name());
             view.put("number", field.number());
-            view.put("protoType", RpcSourceScanner.protoType(field.javaType()));
+            view.put("protoType", protoType(field));
+            view.put("nested", field.nestedType() != null || field.messageType() != null);
             view.put("snakeName", snakeCase(field.name()));
             view.put("primitive", isPrimitive(field.javaType()));
             view.put("setter", "builder.set" + upper(field.name()) + "(" + encodeValue(field, "dto." + field.name() + "()") + ");");
             views.add(view);
         }
         return views;
+    }
+
+    private String protoType(FieldModel field) throws MojoFailureException {
+        if (field.nestedType() != null) {
+            return field.nestedType();
+        }
+        return field.messageType() != null ? field.messageType() : RpcSourceScanner.protoType(field.javaType());
     }
 
     private String decodeArgs(List<FieldModel> fields) {
@@ -96,6 +161,30 @@ final class RpcArtifactGenerator {
                     : "payload.has" + upper(field.name()) + "() ? " + decoded + " : null");
         }
         return String.join(", ", args);
+    }
+
+    /** 仅生成 @ProtoRecord 声明的源类型到协议记录类型的转换工具。 */
+    void generateConverters(List<ConverterModel> converterModels, Path outputDirectory, String converterJavaPackage)
+            throws Exception {
+        if (converterModels.isEmpty()) {
+            return;
+        }
+        VelocityRenderer renderer = new VelocityRenderer();
+        List<Map<String, Object>> converters = new ArrayList<>();
+        for (ConverterModel converter : converterModels) {
+            Map<String, Object> view = new LinkedHashMap<>();
+            view.put("sourceType", converter.sourceType());
+            view.put("targetType", converter.targetType());
+            view.put("methodName", "to" + converter.targetName());
+            view.put("args", String.join(", ",
+                    converter.fields().stream().map(ConverterFieldModel::access).toList()));
+            converters.add(view);
+        }
+        Map<String, Object> context = new HashMap<>();
+        context.put("converterPackage", converterJavaPackage);
+        context.put("converters", converters);
+        write(outputDirectory.resolve(converterJavaPackage.replace('.', '/')).resolve("GeneratedProtoConverters.java"),
+                renderer.render("templates/GeneratedProtoConverters.vm", context));
     }
 
     private Map<String, List<MessageModel>> messagesByProtoFile(RpcModel model) throws MojoFailureException {
@@ -137,7 +226,10 @@ final class RpcArtifactGenerator {
     }
 
     private String protoFileName(MessageModel message) {
-        // 按角色组命名：实现了角色接口（如 PlayerMessage）归入 <Group>Messages.proto，未实现则归通用 comment.proto
+        // ACTOR_MODEL 单独成文件；其余按角色组命名：实现了角色接口（如 PlayerMessage）归入 <Group>Messages.proto，未实现则归通用 comment.proto
+        if ("ACTOR_MODEL".equals(message.kind())) {
+            return "ActorModels.proto";
+        }
         return message.roleType() == null ? "comment.proto" : simpleName(message.roleType()) + "s" + ".proto";
     }
 
@@ -151,10 +243,22 @@ final class RpcArtifactGenerator {
     }
 
     private String encodeValue(FieldModel field, String access) {
+        if (field.nestedType() != null) {
+            return "encode" + field.nestedType() + "(" + access + ")";
+        }
+        if (field.messageType() != null) {
+            return "GeneratedRpcCodec." + field.messageCodec() + "().encode(" + access + ")";
+        }
         return "byte[]".equals(field.javaType()) ? "com.google.protobuf.ByteString.copyFrom(" + access + ")" : access;
     }
 
     private String decodeValue(FieldModel field, String getter) {
+        if (field.nestedType() != null) {
+            return "decode" + field.nestedType() + "(" + getter + ")";
+        }
+        if (field.messageType() != null) {
+            return "GeneratedRpcCodec." + field.messageCodec() + "().decode(" + getter + ")";
+        }
         return "byte[]".equals(field.javaType()) ? getter + ".toByteArray()" : getter;
     }
 

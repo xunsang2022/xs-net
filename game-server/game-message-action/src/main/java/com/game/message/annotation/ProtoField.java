@@ -6,7 +6,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.SOURCE)
-@Target(ElementType.RECORD_COMPONENT)
+@Target({ElementType.RECORD_COMPONENT, ElementType.FIELD})
 public @interface ProtoField {
     int number();
 }

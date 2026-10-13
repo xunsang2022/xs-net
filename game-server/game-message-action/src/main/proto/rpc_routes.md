@@ -5,10 +5,11 @@
 |999|com.game.message.c2s.LogRecordCommand|HTTP_RESPONSE||yes|yes|no||
 |1000|com.game.message.c2s.LoginRequest|HTTP_RESPONSE|com.game.message.actor.logic.PlayerMessage|yes|yes|no||
 |1001|com.game.message.c2s.LogoutRequest|HTTP_RESPONSE|com.game.message.actor.logic.PlayerMessage|yes|yes|no||
-|1002|com.game.message.s2c.LoginResponse|HTTP_RESPONSE|com.game.message.actor.S2C|yes|yes|no||
+|1002|com.game.message.s2c.LoginResponse|HTTP_RESPONSE|com.game.message.actor.S2C|yes|no|no||
 |1003|com.game.message.s2c.LogoutResponse|HTTP_RESPONSE|com.game.message.actor.S2C|yes|yes|no||
 |2100|com.game.message.c2s.LogReportRequest|HTTP_RESPONSE||yes|no|no||
 |2101|com.game.message.s2c.LogReportResponse|HTTP_RESPONSE||yes|no|no||
+|2102|com.game.message.s2c.PlayerInfoData|HTTP_RESPONSE||yes|no|no||
 |3004|com.game.message.management.GmKickPlayerRequest|INTERNAL|com.game.message.actor.logic.GMMessage|no|yes|no||
 |3005|com.game.message.management.GmKickPlayerCommand|INTERNAL|com.game.message.actor.logic.PlayerMessage|no|no|no||
 |3010|com.game.message.battle.BattleCreateCommand|INTERNAL|com.game.message.actor.logic.BattleMessage|no|no|no||

@@ -1,6 +1,8 @@
 package com.game.message;
 
 import com.game.message.rpc.GameRpcMessages;
+import com.game.message.s2c.LoginResponse;
+import com.game.message.s2c.PlayerInfoData;
 import com.game.protocol.pb.CS_Login;
 import com.game.protocol.pb.CS_LogReport;
 import com.game.protocol.pb.CS_Logout;
@@ -10,6 +12,7 @@ import com.game.protocol.pb.SC_Login;
 import com.game.protocol.pb.SC_LogReport;
 import com.game.protocol.pb.SC_Logout;
 import com.google.protobuf.MessageLite;
+import com.xs.net.message.RpcMessageDirection;
 import com.xs.net.message.RpcMessageSpec;
 import org.junit.Test;
 
@@ -45,12 +48,24 @@ public class GameMessagesGoldenTest {
                 .setPlayerId("1001")
                 .setSessionId("s-2")
                 .build());
-        assertGolden("SC_LOGIN", SC_Login.newBuilder()
-                .setResult(0)
-                .setPlayerId("1001")
-                .setPlayerName("alice")
-                .setToken("token-1")
-                .build());
+        LoginResponse login = new LoginResponse(0, "1001",
+                new PlayerInfoData(1001L, "alice", "a@example.com", 1, 1700000000000L, 1700000001000L, 2));
+        SC_Login loginProto = SC_Login.newBuilder()
+                .setResult(login.result())
+                .setToken(login.token())
+                .setPlayerInfo(com.game.protocol.pb.PlayerInfoData.newBuilder()
+                        .setId(login.playerInfo().id())
+                        .setName(login.playerInfo().name())
+                        .setEmail(login.playerInfo().email())
+                        .setOnline(login.playerInfo().online())
+                        .setLastLoginAt(login.playerInfo().lastLoginAt())
+                        .setUpdatedAt(login.playerInfo().updatedAt())
+                        .setVersion(login.playerInfo().version())
+                        .build())
+                .build();
+        assertGolden("SC_LOGIN", loginProto);
+        assertEquals(loginProto, GameRpcMessages.INSTANCE.find(1002).encode(login));
+        assertEquals(login, GameRpcMessages.INSTANCE.find(1002).decode(SC_Login.parseFrom(loginProto.toByteArray())));
         assertGolden("SC_Logout", SC_Logout.newBuilder()
                 .setPlayerId("1001")
                 .setSessionId("s-3")
@@ -77,12 +92,14 @@ public class GameMessagesGoldenTest {
             assertNotNull(spec.parser());
         }
         assertEquals(Set.of(
-                999, 1000, 1001, 1002, 1003, 2100, 2101,
+                999, 1000, 1001, 1002, 1003, 2100, 2101, 2102,
                 3004, 3005,
                 3010, 3011, 3012, 3013, 3014, 3015
         ), rpcNums);
         assertNotNull(GameRpcMessages.INSTANCE.find(1000));
         assertEquals(1003, GameRpcMessages.INSTANCE.find(1003).rpcNum());
+        assertEquals(2102, GameRpcMessages.INSTANCE.find(2102).rpcNum());
+        assertEquals(RpcMessageDirection.HTTP_RESPONSE, GameRpcMessages.INSTANCE.find(2102).direction());
     }
 
     @Test

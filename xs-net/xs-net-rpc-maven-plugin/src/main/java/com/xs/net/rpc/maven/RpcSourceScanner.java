@@ -12,6 +12,7 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
+import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import org.apache.maven.plugin.MojoFailureException;
 
@@ -22,41 +23,26 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
 final class RpcSourceScanner {
+    /** PO 字段类型到协议记录字段类型的映射，Timestamp 以 int64 毫秒上协议。 */
+    private static final Map<String, String> GENERATED_TYPES = Map.of("Timestamp", "Long");
+
     RpcSourceScanner() {
         StaticJavaParser.getConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21);
     }
 
     RpcModel scan(List<Path> sourceDirectories) throws IOException, MojoFailureException {
+        List<CompilationUnit> units = parseUnits(sourceDirectories);
+        Map<String, RecordSource> recordSources = recordSources(units);
         Map<String, RecordDeclaration> records = new HashMap<>();
-        Map<String, RecordSource> recordSources = new HashMap<>();
-        List<CompilationUnit> units = new ArrayList<>();
-        for (Path sourceDirectory : sourceDirectories) {
-            if (!Files.isDirectory(sourceDirectory)) {
-                throw new MojoFailureException("RPC source directory does not exist: " + sourceDirectory);
-            }
-            try (Stream<Path> paths = Files.walk(sourceDirectory)) {
-                for (Path path : paths.filter(value -> value.toString().endsWith(".java")).sorted().toList()) {
-                    CompilationUnit unit = StaticJavaParser.parse(path);
-                    units.add(unit);
-                    String packageName = unit.getPackageDeclaration().map(value -> value.getNameAsString() + ".").orElse("");
-                    String packageTypeName = packageName.endsWith(".")
-                            ? packageName.substring(0, packageName.length() - 1)
-                            : packageName;
-                    Map<String, String> imports = imports(unit);
-                    for (RecordDeclaration record : unit.findAll(RecordDeclaration.class)) {
-                        records.put(packageName + record.getNameAsString(), record);
-                        recordSources.put(packageName + record.getNameAsString(),
-                                new RecordSource(record, packageTypeName, imports));
-                    }
-                }
-            }
-        }
+        recordSources.forEach((type, source) -> records.put(type, source.record()));
+        Map<String, MessageModel> actorModels = actorModelMessages(recordSources);
 
         // 角色接口：所有标注 @Roles 的接口（如 PlayerMessage、S2C），用于为纯下行消息绑定其角色，从而触发对应 shard 代理的创建
         Set<String> roleInterfaces = new HashSet<>();
@@ -100,6 +86,7 @@ final class RpcSourceScanner {
         }
 
         List<MessageModel> messages = new ArrayList<>();
+        Map<String, NestedMessageModel> nestedMessages = new HashMap<>();
         try {
             for (CompilationUnit unit : units) {
                 String packageName = unit.getPackageDeclaration().map(value -> value.getNameAsString()).orElse("");
@@ -116,18 +103,19 @@ final class RpcSourceScanner {
                                         : downlinkRole(record, packageName, imports, roleInterfaces);
                                 String responseDtoType = binding != null ? binding.responseDtoType() : null;
                                 messages.add(message(intAttribute(value, "number"), messageName(dtoType), dtoType,
-                                        record, roleType, Direction.HTTP_RESPONSE, true,
+                                        recordSources, actorModels, nestedMessages, roleType, Direction.HTTP_RESPONSE, true,
                                         binding != null ? binding.actorType() : null,
                                         binding != null ? binding.componentField() : null,
                                         binding != null ? binding.methodName() : null,
-                                        responseDtoType));
+                                        responseDtoType, kind));
                                 return;
                             }
                             MethodBinding binding = requireHandler(handlerByDto, dtoType, record);
                             requireRole(record, binding.roleType(), packageName, imports);
                             if ("INTERNAL".equals(kind)) {
                                 messages.add(message(intAttribute(value, "number"), messageName(dtoType), dtoType,
-                                        record, binding.roleType(), Direction.INTERNAL, false, binding.actorType(), binding.componentField(), binding.methodName(), null));
+                                        recordSources, actorModels, nestedMessages, binding.roleType(), Direction.INTERNAL, false,
+                                        binding.actorType(), binding.componentField(), binding.methodName(), null, kind));
                                 return;
                             }
                             throw new MojoFailureException("Unsupported RPC kind: " + kind);
@@ -140,9 +128,199 @@ final class RpcSourceScanner {
         } catch (ScanException exception) {
             throw exception.failure();
         }
-        validate(messages);
+        messages.addAll(actorModels.values());
+        List<ConverterModel> converters = converters(units, recordSources);
+        validate(messages, nestedMessages);
         messages.sort(Comparator.comparingInt(MessageModel::number).thenComparing(MessageModel::name));
-        return new RpcModel(List.copyOf(messages));
+        List<GeneratedRecordModel> generatedRecords = recordSources.values().stream()
+                .filter(source -> source.generatedSource() != null)
+                .map(source -> new GeneratedRecordModel(source.packageName(), source.record().getNameAsString(),
+                        source.generatedSource()))
+                .sorted(Comparator.comparing(GeneratedRecordModel::typeName)).toList();
+        return new RpcModel(List.copyOf(messages), nestedMessages.values().stream()
+                .sorted(Comparator.comparing(NestedMessageModel::name)).toList(), List.copyOf(converters), generatedRecords);
+    }
+
+    /** 仅扫描 @ProtoRecord 声明的源类型到协议记录类型转换，不解析 RPC 消息。 */
+    List<ConverterModel> scanConverters(List<Path> sourceDirectories) throws IOException, MojoFailureException {
+        List<CompilationUnit> units = parseUnits(sourceDirectories);
+        return converters(units, recordSources(units));
+    }
+
+    /** 解析全部 Java 源文件。 */
+    private List<CompilationUnit> parseUnits(List<Path> sourceDirectories) throws IOException, MojoFailureException {
+        List<CompilationUnit> units = new ArrayList<>();
+        for (Path sourceDirectory : sourceDirectories) {
+            if (!Files.isDirectory(sourceDirectory)) {
+                throw new MojoFailureException("RPC source directory does not exist: " + sourceDirectory);
+            }
+            try (Stream<Path> paths = Files.walk(sourceDirectory)) {
+                for (Path path : paths.filter(value -> value.toString().endsWith(".java")).sorted().toList()) {
+                    units.add(StaticJavaParser.parse(path));
+                }
+            }
+        }
+        return units;
+    }
+
+    /** 收集全部 record 声明与 @ProtoRecord 派生记录及其类型解析上下文。 */
+    private Map<String, RecordSource> recordSources(List<CompilationUnit> units) throws MojoFailureException {
+        Map<String, RecordSource> recordSources = new HashMap<>();
+        for (CompilationUnit unit : units) {
+            String packageName = unit.getPackageDeclaration().map(value -> value.getNameAsString() + ".").orElse("");
+            String packageTypeName = packageName.endsWith(".")
+                    ? packageName.substring(0, packageName.length() - 1)
+                    : packageName;
+            Map<String, String> imports = imports(unit);
+            for (RecordDeclaration record : unit.findAll(RecordDeclaration.class)) {
+                recordSources.put(packageName + record.getNameAsString(),
+                        new RecordSource(record, packageTypeName, imports, null, null));
+            }
+        }
+        for (CompilationUnit unit : units) {
+            String packageName = unit.getPackageDeclaration().map(value -> value.getNameAsString()).orElse("");
+            Map<String, String> imports = imports(unit);
+            for (ClassOrInterfaceDeclaration type : unit.findAll(ClassOrInterfaceDeclaration.class)) {
+                if (type.isInterface()) {
+                    continue;
+                }
+                java.util.Optional<AnnotationExpr> protoRecord = annotation(type.getAnnotations(), "ProtoRecord");
+                if (protoRecord.isPresent()) {
+                    registerGeneratedRecord(recordSources, packageName, imports, type, protoRecord.get());
+                }
+            }
+        }
+        return recordSources;
+    }
+
+    /** 依据 @ProtoRecord 的 classType 与源类型 @ProtoField 字段派生协议记录。 */
+    private void registerGeneratedRecord(Map<String, RecordSource> recordSources, String packageName,
+                                         Map<String, String> imports, ClassOrInterfaceDeclaration type,
+                                         AnnotationExpr protoRecord) throws MojoFailureException {
+        String sourceType = packageName.isEmpty() ? type.getNameAsString() : packageName + "." + type.getNameAsString();
+        String targetType = protoRecordClassType(protoRecord, sourceType, packageName, imports);
+        if (recordSources.containsKey(targetType)) {
+            // 目标协议记录已存在于源码中，直接复用，不做生成。
+            return;
+        }
+        List<String> components = new ArrayList<>();
+        Set<Integer> numbers = new HashSet<>();
+        for (FieldDeclaration field : type.getFields()) {
+            AnnotationExpr protoField = annotation(field.getAnnotations(), "ProtoField").orElse(null);
+            if (protoField == null) {
+                continue;
+            }
+            int number = intAttribute(protoField, "number");
+            if (number <= 0 || !numbers.add(number)) {
+                throw new MojoFailureException("Invalid or duplicate ProtoField number for " + sourceType + ": " + number);
+            }
+            String javaType = GENERATED_TYPES.getOrDefault(field.getElementType().asString(),
+                    field.getElementType().asString());
+            for (var variable : field.getVariables()) {
+                components.add("        @ProtoField(number = " + number + ") " + javaType + " "
+                        + variable.getNameAsString());
+            }
+        }
+        if (components.isEmpty()) {
+            throw new MojoFailureException("@ProtoRecord source type must declare @ProtoField fields: " + sourceType);
+        }
+        int separator = targetType.lastIndexOf('.');
+        String targetPackage = separator < 0 ? "" : targetType.substring(0, separator);
+        String targetSimpleName = targetType.substring(separator + 1);
+        String source = recordSource(targetPackage, targetSimpleName, components, sourceType,
+                intAttribute(protoRecord, "number"));
+        RecordDeclaration record = StaticJavaParser.parse(source).findFirst(RecordDeclaration.class)
+                .orElseThrow(() -> new IllegalStateException("Failed to generate protocol record: " + targetType));
+        recordSources.put(targetType, new RecordSource(record, targetPackage, Map.of(), source,
+                intAttribute(protoRecord, "number")));
+    }
+
+    /** 生成协议记录源码文本，Timestamp 字段映射为 int64 毫秒。 */
+    private String recordSource(String targetPackage, String targetSimpleName, List<String> components,
+                                String sourceType, int number) {
+        StringBuilder source = new StringBuilder();
+        if (!targetPackage.isEmpty()) {
+            source.append("package ").append(targetPackage).append(";\n\n");
+        }
+        source.append("import com.game.message.annotation.ProtoField;\n");
+        source.append("import com.game.message.annotation.Rpc;\n\n");
+        source.append("/** 由 ").append(sourceType).append(" 的 @ProtoRecord 自动生成的协议数据。 */\n");
+        source.append("@Rpc(kind = Rpc.Kind.ACTOR_MODEL, number = ").append(number).append(")\n");
+        source.append("public record ").append(targetSimpleName).append("(\n");
+        source.append(String.join(",\n", components)).append("\n) {\n}\n");
+        return source.toString();
+    }
+
+    /** 读取 @ProtoRecord(classType) 声明的协议记录全限定类名。 */
+    private String protoRecordClassType(AnnotationExpr protoRecord, String sourceType, String packageName,
+                                        Map<String, String> imports) throws MojoFailureException {
+        Expression classType = attribute(protoRecord, "classType");
+        if (!(classType instanceof StringLiteralExpr literal) || literal.asString().isBlank()) {
+            throw new MojoFailureException("@ProtoRecord classType must be a non-blank class name: " + sourceType);
+        }
+        String declared = literal.asString();
+        return declared.contains(".") ? declared : resolveReference(declared, packageName, imports);
+    }
+
+    /** 收集全部 @ProtoRecord 声明的转换。 */
+    private List<ConverterModel> converters(List<CompilationUnit> units, Map<String, RecordSource> recordSources)
+            throws MojoFailureException {
+        List<ConverterModel> converters = new ArrayList<>();
+        for (CompilationUnit unit : units) {
+            String packageName = unit.getPackageDeclaration().map(value -> value.getNameAsString()).orElse("");
+            Map<String, String> imports = imports(unit);
+            for (ClassOrInterfaceDeclaration type : unit.findAll(ClassOrInterfaceDeclaration.class)) {
+                if (type.isInterface()) {
+                    continue;
+                }
+                java.util.Optional<AnnotationExpr> protoRecord = annotation(type.getAnnotations(), "ProtoRecord");
+                if (protoRecord.isPresent()) {
+                    converters.add(converter(packageName, imports, type, protoRecord.get(), recordSources));
+                }
+            }
+        }
+        return converters;
+    }
+
+    /** 读取 @ProtoRecord(classType) 声明的源类型到协议记录字段映射。 */
+    private ConverterModel converter(String packageName, Map<String, String> imports, ClassOrInterfaceDeclaration type,
+                                     AnnotationExpr protoRecord, Map<String, RecordSource> recordSources)
+            throws MojoFailureException {
+        String sourceType = packageName.isEmpty() ? type.getNameAsString() : packageName + "." + type.getNameAsString();
+        String targetType = protoRecordClassType(protoRecord, sourceType, packageName, imports);
+        RecordSource target = requireRecordSource(recordSources, targetType);
+        Map<String, String> sourceFieldTypes = new HashMap<>();
+        for (FieldDeclaration field : type.getFields()) {
+            field.getVariables().forEach(variable ->
+                    sourceFieldTypes.put(variable.getNameAsString(), field.getElementType().asString()));
+        }
+        List<ConverterFieldModel> fields = new ArrayList<>();
+        for (var component : target.record().getParameters()) {
+            String name = component.getNameAsString();
+            String sourceFieldType = sourceFieldTypes.get(name);
+            if (sourceFieldType == null) {
+                throw new MojoFailureException("@ProtoRecord source field is missing: " + sourceType + "." + name);
+            }
+            fields.add(new ConverterFieldModel(name, accessExpression(sourceType, sourceFieldType, component.getTypeAsString(), name)));
+        }
+        if (fields.isEmpty()) {
+            throw new MojoFailureException("@ProtoRecord target record must declare at least one field: " + targetType);
+        }
+        return new ConverterModel(sourceType, targetType, target.record().getNameAsString(), List.copyOf(fields));
+    }
+
+    /** 生成源字段到协议字段的取值表达式，仅支持同类型与 Timestamp→long 毫秒转换。 */
+    private String accessExpression(String sourceType, String sourceFieldType, String targetFieldType, String name)
+            throws MojoFailureException {
+        String getter = ("boolean".equals(sourceFieldType) ? "is" : "get") + upper(name) + "()";
+        if (sourceFieldType.equals(targetFieldType)) {
+            return "source." + getter;
+        }
+        if ("Timestamp".equals(sourceFieldType) && ("Long".equals(targetFieldType) || "long".equals(targetFieldType))) {
+            return "source." + getter + " == null ? null : source." + getter + ".getTime()";
+        }
+        throw new MojoFailureException("@ProtoRecord field conversion is unsupported: " + sourceType + "." + name
+                + " (" + sourceFieldType + " -> " + targetFieldType + ")");
     }
 
     private MethodBinding preferBinding(MethodBinding current, MethodBinding candidate) {
@@ -233,28 +411,88 @@ final class RpcSourceScanner {
     ) {
     }
 
-    private MessageModel message(int number, String name, String dtoType, RecordDeclaration record, String roleType,
-                                 Direction direction, boolean publicVisible, String actorType, String handlerComponent,
-                                 String handlerMethod,
-                                 String responseDtoType) throws MojoFailureException {
+    private MessageModel message(int number, String name, String dtoType,
+                                 Map<String, RecordSource> recordSources, Map<String, MessageModel> actorModels,
+                                 Map<String, NestedMessageModel> nestedMessages, String roleType, Direction direction,
+                                 boolean publicVisible, String actorType, String handlerComponent, String handlerMethod,
+                                 String responseDtoType, String kind) throws MojoFailureException {
         if (number <= 0 || name.isBlank()) {
             throw new MojoFailureException("RPC number must be positive and name must not be blank: " + dtoType);
         }
+        List<FieldModel> fields = fields(dtoType, recordSources, actorModels, nestedMessages, true);
+        return new MessageModel(number, name, dtoType, List.copyOf(fields), roleType, direction, publicVisible, actorType,
+                handlerComponent, handlerMethod, responseDtoType, kind);
+    }
+
+    /** 依据 @ProtoRecord 声明，为协议记录生成 ACTOR_MODEL 消息。 */
+    private Map<String, MessageModel> actorModelMessages(Map<String, RecordSource> recordSources)
+            throws MojoFailureException {
+        Map<String, MessageModel> actorModels = new LinkedHashMap<>();
+        for (RecordSource source : recordSources.values()) {
+            if (source.number() == null) {
+                continue;
+            }
+            String dtoType = source.packageName().isEmpty() ? source.record().getNameAsString()
+                    : source.packageName() + "." + source.record().getNameAsString();
+            List<FieldModel> fields = fields(dtoType, recordSources, actorModels, new HashMap<>(), false);
+            actorModels.put(dtoType, new MessageModel(source.number(), messageName(dtoType), dtoType, fields,
+                    null, Direction.HTTP_RESPONSE, true, null, null, null, null, "ACTOR_MODEL"));
+        }
+        return actorModels;
+    }
+
+    private List<FieldModel> fields(String dtoType, Map<String, RecordSource> recordSources,
+                                    Map<String, MessageModel> actorModels,
+                                    Map<String, NestedMessageModel> nestedMessages, boolean allowNested)
+            throws MojoFailureException {
+        RecordSource source = requireRecordSource(recordSources, dtoType);
         List<FieldModel> fields = new ArrayList<>();
-        for (var component : record.getParameters()) {
+        Set<Integer> numbers = new HashSet<>();
+        for (var component : source.record().getParameters()) {
             AnnotationExpr protoField = annotation(component.getAnnotations(), "ProtoField")
                     .orElseThrow(() -> new MojoFailureException("Record component requires @ProtoField: " + dtoType + "." + component.getNameAsString()));
-            fields.add(new FieldModel(intAttribute(protoField, "number"), component.getNameAsString(), component.getTypeAsString()));
+            int number = intAttribute(protoField, "number");
+            if (number <= 0 || !numbers.add(number)) {
+                throw new MojoFailureException("Invalid or duplicate ProtoField number for " + dtoType + ": " + number);
+            }
+            String javaType = component.getTypeAsString();
+            String nestedType = null;
+            String messageType = null;
+            String messageCodec = null;
+            if (!Set.of("String", "Integer", "int", "Long", "long", "Boolean", "boolean",
+                    "Double", "double", "Float", "float", "byte[]").contains(javaType)) {
+                String resolved = resolveReference(javaType, source.packageName(), source.imports());
+                MessageModel actorModel = actorModels.get(resolved);
+                if (actorModel != null) {
+                    // 已注册为 ACTOR_MODEL 消息的类型，直接以消息类型引用，不重复生成嵌套定义。
+                    messageType = actorModel.name();
+                    messageCodec = "codec" + actorModel.number();
+                    javaType = resolved;
+                } else {
+                    RecordSource nestedSource = recordSources.get(resolved);
+                    if (nestedSource == null || annotation(nestedSource.record().getAnnotations(), "Rpc").isPresent()) {
+                        throw new MojoFailureException("Unsupported @ProtoField type: " + javaType + " in " + dtoType);
+                    }
+                    if (!allowNested) {
+                        throw new MojoFailureException("Unsupported nested @ProtoField depth: " + dtoType + "." + component.getNameAsString());
+                    }
+                    nestedType = "Nested" + nestedSource.record().getNameAsString();
+                    if (!nestedMessages.containsKey(resolved)) {
+                        List<FieldModel> nestedFields = fields(resolved, recordSources, actorModels, nestedMessages, false);
+                        nestedMessages.put(resolved, new NestedMessageModel(nestedType, resolved, List.copyOf(nestedFields)));
+                    }
+                    javaType = resolved;
+                }
+            }
+            fields.add(new FieldModel(number, component.getNameAsString(), javaType, nestedType, messageType, messageCodec));
         }
         if (fields.isEmpty()) {
             throw new MojoFailureException("Protocol record must declare at least one field: " + dtoType);
         }
-        fields.sort(Comparator.comparingInt(FieldModel::number));
-        return new MessageModel(number, name, dtoType, List.copyOf(fields), roleType, direction, publicVisible, actorType,
-                handlerComponent, handlerMethod, responseDtoType);
+        return fields;
     }
 
-    private void validate(List<MessageModel> messages) throws MojoFailureException {
+    private void validate(List<MessageModel> messages, Map<String, NestedMessageModel> nestedMessages) throws MojoFailureException {
         Set<Integer> numbers = new HashSet<>();
         Set<String> names = new HashSet<>();
         for (MessageModel message : messages) {
@@ -264,16 +502,14 @@ final class RpcSourceScanner {
             if (!names.add(message.name())) {
                 throw new MojoFailureException("Duplicate RPC name: " + message.name());
             }
-            Set<Integer> fields = new HashSet<>();
-            for (FieldModel field : message.fields()) {
-                if (field.number() <= 0 || !fields.add(field.number())) {
-                    throw new MojoFailureException("Invalid or duplicate ProtoField number for " + message.name() + ": " + field.number());
-                }
-                protoType(field.javaType());
-            }
             if (message.direction() == Direction.INTERNAL
                     && (message.roleType() == null || message.actorType() == null || message.handlerMethod() == null)) {
                 throw new MojoFailureException("RPC handler must belong to an actor extending RpcActor<Role>: " + message.name());
+            }
+        }
+        for (NestedMessageModel nested : nestedMessages.values()) {
+            if (!names.add(nested.name())) {
+                throw new MojoFailureException("Duplicate proto message name: " + nested.name());
             }
         }
     }
@@ -367,6 +603,10 @@ final class RpcSourceScanner {
         return simpleName;
     }
 
+    private String upper(String value) {
+        return Character.toUpperCase(value.charAt(0)) + value.substring(1);
+    }
+
     private int intAttribute(AnnotationExpr annotation, String name) throws MojoFailureException {
         try {
             return Integer.parseInt(attribute(annotation, name).toString());
@@ -407,7 +647,11 @@ final class RpcSourceScanner {
     private record RecordSource(
             RecordDeclaration record,
             String packageName,
-            Map<String, String> imports
+            Map<String, String> imports,
+            /** 非空表示该记录由 @ProtoRecord 生成，需要落地为源码文件。 */
+            String generatedSource,
+            /** @ProtoRecord 声明的 RPC 编号，仅生成记录有值。 */
+            Integer number
     ) {
     }
 

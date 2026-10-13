@@ -67,6 +67,7 @@ class RpcSourceScannerTest {
         assertTrue(playerProto.contains("message Enter"));
         assertTrue(s2cProto.contains("message Response"));
         assertTrue(playerProto.contains("optional string player_id = 1;"));
+        assertFalse(java.nio.file.Files.exists(target.resolve("proto/rpc_nested.proto")));
         // 消息结构上注释消息 ID，CS/SC 均标注
         assertTrue(playerProto.contains("// Request = 6"));
         assertTrue(s2cProto.contains("// Response = 7"));
@@ -191,6 +192,130 @@ class RpcSourceScannerTest {
         MojoFailureException failure = assertThrows(MojoFailureException.class,
                 () -> new RpcSourceScanner().scan(java.util.List.of(source)));
         assertTrue(failure.getMessage().contains("requires @ProtoField"));
+    }
+
+    @Test
+    void generatesSharedNestedRecordAndCodecAcrossProtoGroups() throws Exception {
+        Path source = sourceDirectory();
+        createDirectories(source.resolve("shared"));
+        writeString(source.resolve("sample/ProtoField.java"), """
+                package sample;
+                public @interface ProtoField { int number(); }
+                """);
+        writeString(source.resolve("shared/Profile.java"), """
+                package shared;
+                import sample.ProtoField;
+                public record Profile(@ProtoField(number = 2) byte[] avatar,
+                                      @ProtoField(number = 1) String displayName,
+                                      @ProtoField(number = 3) int rank) {}
+                """);
+        writeString(source.resolve("sample/Contracts.java"), """
+                package sample;
+                import shared.Profile;
+                @interface Rpc {
+                    enum Kind { MESSAGE, INTERNAL }
+                    Kind kind() default Kind.MESSAGE;
+                    int number() default 0;
+                }
+                @interface Roles { String value(); }
+                @Roles("gateway") interface S2C {}
+                @Roles("logic") interface PlayerMessage {}
+                @Rpc(kind = Rpc.Kind.MESSAGE, number = 1)
+                record Request(@ProtoField(number = 2) Integer count,
+                               @ProtoField(number = 1) Profile profile) implements PlayerMessage {}
+                @Rpc(kind = Rpc.Kind.MESSAGE, number = 2)
+                record Response(@ProtoField(number = 1) Profile profile) implements S2C {}
+                """);
+
+        RpcModel model = new RpcSourceScanner().scan(java.util.List.of(source));
+        assertEquals(1, model.nestedMessages().size());
+        assertEquals("shared.Profile", model.messages().getFirst().fields().get(1).javaType());
+        Path target = temporaryDirectory.resolve("target");
+        new RpcArtifactGenerator().generate(model, target.resolve("proto"), target.resolve("java"),
+                "game.message", "com.game.protocol.pb", "com.game.message.rpc");
+        String nestedProto = java.nio.file.Files.readString(target.resolve("proto/rpc_nested.proto"));
+        String playerProto = java.nio.file.Files.readString(target.resolve("proto/PlayerMessages.proto"));
+        String s2cProto = java.nio.file.Files.readString(target.resolve("proto/S2Cs.proto"));
+        String codec = java.nio.file.Files.readString(target.resolve("java/com/game/message/rpc/GeneratedRpcCodec.java"));
+        assertEquals(1, nestedProto.split("message NestedProfile", -1).length - 1);
+        assertTrue(nestedProto.contains("optional string display_name = 1;"));
+        assertTrue(nestedProto.contains("optional bytes avatar = 2;"));
+        assertTrue(nestedProto.contains("optional int32 rank = 3;"));
+        assertTrue(playerProto.contains("import \"rpc_nested.proto\";"));
+        assertTrue(s2cProto.contains("import \"rpc_nested.proto\";"));
+        assertTrue(playerProto.contains("NestedProfile profile = 1;"));
+        assertTrue(playerProto.contains("optional int32 count = 2;"));
+        assertTrue(codec.contains("builder.setProfile(encodeNestedProfile(dto.profile()));"));
+        assertTrue(codec.contains("payload.hasProfile() ? decodeNestedProfile(payload.getProfile()) : null"));
+        assertTrue(codec.contains("new sample.Request(payload.hasCount() ? payload.getCount() : null, payload.hasProfile() ? decodeNestedProfile(payload.getProfile()) : null)"));
+        assertTrue(codec.contains("private static com.game.protocol.pb.NestedProfile encodeNestedProfile(shared.Profile dto)"));
+        assertTrue(codec.contains("com.google.protobuf.ByteString.copyFrom(dto.avatar())"));
+        assertTrue(codec.contains("payload.getAvatar().toByteArray()"));
+        assertTrue(codec.contains("new shared.Profile(payload.hasAvatar() ? payload.getAvatar().toByteArray() : null, payload.hasDisplayName() ? payload.getDisplayName() : null, payload.getRank())"));
+    }
+
+    @Test
+    void rejectsUnsupportedNestedFieldTypesAndDuplicateNumbers() throws Exception {
+        Path source = sourceDirectory();
+        writeString(source.resolve("sample/Contracts.java"), """
+                package sample;
+                @interface ProtoField { int number(); }
+                @interface Rpc { enum Kind { MESSAGE } Kind kind(); int number(); }
+                record Profile(@ProtoField(number = 1) String name,
+                               @ProtoField(number = 1) Long id) {}
+                @Rpc(kind = Rpc.Kind.MESSAGE, number = 1) record Request(@ProtoField(number = 1) Profile profile) {}
+                """);
+        MojoFailureException duplicate = assertThrows(MojoFailureException.class,
+                () -> new RpcSourceScanner().scan(java.util.List.of(source)));
+        assertTrue(duplicate.getMessage().contains("Invalid or duplicate ProtoField number for sample.Profile"));
+
+        writeString(source.resolve("sample/Contracts.java"), """
+                package sample;
+                @interface ProtoField { int number(); }
+                @interface Rpc { enum Kind { MESSAGE } Kind kind(); int number(); }
+                record Profile(@ProtoField(number = 1) java.util.List<String> names) {}
+                @Rpc(kind = Rpc.Kind.MESSAGE, number = 1) record Request(@ProtoField(number = 1) Profile profile) {}
+                """);
+        MojoFailureException unsupported = assertThrows(MojoFailureException.class,
+                () -> new RpcSourceScanner().scan(java.util.List.of(source)));
+        assertTrue(unsupported.getMessage().contains("Unsupported @ProtoField type"));
+
+        writeString(source.resolve("sample/Contracts.java"), """
+                package sample;
+                @interface ProtoField { int number(); }
+                @interface Rpc { enum Kind { MESSAGE } Kind kind(); int number(); }
+                record Detail(@ProtoField(number = 1) String name) {}
+                record Profile(@ProtoField(number = 1) Detail detail) {}
+                @Rpc(kind = Rpc.Kind.MESSAGE, number = 1) record Request(@ProtoField(number = 1) Profile profile) {}
+                """);
+        MojoFailureException depth = assertThrows(MojoFailureException.class,
+                () -> new RpcSourceScanner().scan(java.util.List.of(source)));
+        assertTrue(depth.getMessage().contains("Unsupported nested @ProtoField depth"));
+
+        writeString(source.resolve("sample/Contracts.java"), """
+                package sample;
+                @interface ProtoField { int number(); }
+                @interface Rpc { enum Kind { MESSAGE } Kind kind(); int number(); }
+                @Rpc(kind = Rpc.Kind.MESSAGE, number = 2)
+                record Profile(@ProtoField(number = 1) String name) {}
+                @Rpc(kind = Rpc.Kind.MESSAGE, number = 1)
+                record Request(@ProtoField(number = 1) Profile profile) {}
+                """);
+        MojoFailureException rpcReference = assertThrows(MojoFailureException.class,
+                () -> new RpcSourceScanner().scan(java.util.List.of(source)));
+        assertTrue(rpcReference.getMessage().contains("Unsupported @ProtoField type"));
+
+        writeString(source.resolve("sample/Contracts.java"), """
+                package sample;
+                @interface ProtoField { int number(); }
+                @interface Rpc { enum Kind { MESSAGE } Kind kind(); int number(); }
+                @Rpc(kind = Rpc.Kind.MESSAGE, number = 1)
+                record Request(@ProtoField(number = 1) String name,
+                               @ProtoField(number = 1) int rank) {}
+                """);
+        MojoFailureException rootDuplicate = assertThrows(MojoFailureException.class,
+                () -> new RpcSourceScanner().scan(java.util.List.of(source)));
+        assertTrue(rootDuplicate.getMessage().contains("Invalid or duplicate ProtoField number for sample.Request"));
     }
 
     private Path sourceDirectory() throws Exception {

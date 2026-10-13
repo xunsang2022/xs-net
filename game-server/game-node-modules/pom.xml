@@ -170,6 +170,26 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>com.xs</groupId>
+                <artifactId>xs-net-rpc-maven-plugin</artifactId>
+                <version>0.0.6</version>
+                <configuration>
+                    <sourceDirectories>
+                        <sourceDirectory>${project.basedir}/src/main/java</sourceDirectory>
+                        <sourceDirectory>${project.basedir}/../game-message-action/src/main/java</sourceDirectory>
+                    </sourceDirectories>
+                    <convertersOnly>true</convertersOnly>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>generate-proto-converters</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
                 <configuration>

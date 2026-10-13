@@ -8,8 +8,7 @@ import com.game.message.annotation.Rpc;
 @Rpc(kind = Rpc.Kind.MESSAGE, number = 1002)
 public record LoginResponse(
         @ProtoField(number = 1) Integer result,
-        @ProtoField(number = 2) String playerId,
-        @ProtoField(number = 3) String playerName,
-        @ProtoField(number = 4) String token
+        @ProtoField(number = 2) String token,
+        @ProtoField(number = 3) PlayerInfoData playerInfo
 ) implements S2C {
 }

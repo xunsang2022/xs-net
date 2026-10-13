@@ -29,4 +29,22 @@ public final class GeneratedRpcCodec {
     }
 
 #end
+#foreach($message in ${nestedMessages})
+
+    private static ${protoJavaPackage}.${message.name} encode${message.name}(${message.dtoType} dto) {
+        ${protoJavaPackage}.${message.name}.Builder builder = ${protoJavaPackage}.${message.name}.newBuilder();
+#foreach($field in ${message.fields})
+#if($field.primitive)
+        ${field.setter}
+#else
+        if (dto.${field.name}() != null) { ${field.setter} }
+#end
+#end
+        return builder.build();
+    }
+
+    private static ${message.dtoType} decode${message.name}(${protoJavaPackage}.${message.name} payload) {
+        return new ${message.dtoType}(${message.decodeArgs});
+    }
+#end
 }

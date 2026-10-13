@@ -6,6 +6,7 @@ import com.game.logic.actor.player.db.PlayerPO;
 import com.game.logic.actor.player.message.FlushDirty;
 import com.game.logic.context.LogicContext;
 import com.game.logic.redis.RedisStore;
+import com.game.message.convert.GeneratedProtoConverters;
 import com.game.message.actor.S2C;
 import com.game.message.actor.gateway.GatewayControlMessage;
 import com.game.message.actor.logic.PlayerMessage;
@@ -16,6 +17,7 @@ import com.game.message.management.GmKickPlayerCommand;
 import com.game.message.routing.ChannelRoutable;
 import com.game.message.s2c.LoginResponse;
 import com.game.message.s2c.LogoutResponse;
+import com.game.message.s2c.PlayerInfoData;
 import com.xs.kernel.actor.ActorServices;
 import com.xs.kernel.actor.SimpleActorServer;
 import lombok.extern.slf4j.Slf4j;
@@ -107,7 +109,7 @@ public final class PlayerInfo extends SimpleActorServer<PlayerMessage, PlayerPO>
         markOnlineFields();
         online = true;
         LogicContext.getRedisStore().saveRedis(data);
-        sendLoginResponse(Long.parseLong(request.playerId()), data.getName(), request.channelId());
+        sendLoginResponse(request.channelId());
         return Behaviors.same();
     }
 
@@ -170,14 +172,13 @@ public final class PlayerInfo extends SimpleActorServer<PlayerMessage, PlayerPO>
     }
 
     /** 向玩家当前频道发送登录成功响应。 */
-    private void sendLoginResponse(Long playerId, String playerName, String channelId) {
+    private void sendLoginResponse(String channelId) {
         if (channelId == null || channelId.isBlank()) {
-            log.warn("Cannot send SC_Login without channelId: playerId={}", playerId);
+            log.warn("Cannot send SC_Login without channelId: playerId={}", data.getId());
             return;
         }
-        LoginResponse response = new LoginResponse(0, String.valueOf(playerId), playerName, null);
-        LogicContext.getRedisStore().saveRedis(data);
-        services.sendRpc(S2C.class, response, channelId);
+        PlayerInfoData playerInfo = GeneratedProtoConverters.toPlayerInfoData(data);
+        services.sendRpc(S2C.class, new LoginResponse(0, null, playerInfo), channelId);
     }
 
     /** 停止脏数据刷新定时器。 */

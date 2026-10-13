@@ -31,6 +31,16 @@ public final class GenerateRpcMojo extends AbstractMojo {
     @Parameter(defaultValue = "com.game.message.rpc")
     private String generatedJavaPackage;
 
+    /** 仅生成 @ProtoRecord 声明的源类型到协议记录类型的转换工具。 */
+    @Parameter(defaultValue = "false")
+    private boolean convertersOnly;
+
+    @Parameter(defaultValue = "com.game.message.convert")
+    private String converterJavaPackage;
+
+    @Parameter(defaultValue = "${project.build.directory}/generated-sources/rpc-converters")
+    private String converterOutputDirectory;
+
     @Parameter(defaultValue = "${project}", readonly = true, required = true)
     private MavenProject project;
 
@@ -40,8 +50,17 @@ public final class GenerateRpcMojo extends AbstractMojo {
             throw new MojoFailureException("Configure at least one RPC source directory");
         }
         try {
-            RpcModel model = new RpcSourceScanner().scan(sourceDirectories.stream().map(Path::of).toList());
-            new RpcArtifactGenerator().generate(model, Path.of(protoOutputDirectory), Path.of(javaOutputDirectory),
+            List<Path> sourcePaths = sourceDirectories.stream().map(Path::of).toList();
+            RpcArtifactGenerator generator = new RpcArtifactGenerator();
+            if (convertersOnly) {
+                List<ConverterModel> converters = new RpcSourceScanner().scanConverters(sourcePaths);
+                generator.generateConverters(converters, Path.of(converterOutputDirectory), converterJavaPackage);
+                project.addCompileSourceRoot(converterOutputDirectory);
+                getLog().info("Generated " + converters.size() + " proto converters");
+                return;
+            }
+            RpcModel model = new RpcSourceScanner().scan(sourcePaths);
+            generator.generate(model, Path.of(protoOutputDirectory), Path.of(javaOutputDirectory),
                     protoPackage, protoJavaPackage, generatedJavaPackage);
             project.addCompileSourceRoot(javaOutputDirectory);
             getLog().info("Generated " + model.messages().size() + " RPC message definitions");

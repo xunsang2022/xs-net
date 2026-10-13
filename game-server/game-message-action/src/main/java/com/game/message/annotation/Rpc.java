@@ -14,6 +14,8 @@ public @interface Rpc {
 
     enum Kind {
         MESSAGE,
-        INTERNAL
+        INTERNAL,
+        /** 标识 Actor 模型数据，可编解码传输。 */
+        ACTOR_MODEL
     }
 }

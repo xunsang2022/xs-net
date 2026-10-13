@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package game.message;
+
+option java_multiple_files = true;
+option java_package = "com.game.protocol.pb";
+
+// PlayerInfoData = 2102
+message PlayerInfoData {
+  optional int64 id = 1;
+  optional string name = 2;
+  optional string email = 3;
+  optional int32 online = 4;
+  optional int64 last_login_at = 5;
+  optional int64 updated_at = 6;
+  optional int32 version = 7;
+}
