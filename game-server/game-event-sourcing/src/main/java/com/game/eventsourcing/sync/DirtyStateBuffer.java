@@ -116,10 +116,6 @@ public final class DirtyStateBuffer {
         return Math.max(0L, bytes.get());
     }
 
-    public long maxBytes() {
-        return maxBytes;
-    }
-
     private long estimate(DirtyRecord record) {
         // Long.BYTES * 2 = expectedVersion + newVersion 两个 long 字段
         long total = Long.BYTES * 2L;
@@ -133,9 +129,5 @@ public final class DirtyStateBuffer {
             total += entry.getValue() == null ? 0 : entry.getValue().length() * 2L;
         }
         return total;
-    }
-
-    public synchronized DirtyRecord get(RecordKey key) {
-        return records.get(key);
     }
 }

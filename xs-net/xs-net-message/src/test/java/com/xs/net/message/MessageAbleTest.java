@@ -7,7 +7,6 @@ import com.xs.net.message.pb.NetMessage;
 import com.xs.net.message.serializer.NetMessageSerializer;
 import junit.framework.TestCase;
 
-import java.util.Arrays;
 import java.util.List;
 
 public class MessageAbleTest extends TestCase {
@@ -37,22 +36,7 @@ public class MessageAbleTest extends TestCase {
             public List<RpcMessageSpec<? extends MessageLite>> all() {
                 return List.of(spec);
             }
-        }, TestRpcMessage::new);
-    }
-
-    public void testFrameRoundTrip() throws Exception {
-        NetMessage business = NetMessage.newBuilder()
-                .setRpcNum(2000)
-                .setData(ByteString.copyFrom(new byte[]{1, 2, 3}))
-                .build();
-        RpcMessage rpc = new TestRpcMessage(TEST_RPC, business);
-
-        NetMessage wrapped = MessageAble.toNetMessage(rpc);
-        byte[] frame = MessageAble.toNetByteMsg(wrapped);
-        NetMessage parsed = MessageAble.toNetMessage(frame);
-
-        assertEquals(TEST_RPC, parsed.getRpcNum());
-        assertTrue(Arrays.equals(business.toByteArray(), parsed.getData().toByteArray()));
+        });
     }
 
     public void testActionMessageRoundTrip() throws Exception {
@@ -60,9 +44,9 @@ public class MessageAbleTest extends TestCase {
                 .setRpcNum(2000)
                 .setData(ByteString.copyFrom(new byte[]{4, 5, 6}))
                 .build();
-        NetMessage envelope = MessageAble.toNetMessage(new TestRpcMessage(TEST_RPC, business));
+        NetMessage envelope = MessageAble.toNetMessage(new TestRpcMessage(TEST_RPC, business), MessageAble.registry());
 
-        Object action = MessageAble.toActionMessage(envelope);
+        Object action = MessageAble.toActionMessage(envelope, MessageAble.registry(), TestRpcMessage::new);
         assertTrue(action instanceof RpcMessage);
         RpcMessage rpc = (RpcMessage) action;
         assertEquals(TEST_RPC, rpc.rpcNum());
@@ -141,7 +125,7 @@ public class MessageAbleTest extends TestCase {
                 .setRpcNum(2000)
                 .setData(ByteString.copyFrom(new byte[]{7, 8, 9}))
                 .build();
-        NetMessage envelope = MessageAble.toNetMessage(new TestRpcMessage(TEST_RPC, business));
+        NetMessage envelope = MessageAble.toNetMessage(new TestRpcMessage(TEST_RPC, business), MessageAble.registry());
         NetMessageSerializer serializer = new NetMessageSerializer();
 
         Object decoded = serializer.fromBinary(serializer.toBinary(envelope));

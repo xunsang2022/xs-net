@@ -3,6 +3,7 @@ package com.game.gateway.netty;
 import com.game.comment.util.JwtUtil;
 import com.game.gateway.config.NettyConfig;
 import com.xs.net.message.pb.NetMessage;
+import com.xs.net.transport.PacketId;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
@@ -13,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WebSocketGameHandlerTest {
@@ -35,7 +37,7 @@ class WebSocketGameHandlerTest {
         assertInstanceOf(WebSocketClientEndpoint.class, ChannelRegistry.INSTANCE.get(CHANNEL_ID));
 
         channel.finishAndReleaseAll();
-        assertFalse(ChannelRegistry.INSTANCE.isRegistered(CHANNEL_ID));
+        assertNull(ChannelRegistry.INSTANCE.get(CHANNEL_ID));
     }
 
     @Test
@@ -46,7 +48,7 @@ class WebSocketGameHandlerTest {
         channel.runPendingTasks();
 
         assertFalse(channel.isOpen());
-        assertFalse(ChannelRegistry.INSTANCE.isRegistered(CHANNEL_ID));
+        assertNull(ChannelRegistry.INSTANCE.get(CHANNEL_ID));
     }
 
     @Test
@@ -68,7 +70,7 @@ class WebSocketGameHandlerTest {
     }
 
     private static BinaryWebSocketFrame hello(String value) {
-        return new BinaryWebSocketFrame(NettyFramer.encodeHello(42,
+        return new BinaryWebSocketFrame(NettyFramer.encode(PacketId.HELLO, 0, 42,
                 value.getBytes(StandardCharsets.UTF_8)));
     }
 

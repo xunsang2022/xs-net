@@ -149,16 +149,6 @@ public final class UdpReliableLayer {
         }
     }
 
-    /** 当前在途未确认数量。 */
-    public int outstanding() {
-        return inFlight.size();
-    }
-
-    /** 收到任意对端包后刷新存活（配合心跳/空闲清理）。 */
-    public long lastSeenMs(LongSupplier nowMs) {
-        return nowMs.getAsLong();
-    }
-
     public record Packet(byte type, long seq, long random, byte[] payload) {
     }
 }

@@ -3,10 +3,22 @@ package ${converterPackage};
 /** 由 @ProtoRecord 声明自动生成的协议数据转换工具。 */
 public final class GeneratedProtoConverters {
     private GeneratedProtoConverters() {}
+
+    static {
+        register();
+    }
 #foreach($converter in ${converters})
 
     public static ${converter.targetType} ${converter.methodName}(${converter.sourceType} source) {
         return new ${converter.targetType}(${converter.args});
     }
 #end
+
+    /** 向框架注册模型到协议记录的转换。 */
+    public static void register() {
+#foreach($converter in ${converters})
+        com.xs.kernel.model.VoConverters.register(${converter.sourceType}.class, ${converter.targetType}.class,
+                source -> ${converter.methodName}((${converter.sourceType}) source));
+#end
+    }
 }

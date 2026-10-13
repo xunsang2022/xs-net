@@ -41,10 +41,6 @@ public final class BattleExecutorPool implements AutoCloseable {
         Metrics.gauge("battle.executor.active_lanes", activeLanes);
     }
 
-    public BattleExecutorConfig config() {
-        return config;
-    }
-
     public BattleRuntime activate(String battleId) {
         Objects.requireNonNull(battleId, "battleId");
         if (!accepting.get()) {
@@ -58,10 +54,6 @@ public final class BattleExecutorPool implements AutoCloseable {
 
     public BattleRuntime find(String battleId) {
         return runtimes.get(battleId);
-    }
-
-    public int activeLanes() {
-        return activeLanes.get();
     }
 
     public BattleSubmissionResult submit(String battleId, Object command, RequestContext context) {

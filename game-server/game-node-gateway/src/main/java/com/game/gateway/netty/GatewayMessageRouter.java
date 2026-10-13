@@ -27,16 +27,8 @@ public final class GatewayMessageRouter {
     private final IngressAdmissionController admission = new IngressAdmissionController(4096);
     private final Map<String, IngressAdmissionController> connectionAdmissions = new ConcurrentHashMap<>();
 
-    public void route(byte[] body) throws Exception {
-        route(NetMessage.parseFrom(body));
-    }
-
     public void route(byte[] body, String authenticatedChannelId) throws Exception {
         route(NetMessage.parseFrom(body), authenticatedChannelId);
-    }
-
-    public void route(NetMessage netMessage) throws Exception {
-        route(netMessage, RequestContext.from(netMessage));
     }
 
     public void route(NetMessage netMessage, String authenticatedChannelId) throws Exception {
@@ -103,18 +95,6 @@ public final class GatewayMessageRouter {
             return;
         }
         AkkaKit.tell(GameRpcMessages.INSTANCE, PlayerMessage.class, (PlayerMessage) actionMessage, playerId, context);
-    }
-
-    static String authenticatedChannelId(RequestContext context, String clientChannelId) {
-        if (context != null && context.channelId() != null && !context.channelId().isBlank()) {
-            return context.channelId();
-        }
-        return clientChannelId;
-    }
-
-    /** Compatibility entry point for authentication handlers during route migration. */
-    static String extractPlayerId(Class<?> type, Object payload) {
-        return com.xs.net.message.RouteValueExtractors.playerId().extract(payload);
     }
 
 }

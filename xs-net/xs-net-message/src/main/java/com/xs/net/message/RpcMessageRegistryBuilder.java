@@ -3,7 +3,6 @@ package com.xs.net.message;
 import com.google.protobuf.MessageLite;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,18 +34,6 @@ public final class RpcMessageRegistryBuilder {
         if (spec.dtoClass() != null) {
             registerUnique(byDtoClass, spec.dtoClass(), spec, "dto class");
         }
-        return this;
-    }
-
-    /**
-     * 批量注册RPC消息规范。
-     *
-     * @param specs RPC消息规范集合
-     * @return 当前构建器实例
-     */
-    public RpcMessageRegistryBuilder registerAll(Collection<? extends RpcMessageSpec<? extends MessageLite>> specs) {
-        Objects.requireNonNull(specs, "specs");
-        specs.forEach(this::register);
         return this;
     }
 

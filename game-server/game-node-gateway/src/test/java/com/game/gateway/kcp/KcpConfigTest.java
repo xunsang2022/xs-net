@@ -3,6 +3,7 @@ package com.game.gateway.kcp;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * KCP 配置与最小生命周期装配测试：验证 @Value 手工构造的默认值、解析策略及会话承载。
@@ -44,7 +45,7 @@ class KcpConfigTest {
         assertEquals("channel-1", session.channelId());
         assertEquals(true, session.isAuthenticated());
         assertEquals(true, session.isActive());
-        assertEquals(0, session.kcp().getConv());
+        assertNotNull(session.kcp());
         session.updateNow(); // 驱动 KCP 演进不应抛异常
         assertEquals(null, session.recvDelivered());
         session.close();

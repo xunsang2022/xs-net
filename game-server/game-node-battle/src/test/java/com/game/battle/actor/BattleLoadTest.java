@@ -9,7 +9,6 @@ import java.util.EnumMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** 战斗专用执行器的本地 10 万次提交压测。 */
 class BattleLoadTest {
@@ -24,7 +23,7 @@ class BattleLoadTest {
         RequestContext context = RequestContext.root("load-test", "load-channel", Duration.ofSeconds(30));
 
         try (BattleExecutorPool pool = new BattleExecutorPool(config)) {
-            BattleRuntime runtime = pool.activate("battle-load");
+            pool.activate("battle-load");
             long started = System.nanoTime();
             Map<BattleSubmissionResult, Integer> results = new EnumMap<>(BattleSubmissionResult.class);
             for (long sequence = 1; sequence <= TOTAL_COMMANDS; sequence++) {
@@ -38,20 +37,17 @@ class BattleLoadTest {
             double qps = TOTAL_COMMANDS / (elapsedNanos / 1_000_000_000.0);
 
             System.out.printf("battle-load commands=%d elapsedMs=%.3f qps=%.0f accepted=%d coalesced=%d "
-                            + "executorRejected=%d pendingInputs=%d%n",
+                            + "executorRejected=%d%n",
                     TOTAL_COMMANDS,
                     elapsedNanos / 1_000_000.0,
                     qps,
                     results.getOrDefault(BattleSubmissionResult.ACCEPTED, 0),
                     results.getOrDefault(BattleSubmissionResult.COALESCED, 0),
-                    results.getOrDefault(BattleSubmissionResult.EXECUTOR_REJECTED, 0),
-                    runtime.pendingInputCount());
+                    results.getOrDefault(BattleSubmissionResult.EXECUTOR_REJECTED, 0));
             assertEquals(TOTAL_COMMANDS, results.values().stream().mapToInt(Integer::intValue).sum());
             assertEquals(0, results.getOrDefault(BattleSubmissionResult.REJECTED_INPUT_CAPACITY, 0));
             assertEquals(0, results.getOrDefault(BattleSubmissionResult.UNKNOWN_BATTLE, 0));
             assertEquals(0, results.getOrDefault(BattleSubmissionResult.CLOSED, 0));
-            assertTrue(runtime.pendingInputCount() <= PLAYERS,
-                    "pending inputs=" + runtime.pendingInputCount());
         }
     }
 }

@@ -38,7 +38,7 @@ length(4) | packetId(2) | sendSeq(4) | random(4) | headCRC(2) | bodyCRC(2) | bod
 
 ## Spring 集成
 
-`xs-net-core` 提供 `GameFrameworkAutoConfiguration`：
+`xs-net-kernel` 提供 `GameFrameworkAutoConfiguration`：
 
 - `@EnableConfigurationProperties(GameFrameworkProperties)`，绑定 `game.framework.*`；
 - 创建 `ActorSystem<Void>("game-system")`，在守护者下 spawn `NodeActor`；
@@ -128,6 +128,7 @@ SDK 不维护为仓库根目录下的独立工程，而是由 `xs-net/xs-net-sdk
 | 需求 | 受支持的接入点 |
 | --- | --- |
 | 新增业务协议 | `@Rpc`/`@ProtoField` record + Actor 单参数处理方法 |
+| 让模型数据进协议 | `@ProtoRecord(classType, number)` + 字段级 `@ProtoField`（插件生成协议记录与转换代码） |
 | 新增角色/节点类型 | `@Roles` 接口 + `RpcActor<Role>` + 新节点的 `application.conf` 角色声明 |
 | 新增传输 | `game-node-gateway` 内新增 Server + 认证 Handler + `ClientEndpoint` 实现 |
 | 绕过分片邮箱的快速路径 | `AkkaKit.registerDeliveryInterceptor(roleClass, interceptor)` |

@@ -33,8 +33,4 @@ public final class IngressAdmissionController {
     public int inFlight() {
         return inFlight.get();
     }
-
-    public int maxInFlight() {
-        return maxInFlight;
-    }
 }

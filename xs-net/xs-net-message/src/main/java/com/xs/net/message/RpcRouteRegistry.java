@@ -62,19 +62,4 @@ public final class RpcRouteRegistry {
     public List<RpcRouteDescriptor> all() {
         return routes;
     }
-
-    /**
-     * 获取指定RPC编号的路由描述符，如果不存在则抛出异常。
-     *
-     * @param rpcNum RPC编号
-     * @return 路由描述符
-     * @throws IllegalArgumentException 如果路由不存在
-     */
-    public RpcRouteDescriptor require(int rpcNum) {
-        RpcRouteDescriptor route = find(rpcNum);
-        if (route == null) {
-            throw new IllegalArgumentException("Unknown RPC route: " + rpcNum);
-        }
-        return route;
-    }
 }

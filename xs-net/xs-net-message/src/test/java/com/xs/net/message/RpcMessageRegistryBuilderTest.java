@@ -40,11 +40,6 @@ public class RpcMessageRegistryBuilderTest extends TestCase {
         assertEquals("127.0.0.1", spec.decode(NetMessage.newBuilder().setUserIp("127.0.0.1").build()));
         assertEquals("127.0.0.1", spec.encode("127.0.0.1").getUserIp());
         try {
-            assertEquals(null, spec.handler().invoke(new TestActor(), "127.0.0.1"));
-        } catch (Exception exception) {
-            fail(exception.getMessage());
-        }
-        try {
             registry.all().add(spec);
             fail("registry must be immutable");
         } catch (UnsupportedOperationException expected) {
@@ -60,16 +55,6 @@ public class RpcMessageRegistryBuilderTest extends TestCase {
             fail("duplicate rpc number must be rejected");
         } catch (IllegalArgumentException expected) {
             assertTrue(expected.getMessage().contains("rpc number"));
-        }
-    }
-
-    public void testInvokesHandlerOnActorComponent() {
-        RpcHandlerMetadata metadata = new RpcHandlerMetadata(
-                ComponentActor.class.getName(), "component", "handle", String.class, String.class);
-        try {
-            assertEquals("handled: request", metadata.invoke(new ComponentActor(), "request"));
-        } catch (Exception exception) {
-            fail(exception.getMessage());
         }
     }
 
@@ -94,16 +79,6 @@ public class RpcMessageRegistryBuilderTest extends TestCase {
 
     private static final class TestActor {
         private void handle(String request) {
-        }
-    }
-
-    private static final class ComponentActor {
-        private final Component component = new Component();
-    }
-
-    private static final class Component {
-        private String handle(String request) {
-            return "handled: " + request;
         }
     }
 }

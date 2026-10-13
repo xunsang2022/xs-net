@@ -16,12 +16,12 @@ tags: [xs-net, architecture, pekko, netty, redis]
 ```text
 xs-net-tools (tool-all = tool-commons-lang4 + tool-luBan-cfg)
 xs-net-message        NetMessage 信封、RPC 契约、注册表、请求上下文
-  -> xs-net-core      Pekko / Cluster Sharding 封装、RpcActor、NodeActor、Spring 自动配置
+  -> xs-net-kernel     Pekko / Cluster Sharding 封装、RpcActor、NodeActor、XsModel 模型契约、Spring 自动配置
   -> xs-net-transport 传输抽象（FrameCodec / TransportAdapter / TransportSession / 准入控制）
 
 xs-net-rpc-maven-plugin  JavaParser 扫描 + Velocity 模板：生成 proto、注册表、路由表、SDK
 xs-net-sdk               统一 SDK 生成模块（仅打包与生成，不含运行时代码）
-xs-net-all               聚合包，导出 xs-net-core + xs-net-transport
+xs-net-all               聚合包，导出 xs-net-kernel + xs-net-transport
 
 game-server
   game-comment           JwtUtil 等公共工具
@@ -34,7 +34,7 @@ game-server
 
 框架层不感知 Netty：`xs-net-transport` 只定义 `FrameCodec`、`TransportAdapter`、`TransportSession`、`TransportMessageHandler`、`BackpressureDecision`、`IngressAdmissionController` 等契约。TCP/WebSocket/UDP/KCP 的具体实现全部在 `game-node-gateway` 内，因为它们绑定了具体的会话与认证语义。
 
-业务协议的唯一来源是 `game-message-action` 中的 Java record。scanner 源码目录同时配置了 `game-message-action`、`game-node-modules`、`game-node-battle`，因此 Actor 里的处理方法也参与协议生成。
+业务协议的声明来源是注解：`game-message-action` 中的 Java record，以及 `game-node-modules` 中标注 `@ProtoRecord` 的模型类（其 `@ProtoField` 字段会被生成成协议记录）。scanner 源码目录同时配置了 `game-message-action`、`game-node-modules`、`game-node-battle`，因此 Actor 里的处理方法也参与协议生成。
 
 ## 运行角色
 

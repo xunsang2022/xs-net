@@ -87,10 +87,6 @@ public class AkkaKit {
         tellToRole(registry, actorCmdClass, message, entityId, context);
     }
 
-    public static void tellRpc(Class<?> roleClass, RpcMessage message, String entityId) {
-        tell(MessageAble.registry(), roleClass, message, entityId);
-    }
-
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static void tellToRole(
             RpcMessageRegistry registry,
@@ -159,11 +155,6 @@ public class AkkaKit {
                 .withRole(roles)
                 .withEntityProps(Props.empty().withDispatcherFromConfig(ENTITY_DISPATCHER)));
         log.info("初始化集群Actor代理 {} {}", actorCmdClass.getSimpleName(), roles);
-    }
-
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    public static void initClusterSharding(ClusterSharding sharding, Class<?> actorCmdClass, Class<?> actorClass, String roles) {
-        initClusterSharding(sharding, actorCmdClass, actorClass, roles, ENTITY_DISPATCHER);
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})

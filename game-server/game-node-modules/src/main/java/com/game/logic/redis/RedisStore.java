@@ -44,66 +44,6 @@ public class RedisStore {
         return PLAYER_KEY_PREFIX + playerId;
     }
 
-    public boolean exists(String playerId) {
-        return Boolean.TRUE.equals(redis.hasKey(playerKey(playerId)));
-    }
-
-    public Map<String, String> load(String playerId) {
-        Map<?, ?> entries = playerHash().entries(playerKey(playerId));
-        Map<String, String> result = new HashMap<>();
-        for (Map.Entry<?, ?> entry : entries.entrySet()) {
-            result.put(String.valueOf(entry.getKey()), textValue(entry.getValue()));
-        }
-        return result;
-    }
-
-    public boolean create(String playerId, PlayerPO state) {
-        if (playerRedis == null) {
-            return create(playerId, state.toHash());
-        }
-        putHash(playerKey(playerId), playerHashMapper.toHash(state));
-        registerOnline(playerId);
-        return true;
-    }
-
-    public boolean create(String playerId, Map<String, String> fields) {
-        putHash(playerKey(playerId), playerRedis == null
-                ? fields
-                : playerHashMapper.toHash(playerHashMapper.fromStringHash(fields)));
-        registerOnline(playerId);
-        return true;
-    }
-
-    public boolean flushDirty(String playerId, PlayerPO state) {
-        if (playerRedis == null) {
-            return flushDirty(playerId, state.toHash(state.getDirtyFields()));
-        }
-        Map<String, Object> dirty = playerHashMapper.toHash(state, state.getDirtyFields());
-        if (dirty.isEmpty()) {
-            return true;
-        }
-        putHash(playerKey(playerId), dirty);
-        return true;
-    }
-
-    public boolean flushDirty(String playerId, Map<String, String> dirty) {
-        if (dirty.isEmpty()) {
-            return true;
-        }
-        putHash(playerKey(playerId), playerRedis == null
-                ? dirty
-                : playerHashMapper.toHash(playerHashMapper.fromStringHash(dirty)));
-        return true;
-    }
-
-    public boolean destroy(String playerId, PlayerPO state) {
-        return deletePlayerCache(playerId);
-    }
-
-    public boolean destroy(String playerId, Map<String, String> fields) {
-        return deletePlayerCache(playerId);
-    }
-
     /** 删除玩家状态缓存及其索引；数据库快照由 DBSyncEngine 异步持久化。 */
     public boolean deletePlayerCache(String playerId) {
         redis.delete(playerKey(playerId));
@@ -121,11 +61,6 @@ public class RedisStore {
         }
         state.clearDirtyMatching(state.toHash());
         return true;
-    }
-
-    private void registerOnline(String playerId) {
-        redis.opsForSet().add(PLAYER_IDX_KEY, playerId);
-        redis.opsForSet().add(PLAYER_ONLINE_KEY, playerId);
     }
 
     @SuppressWarnings("unchecked")

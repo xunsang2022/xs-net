@@ -21,11 +21,6 @@ public final class NettyFramer {
     private NettyFramer() {
     }
 
-    /** Encode a data packet with a zero logical-session id for codec compatibility. */
-    public static ByteBuf encode(NetMessage message) {
-        return encode(PacketId.DATA, 0, 0, message.toByteArray());
-    }
-
     public static ByteBuf encode(int packetId, long sendSeq, long random, byte[] body) {
         return Unpooled.wrappedBuffer(PacketCodec.encode(packetId, sendSeq, random, body));
     }
@@ -36,16 +31,8 @@ public final class NettyFramer {
         return PacketCodec.decode(bytes);
     }
 
-    public static ByteBuf encodeHello(long random, byte[] body) {
-        return encode(PacketId.HELLO, 0, random, body);
-    }
-
     public static ByteBuf encodeAck(long random, long sendSeq) {
         return encode(PacketId.ACK, sendSeq, random, new byte[0]);
-    }
-
-    public static ByteBuf encodeHeartbeat(long random, long sendSeq) {
-        return encode(PacketId.HEARTBEAT, sendSeq, random, new byte[0]);
     }
 
     public static ByteBuf encodeData(long random, long sendSeq, NetMessage message) {

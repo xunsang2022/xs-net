@@ -114,7 +114,7 @@ length(4) | packetId(2) | sendSeq(4) | random(4) | headCRC(2) | bodyCRC(2) | bod
 ## C2S 上行路由
 
 ```text
-GatewayMessageRouter.route(netMessage, authenticatedChannelId)
+GatewayMessageRouter.route(body, channelId)
   -> 准入：全局 4096 在途 + 每 channelId 256 在途；任一失败则
          记录 gateway.ingress.rejected{reason=capacity} 并直接丢弃
   -> routes.find(rpcNum)：未知编号仅打印 WARN 后返回
@@ -159,9 +159,11 @@ DatabaseLoadResult（为空或出错）
   -> cancel 超时定时器 -> failLoading -> stash.clear -> Actor 停止
 
 InitialRedisWriteResult（成功）
-  -> cancel 超时定时器 -> state.clearDirty -> markOnline
+  -> cancel 超时定时器 -> clearDirtyMatching -> markOnline
   -> stateSync.startFlushTimer()
-  -> sendLoginResponse：LoginResponse -> S2C -> sendRpc(S2C.class, resp, pendingChannelId)
+  -> onLoginMessage 内联发送：data.toVo() 转出协议记录
+                        LoginResponse(result, token, playerInfo) -> S2C
+                        -> sendRpc(resp, pendingChannelId)
   -> recordLoginLogicTotal
   -> stash.unstashAll(Behaviors.same())
 
@@ -174,7 +176,7 @@ LoadTimeout（加载超过 3 秒）
 ## S2C 下行
 
 ```text
-Logic：services.sendRpc(S2C.class, response, channelId)
+Logic：services.sendRpc(response, channelId)
   -> AkkaKit 校验角色 -> 转 NetMessage -> entityRef.tell
   -> 远端（Gateway）ChannelActor(entityId = channelId)
        -> ChannelRegistry.get(channelId) -> ClientEndpoint
@@ -210,9 +212,9 @@ POST /admin/gm/kick  (X-GM-Token)
   -> GMActor.onKickPlayer
        -> Redis 审计写入（RedisStore.writeLog，走 redis-io-executor）
        -> AuditResult 失败（含异常）-> 直接拒绝，不执行踢出（fail-closed）
-       -> 成功 -> sendRpc(PlayerMessage.class, GmKickPlayerCommand(3005), playerId)
+       -> 成功 -> sendRpc(GmKickPlayerCommand(3005), playerId)
   -> PlayerActor.onGmKickPlayer
-       -> sendRpc(GatewayControlMessage.class, DisconnectChannelCommand, pendingChannelId)
+       -> sendRpc(DisconnectChannelCommand, pendingChannelId)
        -> beginDestroy()
   -> GatewayControlActor.onDisconnect
        -> ChannelRegistry.remove + endpoint.close -> Actor 停止
@@ -229,12 +231,9 @@ PlayerActor（每 sync-interval-ms，默认 1000ms）
   -> onFlushDirty
        online 且无在途刷写且存在脏字段才执行
        refreshFlushTimerIfNeeded()：读取 LogicContext.getSyncIntervalMs()，支持热更新
-  -> flushDirty：RedisStore.flushDirty(脏字段)          [redis-io-executor]
-  -> RedisFlushResult
-       失败 -> 保留脏字段，下一周期重试
-       成功 -> DBSyncEngine.submit(playerId, 完整快照, version)
-                缓冲区满 -> 返回 false，脏字段保留
-                成功     -> clearDirtyMatching(已写入的字段)
+  -> DBSyncEngine.submit(playerId, 完整快照, version)
+       缓冲区满 -> 返回 false，脏字段保留，下一周期重试
+       成功     -> clearDirtyMatching(已写入的字段)
 
 DBSyncEngine（后台，每 bgsave-seconds，默认 3s）
   -> snapshot(maxDirtyRecords) 过滤终态失败与退避未到期记录
@@ -267,9 +266,14 @@ Java record + @Rpc/@ProtoField（三个 sourceDirectories）
   -> xs-rpc:generate（generate-sources）
        RpcSourceScanner（JavaParser）-> RpcModel
        RpcArtifactGenerator（Velocity）
-         -> src/main/proto/*.proto、rpc_routes.proto、rpc_routes.md、rpc_protocol_validation.txt
+         -> src/main/proto/*.proto（含 ActorModels.proto）、rpc_routes.proto、rpc_routes.md、rpc_protocol_validation.txt
          -> target/generated-sources/rpc：GameRpcMessages / GeneratedRpcCodec / GeneratedRpcHandlers
+         -> target/generated-sources/rpc：@ProtoRecord 派生的协议记录源码
   -> protobuf-maven-plugin 编译 proto -> com.game.protocol.pb
+
+@ProtoRecord(classType, number) 标注的 PO（game-node-modules）
+  -> xs-rpc:generate（convertersOnly = true，game-node-modules 内）
+         -> target/generated-sources/rpc-converters：GeneratedProtoConverters（PO → 协议记录）
 
 scripts/Generate-Sdks.ps1
   -> mvn generate-sources（xs-net-sdk）产出 target/generated-proto

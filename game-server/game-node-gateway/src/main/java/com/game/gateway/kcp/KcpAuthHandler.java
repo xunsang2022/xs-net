@@ -153,8 +153,4 @@ public class KcpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
             }
         }
     }
-
-    public int sessionCount() {
-        return sessions.size();
-    }
 }

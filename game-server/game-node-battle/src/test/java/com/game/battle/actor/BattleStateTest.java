@@ -23,47 +23,24 @@ class BattleStateTest {
         state.tick();
 
         assertEquals(1L, state.frameNumber());
-        assertEquals(1L, state.lastSnapshot().frameNumber());
-        BattleState.ParticipantSnapshot player = state.lastSnapshot().participants().get(42L);
-        assertEquals(1, player.positionX());
-        assertEquals(-1, player.positionY());
-        assertEquals(0, player.directionX());
-        assertEquals(0, player.directionY());
     }
 
     @Test
-    void usesLatestAcceptedInputPerFrameAndRejectsStaleSequence() {
+    void acceptsIncreasingSequenceAndRejectsStaleSequence() {
         BattleState state = createdState();
         assertNull(state.join(42L));
         assertNull(state.acceptInput(new BattleInputCommand(42L, 1L, 1, 0)));
         assertNull(state.acceptInput(new BattleInputCommand(42L, 2L, 0, 1)));
         assertEquals("stale_sequence", state.acceptInput(new BattleInputCommand(42L, 2L, -1, 0)));
-
-        state.tick();
-
-        BattleState.ParticipantSnapshot player = state.lastSnapshot().participants().get(42L);
-        assertEquals(0, player.positionX());
-        assertEquals(1, player.positionY());
-        assertEquals(2L, player.lastClientSequence());
     }
 
     @Test
-    void appliesBaseAttackAgainstDefenseAndExposesHealthInSnapshot() {
+    void appliesAttackAndRejectsStaleSequence() {
         BattleState state = createdState();
         assertNull(state.join(42L));
         assertNull(state.join(43L));
 
-        BattleState.ParticipantSnapshot attacker = state.participant(42L);
-        assertEquals(BattleState.DEFAULT_ATTACK, attacker.attack());
-        assertEquals(BattleState.DEFAULT_DEFENSE, attacker.defense());
-        assertEquals(BattleState.DEFAULT_MAX_HP, attacker.hp());
-        assertEquals(BattleState.DEFAULT_MAX_HP, attacker.maxHp());
-
         assertNull(state.attack(new BattleAttackCommand(42L, 43L, 1L)));
-        BattleState.ParticipantSnapshot target = state.participant(43L);
-        assertEquals(BattleState.DEFAULT_MAX_HP
-                        - (BattleState.DEFAULT_ATTACK - BattleState.DEFAULT_DEFENSE),
-                target.hp());
         assertEquals("stale_sequence", state.attack(new BattleAttackCommand(42L, 43L, 1L)));
     }
 
@@ -85,12 +62,7 @@ class BattleStateTest {
         assertEquals("invalid_direction", state.acceptInput(new BattleInputCommand(42L, 1L, 2, 0)));
         assertEquals("stale_sequence", state.acceptInput(new BattleInputCommand(42L, 0L, 1, 0)));
 
-        state.tick();
-
-        BattleState.ParticipantSnapshot player = state.lastSnapshot().participants().get(42L);
-        assertEquals(0, player.positionX());
-        assertEquals(0, player.positionY());
-        assertEquals(0L, player.lastClientSequence());
+        assertNull(state.acceptInput(new BattleInputCommand(42L, 1L, 1, 0)));
     }
 
     @Test

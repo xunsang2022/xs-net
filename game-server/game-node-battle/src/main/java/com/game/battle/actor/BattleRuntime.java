@@ -13,7 +13,6 @@ import io.micrometer.core.instrument.Tags;
 
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -41,8 +40,6 @@ public final class BattleRuntime implements AutoCloseable {
     private final AtomicBoolean retryScheduled = new AtomicBoolean();
     private final AtomicInteger queuedInputs = new AtomicInteger();
     private final AtomicInteger activeDrains = new AtomicInteger();
-    private final AtomicInteger maxConcurrentDrains = new AtomicInteger();
-    private volatile String lastExecutionThreadName;
     private final BattleState state;
     private final Predicate<Runnable> dispatcher;
     private final ScheduledExecutorService ticker;
@@ -65,26 +62,6 @@ public final class BattleRuntime implements AutoCloseable {
         this.state = new BattleState(battleId, MAX_PLAYERS);
         Metrics.gauge("battle.executor.queue_depth", Tags.of("battleId", battleId), this,
                 runtime -> runtime.controls.size() + runtime.queuedInputs.get());
-    }
-
-    public String battleId() {
-        return battleId;
-    }
-
-    public int controlQueueDepth() {
-        return controls.size();
-    }
-
-    public int pendingInputCount() {
-        return latestInputs.size();
-    }
-
-    Set<Long> pendingInputPlayers() {
-        return Set.copyOf(latestInputs.keySet());
-    }
-
-    public long frameNumber() {
-        return state.frameNumber();
     }
 
     BattleSubmissionResult submitControl(Object command, RequestContext context) {
@@ -195,9 +172,7 @@ public final class BattleRuntime implements AutoCloseable {
 
     private void drain() {
         long started = System.nanoTime();
-        int active = activeDrains.incrementAndGet();
-        maxConcurrentDrains.accumulateAndGet(active, Math::max);
-        lastExecutionThreadName = Thread.currentThread().getName();
+        activeDrains.incrementAndGet();
         try {
             int processed = 0;
             while (processed < config.maxInputsPerDrain()) {
@@ -281,22 +256,6 @@ public final class BattleRuntime implements AutoCloseable {
         tickFuture.set(ticker.scheduleAtFixedRate(this::requestTick,
                 config.tickPeriodNanos(), config.tickPeriodNanos(),
                 java.util.concurrent.TimeUnit.NANOSECONDS));
-    }
-
-    int maxConcurrentDrains() {
-        return maxConcurrentDrains.get();
-    }
-
-    boolean isTickPending() {
-        return tickPending.get();
-    }
-
-    boolean accepting() {
-        return accepting.get();
-    }
-
-    String lastExecutionThreadName() {
-        return lastExecutionThreadName;
     }
 
     private void record(String metric, RequestContext context, Long playerId, String reason) {

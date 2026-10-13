@@ -33,10 +33,6 @@ public interface XsModel<M extends XsModel<M>> {
         return xsModelSupport().setProperty(self(), setter, value);
     }
 
-    default void markDirty(String field) {
-        xsModelSupport().markDirty(field);
-    }
-
     default List<String> getDirtyFields() {
         return xsModelSupport().getDirtyFields();
     }
@@ -45,20 +41,8 @@ public interface XsModel<M extends XsModel<M>> {
         return xsModelSupport().hasDirtyFields();
     }
 
-    default void clearDirty() {
-        xsModelSupport().clearDirty();
-    }
-
-    default void clearDirty(Collection<String> fields) {
-        xsModelSupport().clearDirty(fields);
-    }
-
     default void clearDirtyMatching(Map<String, String> persistedFields) {
         xsModelSupport().clearDirtyMatching(persistedFields);
-    }
-
-    default String fieldValue(String field) {
-        return xsModelSupport().fieldValue(field);
     }
 
     default Map<String, String> toHash() {
@@ -84,5 +68,19 @@ public interface XsModel<M extends XsModel<M>> {
     /** 返回用于乐观锁的版本值，默认 0。子类可覆盖。 */
     default long getVersionValue() {
         return 0L;
+    }
+
+    /**
+     * 把模型转换为 {@code @ProtoRecord} 声明的协议记录。
+     *
+     * <p>调用方按目标类型接收，例如 {@code PlayerInfoData info = playerPO.toVo();}。
+     * 转换器由协议生成器生成并注册，未注册时抛出 {@link IllegalStateException}。</p>
+     *
+     * @param <V> 协议记录类型
+     * @return 协议记录
+     */
+    @SuppressWarnings("unchecked")
+    default <V> V toVo() {
+        return (V) xsModelSupport().toVo(self());
     }
 }

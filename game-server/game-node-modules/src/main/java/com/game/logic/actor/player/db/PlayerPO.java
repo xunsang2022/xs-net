@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.game.eventsourcing.persistence.GameModel;
 import com.game.message.annotation.ProtoField;
+import com.game.message.annotation.ProtoRecord;
 import com.xs.kernel.model.RedisKey;
 import lombok.Data;
 import lombok.EqualsAndHashCode;

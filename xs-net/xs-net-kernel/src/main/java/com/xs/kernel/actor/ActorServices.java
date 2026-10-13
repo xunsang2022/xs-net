@@ -1,10 +1,15 @@
 package com.xs.kernel.actor;
 
+import com.xs.kernel.actor.node.Roles;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.ActorContext;
 import org.apache.pekko.japi.function.Function;
 
+import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 为 Actor 内部协作组件提供通用的 Actor 能力桥接。
@@ -24,6 +29,9 @@ public final class ActorServices<M> {
     public interface RpcSender {
         void send(Class<?> roleClass, Object message, String targetEntityId);
     }
+
+    /** 目标角色缓存：按消息类型缓存其 @Roles 接口，避免重复反射扫描。 */
+    private static final Map<Class<?>, Class<?>> ROLE_CACHE = new ConcurrentHashMap<>();
 
     private final ActorContext<M> context;
     private final String entityId;
@@ -50,26 +58,9 @@ public final class ActorServices<M> {
         this.rpcSender = Objects.requireNonNull(rpcSender, "rpcSender");
     }
 
-    /** 返回 Actor 运行上下文。 */
-    public ActorContext<M> context() {
-        return context;
-    }
-
     /** 返回 Actor 实体 ID。 */
     public String entityId() {
         return entityId;
-    }
-
-    /** 为消息处理方法恢复当前 RPC 请求上下文。 */
-    public <T extends M> Function<T, Behavior<M>> contextual(Function<T, Behavior<M>> handler) {
-        Function<T, Behavior<M>> checkedHandler = Objects.requireNonNull(handler, "handler");
-        return message -> contextualizer.contextual(message, ignored -> checkedHandler.apply(message));
-    }
-
-    /** 为消息处理方法恢复当前 RPC 请求上下文（带类型提示）。 */
-    public <T extends M> Function<T, Behavior<M>> contextual(Class<T> type, Function<T, Behavior<M>> handler) {
-        Function<T, Behavior<M>> checkedHandler = Objects.requireNonNull(handler, "handler");
-        return message -> contextualizer.contextual(message, ignored -> checkedHandler.apply(message));
     }
 
     /** 直接为单条消息恢复 RPC 请求上下文并执行处理。 */
@@ -78,11 +69,37 @@ public final class ActorServices<M> {
         return contextualizer.contextual(message, ignored -> checkedHandler.apply(message));
     }
 
-    /** 向目标实体发送 RPC 消息。 */
-    public void sendRpc(Class<?> roleClass, Object message, String targetEntityId) {
-        rpcSender.send(
-                Objects.requireNonNull(roleClass, "roleClass"),
-                Objects.requireNonNull(message, "message"),
-                Objects.requireNonNull(targetEntityId, "targetEntityId"));
+    /** 向目标实体发送 RPC 消息，目标角色取自消息类型实现的 @Roles 接口。 */
+    public void sendRpc(String targetChannelId, Object message) {
+        Class<?> messageType = Objects.requireNonNull(message, "message").getClass();
+        rpcSender.send(roleOf(messageType), message,
+                Objects.requireNonNull(targetChannelId, "targetChannelId"));
+    }
+
+    /** 解析消息类型实现的目标角色接口，必须唯一。 */
+    static Class<?> roleOf(Class<?> messageType) {
+        return ROLE_CACHE.computeIfAbsent(messageType, type -> {
+            Set<Class<?>> roles = new LinkedHashSet<>();
+            collectRoles(type, roles);
+            if (roles.size() != 1) {
+                throw new IllegalArgumentException("Message type must implement exactly one @Roles interface: "
+                        + type.getName() + " -> " + roles);
+            }
+            return roles.iterator().next();
+        });
+    }
+
+    /** 递归收集类及其父类、父接口上标注 @Roles 的接口。 */
+    private static void collectRoles(Class<?> type, Set<Class<?>> roles) {
+        if (type == null) {
+            return;
+        }
+        for (Class<?> implemented : type.getInterfaces()) {
+            if (implemented.isAnnotationPresent(Roles.class)) {
+                roles.add(implemented);
+            }
+            collectRoles(implemented, roles);
+        }
+        collectRoles(type.getSuperclass(), roles);
     }
 }

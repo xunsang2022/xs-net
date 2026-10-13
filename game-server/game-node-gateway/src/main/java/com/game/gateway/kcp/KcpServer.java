@@ -83,8 +83,4 @@ public class KcpServer {
         }
         log.info("KcpServer stopped");
     }
-
-    public KcpAuthHandler authHandler() {
-        return authHandler;
-    }
 }

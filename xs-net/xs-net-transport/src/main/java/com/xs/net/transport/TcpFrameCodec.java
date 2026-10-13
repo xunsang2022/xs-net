@@ -38,10 +38,6 @@ public final class TcpFrameCodec implements FrameCodec {
         return PacketCodec.decode(frame, maxPayloadBytes).body();
     }
 
-    public int maxPayloadBytes() {
-        return maxPayloadBytes;
-    }
-
     private void checkSize(int length) {
         if (length > maxPayloadBytes) {
             throw new IllegalArgumentException("TCP payload exceeds configured maximum: " + length);

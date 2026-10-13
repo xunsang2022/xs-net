@@ -46,15 +46,11 @@ public abstract class RpcActor<M> extends AbstractBehavior<M> {
                 context,
                 entityId,
                 this::contextual,
-                this::sendRpc);
+                this::deliverRpc);
     }
 
     protected final String entityId() {
         return entityId;
-    }
-
-    protected final RpcMessageRegistry registry() {
-        return registry;
     }
 
     protected final RequestContext currentRequestContext() {
@@ -85,7 +81,13 @@ public abstract class RpcActor<M> extends AbstractBehavior<M> {
         });
     }
 
-    protected final void sendRpc(Class<?> roleClass, Object message, String targetEntityId) {
+    /** 向目标实体发送 RPC 消息，目标角色取自消息类型实现的 @Roles 接口。 */
+    protected final void sendRpc(Object message, String targetEntityId) {
+        services.sendRpc(targetEntityId, message);
+    }
+
+    /** 按已解析出的角色投递 RPC 消息。 */
+    private void deliverRpc(Class<?> roleClass, Object message, String targetEntityId) {
         RequestContext context = currentRequestContext();
         AkkaKit.tell(registry, roleClass, message, targetEntityId,
                 context == null ? null : context.nextHop(null));

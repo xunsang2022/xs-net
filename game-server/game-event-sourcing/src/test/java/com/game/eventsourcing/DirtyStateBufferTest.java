@@ -5,11 +5,12 @@ import com.game.eventsourcing.sync.DirtyStateBuffer;
 import com.game.eventsourcing.sync.RecordKey;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DirtyStateBufferTest {
     @Test
@@ -40,12 +41,15 @@ class DirtyStateBufferTest {
         buffer.submit("player", 1L, Map.of("name", "alice"), 1);
         buffer.submit("guild", 1L, Map.of("level", "3"), 1);
 
+        List<DirtyRecord> snapshot = buffer.snapshot(10);
         assertEquals(2, buffer.size(), "同 ID 不同实体类型应各占一条脏记录");
-        assertNotNull(buffer.get(new RecordKey("player", 1L)));
-        assertNotNull(buffer.get(new RecordKey("guild", 1L)));
+        assertTrue(snapshot.stream().anyMatch(r -> r.entityType().equals("player") && r.entityId().equals(1L)));
+        assertTrue(snapshot.stream().anyMatch(r -> r.entityType().equals("guild") && r.entityId().equals(1L)));
 
         buffer.removeIfVersion(new RecordKey("player", 1L), 1);
-        assertNull(buffer.get(new RecordKey("player", 1L)));
-        assertNotNull(buffer.get(new RecordKey("guild", 1L)), "移除 player 不应影响 guild");
+        List<DirtyRecord> remaining = buffer.snapshot(10);
+        assertFalse(remaining.stream().anyMatch(r -> r.entityType().equals("player") && r.entityId().equals(1L)));
+        assertTrue(remaining.stream().anyMatch(r -> r.entityType().equals("guild") && r.entityId().equals(1L)),
+                "移除 player 不应影响 guild");
     }
 }

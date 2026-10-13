@@ -140,8 +140,4 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
             }
         }
     }
-
-    public int sessionCount() {
-        return sessions.size();
-    }
 }

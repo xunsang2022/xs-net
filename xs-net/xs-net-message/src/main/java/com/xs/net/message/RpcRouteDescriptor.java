@@ -58,16 +58,6 @@ public record RpcRouteDescriptor(
     }
 
     /**
-     * 从消息对象中提取频道ID。
-     *
-     * @param message 消息对象
-     * @return 频道ID，如果不需要路由返回null
-     */
-    public String channelId(Object message) {
-        return channelIdExtractor == null ? null : channelIdExtractor.extract(message);
-    }
-
-    /**
      * 获取RPC编号。
      *
      * @return RPC编号
@@ -119,18 +109,5 @@ public record RpcRouteDescriptor(
      */
     public boolean channelRoutingRequired() {
         return spec.channelRoutingRequired();
-    }
-
-    /**
-     * 获取请求DTO类型。
-     *
-     * @return 请求DTO类
-     */
-    public Class<?> requestType() {
-        return spec.dtoClass();
-    }
-
-    public Class<?> responseType() {
-        return spec.handler() == null ? null : spec.handler().responseType();
     }
 }

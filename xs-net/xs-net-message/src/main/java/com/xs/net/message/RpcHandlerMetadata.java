@@ -1,7 +1,5 @@
 package com.xs.net.message;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.Objects;
 
 /**
@@ -51,37 +49,5 @@ public record RpcHandlerMetadata(
      */
     public boolean hasResponse() {
         return responseType != null;
-    }
-
-    /**
-     * 调用RPC处理方法。
-     *
-     * @param actor Actor实例
-     * @param request 请求对象
-     * @return 处理方法返回值
-     * @throws Exception 如果调用失败
-     */
-    public Object invoke(Object actor, Object request) throws Exception {
-        if (!actorType.equals(actor.getClass().getName())) {
-            throw new IllegalArgumentException("RPC actor type mismatch: " + actor.getClass().getName());
-        }
-        if (!requestType.isInstance(request)) {
-            throw new IllegalArgumentException("RPC request type mismatch: " + request.getClass().getName());
-        }
-        Object target = componentField == null ? actor : component(actor);
-        Method method = target.getClass().getDeclaredMethod(methodName, requestType);
-        method.setAccessible(true);
-        return method.invoke(target, request);
-    }
-
-    /** 从 Actor 的组件字段取得实际 RPC 处理对象。 */
-    private Object component(Object actor) throws ReflectiveOperationException {
-        Field field = actor.getClass().getDeclaredField(componentField);
-        field.setAccessible(true);
-        Object component = field.get(actor);
-        if (component == null) {
-            throw new IllegalStateException("RPC handler component is null: " + componentField);
-        }
-        return component;
     }
 }

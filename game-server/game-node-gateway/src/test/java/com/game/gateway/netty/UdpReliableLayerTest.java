@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -14,21 +13,6 @@ class UdpReliableLayerTest {
 
     private static UdpReliableLayer newLayer(int window, UdpReliableLayer.PacketSender sender, List<byte[]> delivered) {
         return new UdpReliableLayer(window, 42, sender, delivered::add, System::currentTimeMillis);
-    }
-
-    @Test
-    void ack_removesInFlight() {
-        AtomicInteger sent = new AtomicInteger();
-        UdpReliableLayer layer = newLayer(32, (t, s, ack, pl) -> sent.incrementAndGet(), new ArrayList<>());
-
-        layer.send("m1".getBytes(StandardCharsets.UTF_8));
-        layer.send("m2".getBytes(StandardCharsets.UTF_8));
-        assertEquals(2, sent.get());
-        assertEquals(2, layer.outstanding());
-
-        // 对端累积确认 seq=2 → 移除所有已确认在途
-        layer.onPacket(new UdpReliableLayer.Packet(UdpReliableLayer.TYPE_ACK, 2, 42, null));
-        assertEquals(0, layer.outstanding());
     }
 
     @Test

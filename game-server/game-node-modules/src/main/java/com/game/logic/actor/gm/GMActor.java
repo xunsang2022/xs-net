@@ -3,7 +3,6 @@ package com.game.logic.actor.gm;
 import com.game.logic.context.LogicContext;
 import com.game.logic.redis.RedisStore;
 import com.game.message.actor.logic.GMMessage;
-import com.game.message.actor.logic.PlayerMessage;
 import com.game.message.management.GmKickPlayerCommand;
 import com.game.message.management.GmKickPlayerRequest;
 import com.xs.kernel.actor.RpcActor;
@@ -63,7 +62,6 @@ public final class GMActor extends RpcActor<GMMessage> {
             return this;
         }
         sendRpc(
-                PlayerMessage.class,
                 new GmKickPlayerCommand(
                         result.request.requestId(),
                         result.request.operator(),

@@ -194,11 +194,6 @@ public final class Kcp {
         input(buffer, 0, buffer.length);
     }
 
-    /** 当前接收窗口的期望下一个 sn。 */
-    int rcvNxt() {
-        return rcvNxt;
-    }
-
     /* -------------------- 帧解析（input 子逻辑） -------------------- */
 
     private void input(byte[] buf, int off, int len) {
@@ -536,16 +531,6 @@ public final class Kcp {
         return Math.max(rcvWnd - (rcvQueue.size() + rcvBuf.size()), 0);
     }
 
-    /** 待发送 + 在途未确认的总段数。 */
-    public int waitSnd() {
-        return sndBuf.size() + sndQueue.size();
-    }
-
-    /** 是否仍存活（未达到死链阈值）。 */
-    public boolean isAlive() {
-        return state == 0;
-    }
-
     /* -------------------- 配置 -------------------- */
 
     /** 与 ikcp_nodelay 一致：(nodelay, interval, fastresend, nocwnd)，各参数 <0 表示不修改。 */
@@ -577,47 +562,6 @@ public final class Kcp {
         if (rcvwnd > 0) {
             rcvWnd = rcvwnd;
         }
-    }
-
-    /** 设置 MTU 并重算 mss（后续 send 将按新 mss 分片）。 */
-    public void setMtu(int mtu) {
-        if (mtu < IKCP_OVERHEAD + 26) {
-            return;
-        }
-        this.mtu = mtu;
-        this.mss = mtu - IKCP_OVERHEAD;
-    }
-
-    public int getMss() {
-        return mss;
-    }
-
-    public int getConv() {
-        return conv;
-    }
-
-    public int getState() {
-        return state;
-    }
-
-    /** 当前拥塞窗口（段数），供测试/诊断。 */
-    public int getCwnd() {
-        return cwnd;
-    }
-
-    /** 当前慢启动阈值，供测试/诊断。 */
-    public int getSsthresh() {
-        return ssthresh;
-    }
-
-    /** 当前自适应 RTO（ms），供测试/诊断。 */
-    public int getRxRto() {
-        return rxRto;
-    }
-
-    /** 包可见的无符号 32 位回绕距离差（供同包测试验证回绕语义）。 */
-    int snDistance(int later, int earlier) {
-        return itimediff(later, earlier);
     }
 
     /* -------------------- 工具 -------------------- */

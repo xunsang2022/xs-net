@@ -22,10 +22,6 @@ public final class BattleCommandIngress implements RpcDeliveryInterceptor {
         this.pool = java.util.Objects.requireNonNull(pool, "pool");
     }
 
-    public BattleExecutorPool pool() {
-        return pool;
-    }
-
     public BattleRuntime activate(String battleId) {
         return pool.activate(battleId);
     }

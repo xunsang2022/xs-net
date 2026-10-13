@@ -20,17 +20,6 @@ public final class MessageAble {
     private static volatile RpcEnvelopeFactory envelopeFactory;
 
     /**
-     * 初始化消息能力工具，设置RPC消息注册表和信封工厂。
-     *
-     * @param messageRegistry RPC消息注册表
-     * @param messageEnvelopeFactory RPC信封工厂
-     */
-    public static void initialize(RpcMessageRegistry messageRegistry, RpcEnvelopeFactory messageEnvelopeFactory) {
-        registry = messageRegistry;
-        envelopeFactory = messageEnvelopeFactory;
-    }
-
-    /**
      * 初始化消息能力工具，仅设置RPC消息注册表。
      *
      * @param messageRegistry RPC消息注册表
@@ -71,17 +60,6 @@ public final class MessageAble {
             throw new InvalidProtocolBufferException("Frame too short: " + (bytes == null ? 0 : bytes.length));
         }
         return NetMessage.parseFrom(ByteBuffer.wrap(bytes, 12, bytes.length - 12));
-    }
-
-    /**
-     * 将NetMessage对象转换为业务消息对象。
-     *
-     * @param netMessage 网络消息对象
-     * @return 业务消息对象
-     * @throws InvalidProtocolBufferException 如果解析失败
-     */
-    public static Object toActionMessage(NetMessage netMessage) throws InvalidProtocolBufferException {
-        return toActionMessage(netMessage, requireRegistry(), envelopeFactory);
     }
 
     /**
@@ -154,17 +132,6 @@ public final class MessageAble {
     }
 
     /**
-     * 将RPC消息对象转换为NetMessage对象。
-     *
-     * @param message RPC消息对象
-     * @return NetMessage对象
-     * @throws IllegalArgumentException 如果消息类型未知或负载类型不匹配
-     */
-    public static NetMessage toNetMessage(RpcMessage message) {
-        return toNetMessage(message, requireRegistry());
-    }
-
-    /**
      * 将RPC消息对象转换为NetMessage对象，使用指定的注册表。
      *
      * @param message RPC消息对象
@@ -191,45 +158,6 @@ public final class MessageAble {
     }
 
     /**
-     * 将NetMessage对象转换为网络字节数组。
-     * 消息协议格式：packetLength(4字节) | rpcNum(4字节) | errorCode(4字节) | body(变长)
-     *
-     * @param netMessage 网络消息对象
-     * @return 网络字节数组
-     */
-    public static byte[] toNetByteMsg(NetMessage netMessage) {
-        int rpcNumber = netMessage.getRpcNum();
-        byte[] data = netMessage.toByteArray();
-
-        int errorCode = 0;
-        int totalLength = data.length + 12;
-
-        byte[] bytes = new byte[totalLength];
-        ByteBuffer bb = ByteBuffer.wrap(bytes);
-        bb.putInt(totalLength);
-        bb.putInt(rpcNumber);
-        bb.putInt(errorCode);
-        bb.put(data);
-
-        return bytes;
-    }
-
-    /**
-     * 将字节数组转换为NetMessage对象，支持带帧头或不带帧头的格式。
-     *
-     * @param bytes 字节数组
-     * @param framed 是否带帧头（packetLength字段）
-     * @return NetMessage对象
-     * @throws InvalidProtocolBufferException 如果解析失败
-     */
-    public static NetMessage toNetMessage(byte[] bytes, boolean framed) throws InvalidProtocolBufferException {
-        if (!framed) {
-            return NetMessage.parseFrom(bytes);
-        }
-        return toNetMessage(bytes);
-    }
-
-    /**
      * 获取必需的RPC消息注册表，如果未初始化则抛出异常。
      *
      * @return RPC消息注册表
@@ -245,13 +173,5 @@ public final class MessageAble {
 
     private static RpcMessageRegistry requireRegistry(RpcMessageRegistry value) {
         return Objects.requireNonNull(value, "messageRegistry");
-    }
-
-    private static RpcEnvelopeFactory requireFactory() {
-        RpcEnvelopeFactory value = envelopeFactory;
-        if (value == null) {
-            throw new IllegalStateException("RpcEnvelopeFactory has not been initialized");
-        }
-        return value;
     }
 }

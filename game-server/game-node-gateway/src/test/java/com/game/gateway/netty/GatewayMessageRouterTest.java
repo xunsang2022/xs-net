@@ -1,7 +1,6 @@
 package com.game.gateway.netty;
 
 import com.game.message.c2s.LoginRequest;
-import com.game.message.c2s.LogoutRequest;
 import com.xs.net.message.RequestContext;
 import com.xs.net.message.pb.NetMessage;
 import org.junit.jupiter.api.Test;
@@ -23,13 +22,4 @@ class GatewayMessageRouterTest {
         assertEquals("authenticated-channel", context.channelId());
     }
 
-    @Test
-    void authenticatedChannelOverridesLogoutSessionId() {
-        RequestContext context = RequestContext.root("1", "authenticated-channel", java.time.Duration.ofSeconds(3));
-        LogoutRequest logout = new LogoutRequest("1", "1");
-
-        String channelId = GatewayMessageRouter.authenticatedChannelId(context, logout.sessionId());
-
-        assertEquals("authenticated-channel", channelId);
-    }
 }

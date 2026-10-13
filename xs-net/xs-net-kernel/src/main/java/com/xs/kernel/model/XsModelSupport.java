@@ -108,17 +108,6 @@ public final class XsModelSupport {
     }
 
     /**
-     * 手动将指定字段标记为脏（已修改）。
-     *
-     * @param field 字段的列名
-     * @throws IllegalArgumentException 如果字段名不存在
-     */
-    public void markDirty(String field) {
-        property(field);
-        dirtyFields.add(field);
-    }
-
-    /**
      * 获取所有脏字段的列名列表。
      *
      * @return 脏字段列名的新列表，保持插入顺序
@@ -134,23 +123,6 @@ public final class XsModelSupport {
      */
     public boolean hasDirtyFields() {
         return !dirtyFields.isEmpty();
-    }
-
-    /**
-     * 清除所有脏字段记录。
-     */
-    public void clearDirty() {
-        dirtyFields.clear();
-    }
-
-    /**
-     * 清除指定脏字段。
-     *
-     * @param fields 要清除的字段列名集合
-     * @throws NullPointerException 如果 fields 为空
-     */
-    public void clearDirty(Collection<String> fields) {
-        dirtyFields.removeAll(Objects.requireNonNull(fields, "fields"));
     }
 
     /**
@@ -178,7 +150,7 @@ public final class XsModelSupport {
      * @return 字段的文本表示形式（null 返回空字符串，Timestamp 返回毫秒数，Boolean 返回 "1"/"0"）
      * @throws IllegalArgumentException 如果字段名不存在
      */
-    public String fieldValue(String field) {
+    private String fieldValue(String field) {
         return textValue(readField(property(field).field()));
     }
 
@@ -189,6 +161,16 @@ public final class XsModelSupport {
      */
     public Map<String, String> toHash() {
         return toHash(properties().stream().map(Property::column).toList());
+    }
+
+    /**
+     * 把模型对象转换为 {@code @ProtoRecord} 声明的协议记录。
+     *
+     * @param model 模型对象
+     * @return 协议记录
+     */
+    public Object toVo(Object model) {
+        return VoConverters.convert(model);
     }
 
     /**

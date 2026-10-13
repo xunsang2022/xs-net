@@ -6,9 +6,7 @@ import com.game.logic.actor.player.db.PlayerPO;
 import com.game.logic.actor.player.message.FlushDirty;
 import com.game.logic.context.LogicContext;
 import com.game.logic.redis.RedisStore;
-import com.game.message.convert.GeneratedProtoConverters;
 import com.game.message.actor.S2C;
-import com.game.message.actor.gateway.GatewayControlMessage;
 import com.game.message.actor.logic.PlayerMessage;
 import com.game.message.c2s.LoginRequest;
 import com.game.message.c2s.LogoutRequest;
@@ -17,7 +15,6 @@ import com.game.message.management.GmKickPlayerCommand;
 import com.game.message.routing.ChannelRoutable;
 import com.game.message.s2c.LoginResponse;
 import com.game.message.s2c.LogoutResponse;
-import com.game.message.s2c.PlayerInfoData;
 import com.xs.kernel.actor.ActorServices;
 import com.xs.kernel.actor.SimpleActorServer;
 import lombok.extern.slf4j.Slf4j;
@@ -109,7 +106,11 @@ public final class PlayerInfo extends SimpleActorServer<PlayerMessage, PlayerPO>
         markOnlineFields();
         online = true;
         LogicContext.getRedisStore().saveRedis(data);
-        sendLoginResponse(request.channelId());
+        if (pendingChannelId == null || pendingChannelId.isBlank()) {
+            log.warn("Cannot send SC_Login without channelId: playerId={}", data.getId());
+            return Behaviors.same();
+        }
+        services.sendRpc(pendingChannelId, new LoginResponse(0, null, data.toVo()));
         return Behaviors.same();
     }
 
@@ -128,10 +129,10 @@ public final class PlayerInfo extends SimpleActorServer<PlayerMessage, PlayerPO>
             return Behaviors.same();
         }
         if (pendingChannelId != null && !pendingChannelId.isBlank()) {
-            services.sendRpc(GatewayControlMessage.class, new DisconnectChannelCommand(
+            services.sendRpc(pendingChannelId, new DisconnectChannelCommand(
                     command.requestId(),
                     Long.parseLong(services.entityId()),
-                    command.reason()), pendingChannelId);
+                    command.reason()));
         }
         beginDestroy();
         return Behaviors.stopped();
@@ -168,17 +169,7 @@ public final class PlayerInfo extends SimpleActorServer<PlayerMessage, PlayerPO>
                     services.entityId(), response.getClass().getName());
             return;
         }
-        services.sendRpc(S2C.class, response, request.channelId());
-    }
-
-    /** 向玩家当前频道发送登录成功响应。 */
-    private void sendLoginResponse(String channelId) {
-        if (channelId == null || channelId.isBlank()) {
-            log.warn("Cannot send SC_Login without channelId: playerId={}", data.getId());
-            return;
-        }
-        PlayerInfoData playerInfo = GeneratedProtoConverters.toPlayerInfoData(data);
-        services.sendRpc(S2C.class, new LoginResponse(0, null, playerInfo), channelId);
+        services.sendRpc(request.channelId(), response);
     }
 
     /** 停止脏数据刷新定时器。 */

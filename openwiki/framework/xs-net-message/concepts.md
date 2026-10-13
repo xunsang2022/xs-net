@@ -25,11 +25,11 @@ tags: [xs-net, concepts, rpc, routing]
 | `codec` | `RpcPayloadCodec<DTO, Proto>`，DTO 与 protobuf 的双向转换 |
 | `handler` | `RpcHandlerMetadata`，记录 Actor 类型、组件字段、方法名、请求/响应类型 |
 
-`isRoutable()` 等价于 `roleClass != null`；`hasCodec()` 判断是否配置了 DTO 编解码。`decode` / `encode` 在缺少 codec 或类型不符时抛异常，不做静默降级。
+`decode` / `encode` 在缺少 codec 或类型不符时抛异常，不做静默降级。
 
 `RpcMessageRegistry` 提供按编号、Protobuf 类型、DTO 类型、角色四种检索，以及 `findResponseForRequest`（通过 handler 的 `responseType` 反查响应规格）。`RpcMessageRegistryBuilder` 在构建时对编号、Protobuf 类型、DTO 类型分别做唯一性校验，重复即抛 `IllegalArgumentException`。
 
-`RpcRouteRegistry` 在消息注册表之上派生 `RpcRouteDescriptor`，供网关使用；它同样拒绝重复路由，并提供 `require(rpcNum)`。
+`RpcRouteRegistry` 在消息注册表之上派生 `RpcRouteDescriptor`，供网关使用；它同样拒绝重复路由，并提供 `find(rpcNum)`。
 
 ## 方向与可见性
 
@@ -39,8 +39,11 @@ tags: [xs-net, concepts, rpc, routing]
 | --- | --- | --- |
 | `INTERNAL` | 节点间内部指令，不来自客户端 | `@Rpc(kind = INTERNAL, number)` |
 | `HTTP_RESPONSE` | scanner 对 `kind = MESSAGE` 的分类结果，表示"单条单向消息" | `@Rpc(kind = MESSAGE, number)` |
+| `ACTOR_MODEL` | scanner 对 `@ProtoRecord` 派生记录的分类结果，表示"可编解码传输的 Actor 模型数据" | `@ProtoRecord(classType, number)` 自动生成 |
 
 注意 `HTTP_RESPONSE` 这个名字容易误解：对 `kind = MESSAGE` 的消息（例如 `LoginRequest` 1000、`LoginResponse` 1002、`LogReportRequest` 2100），scanner 只是把它们标记为无 handler 的单向消息，与 HTTP 传输无关。
+
+`ACTOR_MODEL` 是注解层的类型（`Rpc.Kind`），在 `RpcMessageDirection` 里目前同样落到 `HTTP_RESPONSE`（`publicVisible = true`），与 `MESSAGE` 同一条投递路径；它表达的是"这条规格的协议记录源自某个 Actor 模型 PO"，而不是另一种传输方向。
 
 ### `RpcDeliveryClass`
 
@@ -59,7 +62,7 @@ scanner 对所有 `kind = MESSAGE` 的消息标记 `publicVisible = true`，对 
 
 ## 协议声明与生成
 
-业务协议的唯一来源是 Java record 加注解，由 `xs-net-rpc-maven-plugin` 的 `generate` goal 在 `generate-sources` 阶段扫描：
+业务协议只有两种声明来源，均由 `xs-net-rpc-maven-plugin` 的 `generate` goal 在 `generate-sources` 阶段扫描：一是 `@Rpc` + `@ProtoField` 手写的 Java record（主路径），二是 `@ProtoRecord` 标注的模型类（由字段级 `@ProtoField` 派生协议记录，见本节末尾）。手写 record 的形态：
 
 ```java
 @Rpc(kind = Rpc.Kind.MESSAGE, number = 1001)
@@ -77,6 +80,7 @@ public record LogoutRequest(
 生成规则与硬性约束：
 
 - 每个 record 组件必须有 `@ProtoField(number)`，编号从 1 开始且在同一消息内唯一；没有 `@ProtoField` 或缺字段直接构建失败。
+- `@ProtoField` 的 `@Target` 同时允许 `RECORD_COMPONENT` 与 `FIELD`：前者用于协议 record 组件，后者用于 `@ProtoRecord` 标注的 PO 字段。
 - 支持的 Java 类型只有 `String` / `Integer`·`int` / `Long`·`long` / `Boolean`·`boolean` / `Double`·`double` / `Float`·`float` / `byte[]`；泛型与数组被拒绝。
 - `kind = MESSAGE` 的消息若需要 Actor 处理，必须能在扫描到的 `RpcActor<R>`（含其字段组件）里找到"单参数且参数类型为该 DTO"的方法。
 - `kind = INTERNAL` 同样要求处理方法，但不生成响应规格。
@@ -84,9 +88,45 @@ public record LogoutRequest(
 - `INTERNAL` 的 DTO 必须实现 handler 所属 Actor 的角色接口，否则构建失败。
 - 全局校验：RPC 编号唯一、消息名唯一、字段编号合法。
 - 消息名派生：`*Request` → `CS_<Base>`，`*Response` → `SC_<Base>`，其他保持类名。
-- proto 文件按角色分组：实现角色接口的进入 `<RoleSimpleName>s.proto`，其余进入 `comment.proto`。
+- proto 文件按角色分组：实现角色接口的进入 `<RoleSimpleName>s.proto`，`kind = ACTOR_MODEL` 的记录进入 `ActorModels.proto`，其余进入 `comment.proto`。
+- 一个消息字段引用到其他 proto 文件中的消息类型时，scanner 会在该 `.proto` 顶部补上 `import "<file>.proto";`。
 
-生成产物：`GameRpcMessages`（注册表 + `ROUTES`）、`GeneratedRpcCodec`（逐消息的 DTO⇄protobuf 编解码）、`GeneratedRpcHandlers`（编号 → Actor/方法/请求类型的清单），以及 `src/main/proto/` 下的 `.proto`、`rpc_routes.md`、`rpc_routes.proto`、`rpc_protocol_validation.txt`。
+### PO 派生协议记录（`@ProtoRecord`）
+
+`@ProtoField` 也允许出现在模型类字段上，由 `@ProtoRecord` 触发协议记录生成，用来避免在 `game-message-action` 里手写与 PO 重复的字段表：
+
+```java
+@ProtoRecord(classType = "com.game.message.s2c.PlayerInfoData", number = 2102)
+public class PlayerPO extends GameModel<PlayerPO> {
+    @ProtoField(number = 1) private Long id;
+    @ProtoField(number = 2) private String name;
+    // ... 未标注 @ProtoField 的字段（如 expectedVersion）不进入协议
+}
+```
+
+约束与行为：
+
+- `classType` 是**全限定类名字符串**（不是 `Class` 字面量），因此被引用的协议记录不存在也不会导致编译失败；若源码里已存在同名 record，则直接复用、不生成。
+- `number` 是这条 ACTOR_MODEL 规格的 RPC 编号，必须全局唯一。
+- 生成内容三件：`classType` 指定的协议记录源码（带 `@Rpc(kind = Rpc.Kind.ACTOR_MODEL, number)` 与逐字段 `@ProtoField`）、对应的 proto 消息，以及 PO → 协议记录的转换方法。
+- `Timestamp` 字段在生成记录中映射为 `Long`（Unix 毫秒），转换代码调用 `getTime()`；其他字段要求源/目标类型一致，否则构建失败。
+- 其他消息引用这条记录时，字段按**消息类型**引用并复用其 codec；只有非消息的普通 record 才会走 `Nested*` 嵌套定义。
+
+### 模型转换入口 `toVo()`
+
+转换方法不只给生成器内部使用，还会注册到框架，业务侧直接调用模型的 `toVo()`：
+
+```java
+services.sendRpc(new LoginResponse(0, null, playerPO.toVo()), channelId);
+```
+
+- `XsModel#toVo()` 是泛型默认方法（`<V> V toVo()`），按调用处的目标类型推断，例如 `PlayerInfoData info = playerPO.toVo();`；类型不匹配会在调用点抛 `ClassCastException`。
+- 内部委托 `XsModelSupport#toVo` → `com.xs.kernel.model.VoConverters`（`xs-net-kernel`），按**源模型类型**查注册表。
+- 注册由生成的 `GeneratedProtoConverters` 完成：它在静态初始化中调用 `VoConverters.register(...)`，因此加载该类即完成注册。
+- 已注册但未加载时，框架首次转换会按约定类名加载一次转换器持有类（默认 `com.game.message.convert.GeneratedProtoConverters`，可用系统属性 `xs.model.converter-class` 覆盖）；找不到或未注册则抛 `IllegalStateException`，不做静默降级。
+
+
+生成产物：`GameRpcMessages`（注册表 + `ROUTES`）、`GeneratedRpcCodec`（逐消息的 DTO⇄protobuf 编解码）、`GeneratedRpcHandlers`（编号 → Actor/方法/请求类型的清单）、`GeneratedProtoConverters`（PO → 协议记录的转换方法，仅在 `convertersOnly = true` 的执行中生成），以及 `src/main/proto/` 下的 `.proto`、`rpc_routes.md`、`rpc_routes.proto`、`rpc_protocol_validation.txt`。`@ProtoRecord` 派生的协议记录源码写入 message-action 的生成源码目录（`com/game/message/<pkg>/<Record>.java`），与手写 record 一起编译。
 
 ## 角色与分片
 
@@ -122,6 +162,8 @@ public record LogoutRequest(
 
 前三种拒绝都会自增 `xs.rpc.routing.rejected{reason}` 计数器并打印 WARN。
 
+Actor 内发送方向的入口 `ActorServices#sendRpc(message, targetEntityId)` 与 `RpcActor#sendRpc(message, targetEntityId)` 不需要显式传目标角色：目标角色由消息类型实现的 `@Roles` 接口解析（同一消息类型必须恰好实现一个 `@Roles` 接口，否则抛 `IllegalArgumentException`），结果按消息类型缓存；解析出的角色随后仍要过上面第 2 步的一致性校验。
+
 身份字段的来源：
 
 | 字段 | 上行来源 | 下行用途 |
@@ -129,7 +171,7 @@ public record LogoutRequest(
 | `playerId` | DTO 中的 `playerId`（或 `player_id`），由 `RouteValueExtractors.playerId()` 反射读取 | 决定 Logic 中的实体 ID |
 | `channelId` | JWT 的 `cid` claim，认证后由 `RequestContext.withIdentity` 覆盖 | 决定 Gateway 中 `ChannelActor` 的实体 ID |
 
-`RouteValueExtractors.channelId()` 会先找 `channelId()`，找不到再退到 `sessionId()`。但网关在认证后会用认证上下文里的 `channelId` 覆盖 DTO 里的值（`GatewayMessageRouter.authenticatedChannelId`），这是防止客户端伪造下行目标的刻意设计，不要改成优先取 DTO 值。
+`RouteValueExtractors.channelId()` 会先找 `channelId()`，找不到再退到 `sessionId()`。但网关在认证后会用认证上下文里的 `channelId` 覆盖 DTO 里的值（`GatewayMessageRouter.authenticatedContext`），这是防止客户端伪造下行目标的刻意设计，不要改成优先取 DTO 值。
 
 `TransportKind`（`TCP` / `UDP` / `WEBSOCKET`）出现在 `RpcRouteDescriptor.transports` 中，当前 `RpcRouteDescriptor.from` 恒为"全部三种"，尚无按传输过滤的实现。
 
@@ -165,6 +207,8 @@ public record LogoutRequest(
 ## 玩家状态模型
 
 `PlayerPO` 对应 Redis hash `player:{playerId}` 和 PostgreSQL `users` 行，持久化字段为 `id`、`name`、`email`、`online`、`last_login_at`、`updated_at`、`version`；`expectedVersion` 是仅供写入时使用的乐观锁字段，不映射到表或 Redis。`PlayerPO` 继承 `GameModel` 并实现 xs-net 的 `XsModel` 契约，`setProperty` 根据 setter 方法引用定位字段、记录脏字段；未知或非持久化字段会被拒绝。Redis Hash 的字段名通过模型支持将 camelCase 转为 snake_case。
+
+同一个 `PlayerPO` 还通过 `@ProtoRecord` 与逐字段 `@ProtoField` 声明对外协议字段（见上一节的 PO 派生协议记录）：生成的 `com.game.message.s2c.PlayerInfoData` 是 RPC 2102 的 ACTOR_MODEL 记录，登录成功时调用 `data.toVo()` 转换后放进 `LoginResponse.playerInfo` 下发。`expectedVersion` 既不落库也不上协议。修改 `PlayerPO` 字段时，必须同时评估表结构、Redis Hash 与协议编号/字段号三处影响。
 
 生命周期阶段（`PlayerLifecycle.Phase`）：
 

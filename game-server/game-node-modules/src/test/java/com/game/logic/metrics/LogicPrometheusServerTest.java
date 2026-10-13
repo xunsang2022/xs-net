@@ -19,14 +19,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LogicPrometheusServerTest {
 
+    private static final int METRICS_PORT = 18090;
+    private static final int TRACE_PORT = 18091;
+
     @Test
     void exposesPrometheusMetrics() throws Exception {
         PrometheusMeterRegistry meterRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
         Counter.builder("logic.test.counter").register(meterRegistry).increment();
 
-        try (LogicPrometheusServer server = LogicPrometheusServer.start("127.0.0.1", 0, meterRegistry)) {
+        try (LogicPrometheusServer server = LogicPrometheusServer.start(
+                "127.0.0.1", METRICS_PORT, meterRegistry, "", null)) {
             HttpRequest request = HttpRequest.newBuilder(
-                    URI.create("http://127.0.0.1:" + server.port() + "/metrics"))
+                    URI.create("http://127.0.0.1:" + METRICS_PORT + "/metrics"))
                     .GET()
                     .build();
             HttpResponse<String> response = HttpClient.newHttpClient().send(
@@ -45,8 +49,8 @@ class LogicPrometheusServerTest {
                 (target, timeoutMs) -> new ArthasTraceExecution(0, false, "trace output"));
 
         try (LogicPrometheusServer server = LogicPrometheusServer.start(
-                "127.0.0.1", 0, meterRegistry, "test-token", traceService)) {
-            URI uri = URI.create("http://127.0.0.1:" + server.port() + "/admin/gm/trace");
+                "127.0.0.1", TRACE_PORT, meterRegistry, "test-token", traceService)) {
+            URI uri = URI.create("http://127.0.0.1:" + TRACE_PORT + "/admin/gm/trace");
             HttpRequest unauthorized = HttpRequest.newBuilder(uri)
                     .POST(HttpRequest.BodyPublishers.ofString("{\"protocolNumber\":1001}"))
                     .build();

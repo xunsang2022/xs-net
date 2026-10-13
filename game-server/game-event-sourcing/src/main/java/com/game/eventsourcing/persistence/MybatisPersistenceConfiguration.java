@@ -23,28 +23,6 @@ public final class MybatisPersistenceConfiguration {
     }
 
     /**
-     * 创建基础 SqlSessionFactory，仅注册本模块自带的 LogEventMapper。
-     * 外部 Mapper（如 PlayerMapper）由调用方在返回后自行注册。
-     */
-    public static SqlSessionFactory create(DataSource dataSource) {
-        MybatisConfiguration configuration = new MybatisConfiguration();
-        configuration.setEnvironment(new Environment(
-                "logic-postgres",
-                new JdbcTransactionFactory(),
-                dataSource));
-        configuration.setMapUnderscoreToCamelCase(true);
-
-        GlobalConfig globalConfig = GlobalConfigUtils.defaults()
-                .setBanner(false);
-        globalConfig.getDbConfig().setIdType(IdType.INPUT);
-        GlobalConfigUtils.setGlobalConfig(configuration, globalConfig);
-
-        configuration.addMapper(LogEventMapper.class);
-        parseMapperXml(configuration, "mapper/LogEventMapper.xml");
-        return new MybatisSqlSessionFactoryBuilder().build(configuration);
-    }
-
-    /**
      * 创建 SqlSessionFactory 并注册额外的 Mapper 接口和 XML。
      */
     public static SqlSessionFactory create(DataSource dataSource,

@@ -56,10 +56,6 @@ public final class ChannelRegistry {
         return channelId != null && expected != null && endpoints.remove(channelId, expected);
     }
 
-    public boolean isRegistered(String channelId) {
-        return channelId != null && endpoints.containsKey(channelId);
-    }
-
     /**
      * 该 channelId 是否存在且底层连接/会话依然活跃。
      * 用于单账号重复连接判定与 S2C 写前校验。
@@ -68,9 +64,4 @@ public final class ChannelRegistry {
         ClientEndpoint endpoint = get(channelId);
         return endpoint != null && endpoint.isActive();
     }
-
-    public int size() {
-        return endpoints.size();
-    }
-
 }

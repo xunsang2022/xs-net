@@ -36,7 +36,7 @@ tags: [xs-net, operations, build, troubleshooting]
 | 风格 | 模块 |
 | --- | --- |
 | JUnit 3（`junit.framework.TestCase`，`junit:3.8.1`） | `xs-net-message`、`xs-net-tools` |
-| JUnit 4（`org.junit.Test`） | `xs-net-core`、`game-message-action` |
+| JUnit 4（`org.junit.Test`） | `xs-net-kernel`、`game-message-action` |
 | JUnit 5（`org.junit.jupiter.api`） | `xs-net-transport`、`xs-net-rpc-maven-plugin`、`game-node-gateway`、`game-node-login`、`game-node-modules`、`game-node-battle` |
 
 `game-message-action` 的黄金样本测试（`GameMessagesGoldenTest` + `src/test/resources/golden/*.hex`）对线格式做字节级断言；任何信封字段或编码顺序的改动都必须解释这些样本为什么需要更新。
@@ -172,15 +172,16 @@ Logic 配置由 Spring Boot 外部化配置加载。Redis、数据源分别使�
 | 状态不落库 | `dbsync.dirty.size` / `dbsync.dirty.bytes` 是否增长；`dbsync.flush.failures` 与 `dbsync.retry.exhausted`；`users` 表结构与 `PlayerMapper.xml` 是否一致；乐观锁冲突是否持续 |
 | 日志丢失或重复 | `log:events:dead-letter` 是否有坏消息；消费者组 `db-sync` 的 pending 列表；`source_stream_id` 唯一索引是否存在 |
 | 实体分布不均或投递失败 | 角色是否在目标节点注册；`@Roles` 与 `@ActorDispatcher` 是否齐全；是否存在"只实现了 `@Rpc` 但没有 Actor 处理方法"的消息（构建期就会失败） |
-| 文档与实现对不上 | 先看 [传输协议说明](../../business/game-node-gateway/transport.md)，实现路径以 `com.game.gateway.netty` 与 `com.game.gateway.kcp` 为准 |
+| 文档与实现对不上 | 先看 [传输协议说明](../game-node-gateway/transport.md)，实现路径以 `com.game.gateway.netty` 与 `com.game.gateway.kcp` 为准 |
 
 ## 按变更区域的验证矩阵
 
 | 变更区域 | 必跑 |
 | --- | --- |
 | `xs-net-message`（信封、上下文、注册表） | `xs-net-message` 全部测试 + `game-message-action` 的 `GameMessagesGoldenTest` + `RpcTransportTest` |
-| `xs-net-core`（分片、投递、拦截器） | `xs-net-core` 全部测试 + `game-node-battle` 的 `BattleActorDispatcherTest` |
+| `xs-net-kernel`（分片、投递、拦截器、模型契约） | `xs-net-kernel` 全部测试 + `game-node-battle` 的 `BattleActorDispatcherTest` |
 | `xs-net-rpc-maven-plugin` / 协议声明 | 插件测试 + 重建 `game-message-action` 并检查 `rpc_protocol_validation.txt` + `scripts/Generate-Sdks.ps1` |
+| `@ProtoRecord` 模型协议（如 `PlayerPO` → `PlayerInfoData`） | 插件测试 + 重建 `game-message-action`（生成记录与 `ActorModels.proto`）+ 重建 `game-node-modules`（生成 `GeneratedProtoConverters`）+ `GameMessagesGoldenTest` / `RpcTransportTest` |
 | Gateway 传输或认证 | `game-node-gateway` 全部测试；实机验证对应协议的认证与 S2C 往返 |
 | Logic 状态与持久化 | `game-node-modules` 全部测试；本地起 Redis+PostgreSQL 跑一次登录/登出，确认 `users` 行与 `version` 变化 |
 | Battle 执行模型 | `game-node-battle` 全部测试（含 `BattleLoadTest`） |

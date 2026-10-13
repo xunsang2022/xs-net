@@ -13,7 +13,7 @@ tags: [xs-net, modules, source-map, maven]
 | --- | --- | --- |
 | `com.xs:xs-net-workspace` | `0.0.1-SNAPSHOT` | 根 reactor（`pom`），聚合 `xs-net` 与 `game-server` |
 | `com.xs:xs-net` | `0.0.1` | 框架 reactor（`pom`），7 个模块 |
-| `com.xs:xs-net-all` | `0.0.1` | 框架聚合包，导出 `xs-net-core` + `xs-net-transport` |
+| `com.xs:xs-net-all` | `0.0.1` | 框架聚合包，导出 `xs-net-kernel` + `xs-net-transport` |
 | `com.xs:game-server` | `0.0.1-SNAPSHOT` | 业务 reactor，父 POM 为 `spring-boot-starter-parent:4.0.0`，6 个模块 |
 
 依赖版本集中在 `xs-net/pom.xml` 的 `dependencyManagement`：Pekko BOM `1.1.5`、Aeron driver `1.40.0`、LMDB `0.8.3`、Lombok `1.18.34`、Micrometer `1.16.0`、Spring `7.0.1`。`game-server/pom.xml` 另行管理 Protobuf `3.25.5`、jjwt `0.12.6`、Netty `4.1.115.Final` 与 Spring Boot `4.0.0`。Java 版本为 21。
@@ -24,7 +24,7 @@ tags: [xs-net, modules, source-map, maven]
 | --- | --- | --- |
 | `xs-net-tools` | 工具聚合：`tool-commons-lang4`（`ArrayKit`/`ClassScanner`/`FileKit`/`FormatTimeKit`/`StrKit`）与 `tool-luBan-cfg`（LuBan 配置加载） | `xs-net/xs-net-tools/` |
 | `xs-net-message` | `NetMessage` proto 与生成类型、`RpcMessageSpec`、`RpcMessageRegistry`(+Builder)、`RpcRouteDescriptor`/`RpcRouteRegistry`、`MessageAble`、`RpcRuntime`、`RequestContext`/`RequestContextHolder`、`RouteValueExtractors`、`NetMessageSerializer` | `xs-net/xs-net-message/src/main/java/com/xs/net/message/` |
-| `xs-net-core` | `AkkaKit`（分片初始化、投递、投递拦截器）、`RpcActor`（信封解码 + 上下文恢复）、`ActorServices`、`NodeActor`（角色扫描与分片注册）、`Roles`/`ActorDispatcher` 注解、Spring 自动配置与 `SpringUtil` | `xs-net/xs-net-core/src/main/java/com/xs/core/` |
+| `xs-net-kernel` | 模型契约与 Actor 运行时：`XsModel`/`XsModelSupport`（属性读写、脏字段、Hash 转换、`toVo()`）、`VoConverters`（模型 → 协议记录转换注册表）、`RedisKey`、`AkkaKit`（分片初始化、投递、投递拦截器）、`RpcActor`/`ActorServices`/`SimpleActorServer`、`NodeActor`（角色扫描与分片注册）、`Roles`/`ActorDispatcher`、`GameFrameworkAutoConfiguration` 与 `SpringUtil`/`ClassScanner` | `xs-net/xs-net-kernel/src/main/java/com/xs/kernel/` |
 | `xs-net-transport` | 传输抽象：`FrameCodec`、`RawFrameCodec`、`TcpFrameCodec`、`TransportAdapter`、`TransportSession`、`TransportMessageHandler`、`TransportCapabilities`、`OutboundMessage`、`BackpressureDecision`、`IngressAdmissionController` | `xs-net/xs-net-transport/src/main/java/com/xs/net/transport/` |
 | `xs-net-rpc-maven-plugin` | `generate`：扫描源目录生成 proto/注册表/路由表；`export` / `verify-export`：导出一致性校验；`export-typescript-sdk` / `export-unity-sdk` / `export-cpp-sdk`：SDK 导出 | `xs-net/xs-net-rpc-maven-plugin/src/main/java/com/xs/net/rpc/maven/` |
 | `xs-net-sdk` | SDK 生成模块（`pom` 打包）。绑定 `generate` + protoc 编译，模板位于 `src/main/sdk/{unity,typescript,cocos,cpp}` | `xs-net/xs-net-sdk/pom.xml` |
@@ -56,8 +56,8 @@ tags: [xs-net, modules, source-map, maven]
 - 玩家生命周期：`.../logic/actor/player/core/PlayerLifecycle.java`；状态同步：`.../logic/actor/player/core/PlayerStateSync.java`
 - 批写与日志消费：`.../logic/dbsync/DBSyncEngine.java`、`.../logic/dbsync/LogConsumer.java`
 - 战斗节点：`game-server/game-node-battle/src/main/java/com/game/battle/GameBattleApplication.java`
-- 框架投递核心：`xs-net/xs-net-core/src/main/java/com/xs/core/akka/AkkaKit.java`
-- 角色注册：`xs-net/xs-net-core/src/main/java/com/xs/core/actor/node/NodeActor.java`
+- 框架投递核心：`xs-net/xs-net-kernel/src/main/java/com/xs/kernel/akka/AkkaKit.java`
+- 角色注册：`xs-net/xs-net-kernel/src/main/java/com/xs/kernel/actor/node/NodeActor.java`
 
 ## 生成源与生成物
 
@@ -66,7 +66,8 @@ tags: [xs-net, modules, source-map, maven]
 | 位置 | 生成方式 | 是否入库 |
 | --- | --- | --- |
 | `xs-net/xs-net-message/src/main/generated/` | `protobuf-maven-plugin` 编译 `src/main/proto/net_message.proto`，输出到 `src/main/generated`，再由 `build-helper-maven-plugin` 加入源码根 | 是（框架信封类型固定） |
-| `game-server/game-message-action/target/generated-sources/rpc/` | `xs-rpc:generate` 的 Velocity 模板输出：`GameRpcMessages`、`GeneratedRpcCodec`、`GeneratedRpcHandlers` | 否 |
+| `game-server/game-message-action/target/generated-sources/rpc/` | `xs-rpc:generate` 的 Velocity 模板输出：`GameRpcMessages`、`GeneratedRpcCodec`、`GeneratedRpcHandlers`，以及 `@ProtoRecord` 派生的协议记录源码 | 否 |
+| `game-server/game-node-modules/target/generated-sources/rpc-converters/` | node-modules 的 `xs-rpc:generate`（`convertersOnly = true`）输出：`GeneratedProtoConverters`（PO → 协议记录） | 否 |
 | `game-server/game-message-action/src/main/proto/` | `generate` 的 `protoOutputDirectory`，每次构建会删除旧 `.proto` 后重写，并输出 `rpc_routes.md`、`rpc_routes.proto`、`rpc_protocol_validation.txt` | 是 |
 | `xs-net/xs-net-sdk/target/code/{unity,typescript,cocos,cpp}` | `scripts/Generate-Sdks.ps1` 驱动的 SDK 生成 | 否 |
 
@@ -76,7 +77,7 @@ tags: [xs-net, modules, source-map, maven]
 
 | 模块 | 测试 |
 | --- | --- |
-| `xs-net-core` | `RpcActorTest`、`AkkaKitRpcRoutingTest`、`ClassUtilTest` |
+| `xs-net-kernel` | `RpcActorTest`、`AkkaKitRpcRoutingTest`、`ClassUtilTest`、`VoConvertersTest` |
 | `xs-net-message` | `MessageAbleTest`、`NetMessageGoldenTest`、`RequestContextTest`、`RpcMessageRegistryBuilderTest`、`RpcRouteRegistryTest` |
 | `xs-net-transport` | `TcpFrameCodecTest`（JUnit 5） |
 | `xs-net-rpc-maven-plugin` | `RpcSourceScannerTest`、`SdkProtoExporterTest` |
@@ -98,6 +99,16 @@ tags: [xs-net, modules, source-map, maven]
 4. 重建 `game-message-action`，检查 `src/main/proto/rpc_routes.md` 与 `rpc_protocol_validation.txt`；
 5. 需要客户端联调时运行 `scripts/Generate-Sdks.ps1`。
 
+### 新增或修改 Actor 模型协议（`@ProtoRecord`）
+
+要让某个 PO 的状态直接进协议（例如登录响应携带玩家数据），不要手写重复的 record：
+
+1. 在 PO 上加 `@ProtoRecord(classType = "<全限定记录类名>", number = <RPC 编号>)`，给需要上协议的字段加 `@ProtoField(number)`，不需要的字段不加；
+2. 在 `game-message-action` 的消息里按 `classType` 的简单类名引用该字段（该记录会由插件生成到生成源码目录，不要在源码里重复声明）；
+3. 重建 `game-message-action`（生成协议记录、`ActorModels.proto`、注册表与 codec），再重建 `game-node-modules`（生成 `GeneratedProtoConverters` 并编译 PO 侧调用）；
+4. 字段类型变化要注意：`Timestamp` 会映射为 `Long` 毫秒，其他类型必须源/目标一致，否则插件构建失败；
+5. 协议编号新增后要同步 `game-message-action` 的注册表断言测试（`GameMessagesGoldenTest#registryIsCompleteAndUnique`）。
+
 ### 修改路由或上下文
 
 同时检查 `RpcRouteDescriptor`（方向 → `RpcDeliveryClass` 的映射）、`RouteValueExtractors`（`playerId` / `channelId` 反射提取与缓存）、`GatewayMessageRouter`（准入与投递决策）、`AkkaKit.tellToRole`（角色校验与拒绝指标）、`RequestContext.applyTo`（信封字段回填）。`xs.rpc.routing.rejected` 与 `xs.rpc.actor.envelope.dropped` 两个计数器是这些路径的可观测出口。
@@ -108,7 +119,7 @@ tags: [xs-net, modules, source-map, maven]
 
 ### 修改状态持久化
 
-`PlayerPO`/`GameModel`（玩家字段、脏标记与 ORM 映射）、`RedisStore`（key 布局 `player:{id}`、`idx:player`、`player:online`）、`PlayerMapper.xml`（PostgreSQL UPSERT）、`DBSyncEngine`（批大小、重试、乐观锁）、`deploy/pg-init.sql`（表结构与索引）必须一起看。表结构不一致会导致首次写入失败或 flush 重试耗尽。
+`PlayerPO`/`GameModel`（玩家字段、脏标记与 ORM 映射）、`RedisStore`（key 布局 `player:{id}`、`idx:player`、`player:online`）、`PlayerMapper.xml`（PostgreSQL UPSERT）、`DBSyncEngine`（批大小、重试、乐观锁）、`deploy/pg-init.sql`（表结构与索引）必须一起看。表结构不一致会导致首次写入失败或 flush 重试耗尽。注意 `PlayerPO` 同时是协议来源（`@ProtoRecord` + 字段级 `@ProtoField`），增删字段还要同步 `GameRpcMessages` 中的 ACTOR_MODEL 规格与登录响应。
 
 ### 修改 SDK 生成
 

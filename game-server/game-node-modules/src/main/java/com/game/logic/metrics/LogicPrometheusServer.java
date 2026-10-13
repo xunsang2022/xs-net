@@ -26,14 +26,6 @@ public final class LogicPrometheusServer implements AutoCloseable {
     public static LogicPrometheusServer start(
             String host,
             int port,
-            PrometheusMeterRegistry meterRegistry
-    ) throws IOException {
-        return start(host, port, meterRegistry, "", null);
-    }
-
-    public static LogicPrometheusServer start(
-            String host,
-            int port,
             PrometheusMeterRegistry meterRegistry,
             String managementToken,
             GmProtocolTraceService traceService
@@ -46,10 +38,6 @@ public final class LogicPrometheusServer implements AutoCloseable {
         }
         server.start();
         return new LogicPrometheusServer(server);
-    }
-
-    public int port() {
-        return server.getAddress().getPort();
     }
 
     private static void respond(HttpExchange exchange, PrometheusMeterRegistry meterRegistry) throws IOException {

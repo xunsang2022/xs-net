@@ -1,7 +1,6 @@
 package com.xs.net.message;
 
 import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.MessageLite;
 import com.xs.net.message.pb.NetMessage;
 
 import java.util.Objects;
@@ -37,15 +36,6 @@ public final class RpcRuntime {
     }
 
     /**
-     * 获取RPC消息注册表。
-     *
-     * @return RPC消息注册表
-     */
-    public RpcMessageRegistry registry() {
-        return registry;
-    }
-
-    /**
      * 解码网络消息为业务消息对象。
      *
      * @param envelope 网络消息信封
@@ -65,49 +55,5 @@ public final class RpcRuntime {
      */
     public RpcDelivery<Object> decodeDelivery(NetMessage envelope) throws InvalidProtocolBufferException {
         return new RpcDelivery<>(decode(envelope), RequestContext.from(envelope));
-    }
-
-    /**
-     * 将业务消息对象编码为网络消息。
-     *
-     * @param message 业务消息对象
-     * @return 网络消息
-     */
-    public NetMessage encode(Object message) {
-        return MessageAble.toNetMessage(message, registry);
-    }
-
-    /**
-     * 将业务消息对象编码为网络消息，并应用请求上下文。
-     *
-     * @param message 业务消息对象
-     * @param context 请求上下文
-     * @return 网络消息
-     */
-    public NetMessage encode(Object message, RequestContext context) {
-        NetMessage base = encode(message);
-        return context.applyTo(base.toBuilder()).build();
-    }
-
-    /**
-     * 将RPC消息对象编码为网络消息，并应用请求上下文。
-     *
-     * @param message RPC消息对象
-     * @param context 请求上下文
-     * @return 网络消息
-     */
-    public NetMessage encode(RpcMessage message, RequestContext context) {
-        NetMessage base = MessageAble.toNetMessage(message, registry);
-        return context.applyTo(base.toBuilder()).build();
-    }
-
-    /**
-     * 根据RPC编号查找消息规范。
-     *
-     * @param rpcNum RPC编号
-     * @return 消息规范，如果未找到返回null
-     */
-    public RpcMessageSpec<? extends MessageLite> find(int rpcNum) {
-        return registry.find(rpcNum);
     }
 }

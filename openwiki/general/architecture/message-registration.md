@@ -14,12 +14,12 @@ tags: [xs-net, message, rpc, registration, registry]
 ```mermaid
 flowchart TB
     subgraph 编译时
-        A1[Java Record<br/>@Rpc @ProtoField] --> A2[xs-rpc:generate<br/>Maven Plugin]
+        A1[Java record/PO<br/>@Rpc @ProtoRecord @ProtoField] --> A2[xs-rpc:generate<br/>Maven Plugin]
         A2 --> A3[GameRpcMessages.java<br/>自动生成]
     end
     
     subgraph 启动时
-        B1[RpcMessageRegistryBuilder] --> B2[registerAll<br/>注册所有消息规范]
+        B1[RpcMessageRegistryBuilder] --> B2[register<br/>注册所有消息规范]
         B2 --> B3[RpcMessageRegistry<br/>不可变注册表]
         B3 --> B4[MessageAble.initialize<br/>全局初始化]
     end
@@ -39,8 +39,10 @@ flowchart TB
 
 三个 sourceDirectories 参与扫描：
 - `game-message-action`：业务协议 record
-- `game-node-modules`：Actor 处理方法
+- `game-node-modules`：Actor 处理方法，以及带 `@ProtoRecord` 的模型类（PO）
 - `game-node-battle`：战斗 Actor 处理方法
+
+`game-node-modules` 自身还会再跑一次 `xs-rpc:generate`（`convertersOnly = true`），扫描自身与 `game-message-action` 源码，只产出 PO → 协议记录的转换代码，不重复生成 proto 与注册表。
 
 ### 生成产物
 
@@ -48,12 +50,18 @@ flowchart TB
 
 | 文件 | 位置 | 用途 |
 |------|------|------|
-| `*.proto` | `src/main/proto/` | Protocol Buffers 定义 |
+| `*.proto` | `src/main/proto/` | Protocol Buffers 定义（含 `ActorModels.proto`） |
 | `rpc_routes.proto` | `src/main/proto/` | 路由表 proto |
 | `rpc_routes.md` | 项目根 | 路由表文档 |
 | `GameRpcMessages.java` | `target/generated-sources/rpc/` | 消息注册表装配 |
 | `GeneratedRpcCodec.java` | `target/generated-sources/rpc/` | DTO ↔ Protobuf 编解码 |
 | `GeneratedRpcHandlers.java` | `target/generated-sources/rpc/` | Actor 方法处理器 |
+| 协议记录源码 | `target/generated-sources/rpc/com/game/message/**` | `@ProtoRecord(classType)` 指定的 record |
+| `GeneratedProtoConverters.java` | `game-node-modules/target/generated-sources/rpc-converters/` | PO → 协议记录的转换方法（`convertersOnly` 执行） |
+
+### ACTOR_MODEL 消息
+
+`@ProtoRecord(classType, number)` 标注的模型类会派生一条 `kind = ACTOR_MODEL` 的消息规格：编号取自注解的 `number`，消息名取 `classType` 的简单类名，字段取 PO 上带 `@ProtoField` 的字段（`Timestamp` → `int64` 毫秒），无 `roleClass`（进入 `ActorModels.proto`）、`direction = HTTP_RESPONSE`、`publicVisible = true`。它和其他消息一样进注册表与路由表；引用它的消息字段直接以消息类型引用并复用其 codec。详见 [领域概念](../../framework/xs-net-message/concepts.md#协议声明与生成)。
 
 ### GameRpcMessages 结构
 
@@ -202,7 +210,6 @@ if (route == null) {
 
 // 提取路由键
 String playerId = route.playerId(dto);
-String channelId = route.channelId(dto);
 
 // 校验
 if (playerId == null && route.playerRoutingRequired()) {

@@ -360,15 +360,19 @@ class DBSyncEngineP0Test {
         return buf.size();
     }
 
+    @SuppressWarnings("unchecked")
     protected static DirtyRecord getDirtyRecord(DBSyncEngine engine, RecordKey key) throws Exception {
         DirtyStateBuffer buf = field(engine, "dirty");
-        return buf.get(key);
+        Field recordsField = DirtyStateBuffer.class.getDeclaredField("records");
+        recordsField.setAccessible(true);
+        ConcurrentHashMap<RecordKey, DirtyRecord> map =
+                (ConcurrentHashMap<RecordKey, DirtyRecord>) recordsField.get(buf);
+        return map.get(key);
     }
 
-    @SuppressWarnings("unchecked")
     protected static void replaceDirtyVersion(DBSyncEngine engine, RecordKey key, long newVersion) throws Exception {
         DirtyStateBuffer buf = field(engine, "dirty");
-        DirtyRecord cur = buf.get(key);
+        DirtyRecord cur = getDirtyRecord(engine, key);
         assertNotNull(cur);
         buf.remove(key);
         DirtyRecord replaced = new DirtyRecord(

@@ -5,9 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.game.protocol.pb.LogRecordCommand;
 
 import java.sql.Timestamp;
-import java.util.ArrayList;
 import java.util.Base64;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -19,14 +17,6 @@ public class LogEventCodec {
 
     public LogEventCodec(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
-    }
-
-    public List<LogEvent> toEvents(List<LogStreamRecord> records) {
-        List<LogEvent> events = new ArrayList<>(records.size());
-        for (LogStreamRecord record : records) {
-            events.add(toEvent(record));
-        }
-        return events;
     }
 
     public LogEvent toEvent(LogStreamRecord record) {

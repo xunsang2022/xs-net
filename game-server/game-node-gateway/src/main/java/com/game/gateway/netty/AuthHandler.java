@@ -178,12 +178,4 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
             authTimeoutTask.cancel(false);
         }
     }
-
-    /**
-     * 从 protobuf 消息中反射提取 playerId（兼容 string / int64 字段）。
-     * <p>Method 采用缓存，避免每条消息都执行 {@code getClass().getMethod()}。</p>
-     */
-    static String extractPlayerId(Class<?> type, Object payload) {
-        return GatewayMessageRouter.extractPlayerId(type, payload);
-    }
 }

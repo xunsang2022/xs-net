@@ -61,24 +61,6 @@ public record RpcMessageSpec<T extends MessageLite>(
     }
 
     /**
-     * 检查消息是否可路由。
-     *
-     * @return 如果可路由返回true，否则返回false
-     */
-    public boolean isRoutable() {
-        return roleClass != null;
-    }
-
-    /**
-     * 检查是否配置了编解码器。
-     *
-     * @return 如果已配置返回true，否则返回false
-     */
-    public boolean hasCodec() {
-        return codec != null;
-    }
-
-    /**
      * 解码Protocol Buffers消息为DTO对象。
      *
      * @param payload Protocol Buffers消息

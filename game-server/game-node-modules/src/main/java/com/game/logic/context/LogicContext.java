@@ -39,36 +39,12 @@ public final class LogicContext {
     private LogicContext() {
     }
 
-    public static RedisConnectionFactory getConnectionFactory() {
-        RedisConnectionFactory factory = connectionFactory;
-        if (factory == null) {
-            throw new IllegalStateException("RedisConnectionFactory has not been initialized");
-        }
-        return factory;
-    }
-
-    public static StringRedisTemplate getRedisTemplate() {
-        StringRedisTemplate template = redisTemplate;
-        if (template == null) {
-            throw new IllegalStateException("StringRedisTemplate has not been initialized");
-        }
-        return template;
-    }
-
     public static DBSyncEngineRegistry getDbSyncEngineRegistry() {
         DBSyncEngineRegistry registry = dbSyncEngineRegistry;
         if (registry == null) {
             throw new IllegalStateException("DBSyncEngineRegistry has not been initialized");
         }
         return registry;
-    }
-
-    public static LogConsumer getLogConsumer() {
-        LogConsumer consumer = logConsumer;
-        if (consumer == null) {
-            throw new IllegalStateException("LogConsumer has not been initialized");
-        }
-        return consumer;
     }
 
     public static RedisStore getRedisStore() {
@@ -97,26 +73,5 @@ public final class LogicContext {
 
     public static void setSyncIntervalMs(int intervalMs) {
         syncIntervalMs = Math.max(1, intervalMs);
-    }
-
-    public static MeterRegistry getMeterRegistry() {
-        MeterRegistry registry = meterRegistry;
-        if (registry == null) {
-            throw new IllegalStateException("MeterRegistry has not been initialized");
-        }
-        return registry;
-    }
-
-    public static LogicMetrics getLogicMetrics() {
-        LogicMetrics metrics = logicMetrics;
-        if (metrics == null) {
-            throw new IllegalStateException("LogicMetrics has not been initialized");
-        }
-        return metrics;
-    }
-
-    /** 供 DBSyncEngine 等可选上报场景使用：未装配时返回 null。 */
-    public static LogicMetrics getLogicMetricsOrNull() {
-        return logicMetrics;
     }
 }

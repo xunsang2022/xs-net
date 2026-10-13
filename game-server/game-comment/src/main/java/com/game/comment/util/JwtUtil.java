@@ -66,17 +66,7 @@ public class JwtUtil {
         return claims.getSubject();
     }
 
-    public String getPlayerId(String token) {
-        Claims claims = this.validateToken(token);
-        return claims == null ? null : getPlayerId(claims);
-    }
-
     public String getChannelId(Claims claims) {
         return claims.get(CLAIM_CHANNEL_ID, String.class);
-    }
-
-    public String getChannelId(String token) {
-        Claims claims = this.validateToken(token);
-        return claims == null ? null : getChannelId(claims);
     }
 }

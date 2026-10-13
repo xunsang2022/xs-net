@@ -4,7 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.lang.annotation.Annotation;
 import java.net.URL;
 import java.util.*;
 import java.util.function.Predicate;
@@ -19,18 +18,6 @@ import java.util.jar.JarFile;
 public class ClassScanner {
 
     private static final Logger log = LoggerFactory.getLogger(ClassScanner.class);
-
-    /**
-     * 扫描指定包下带有特定注解的类
-     * 如果 basePackages 为空或长度为 0，则扫描所有包
-     *
-     * @param basePackages    基础包路径数组
-     * @param annotationClass 注解类型
-     * @return 扫描到的类集合
-     */
-    public static Set<Class<?>> scanClassesWithAnnotation(String[] basePackages, Class<? extends Annotation> annotationClass) {
-        return scanClasses(basePackages, clazz -> clazz.isAnnotationPresent(annotationClass));
-    }
 
     /**
      * 扫描指定包下符合条件的类

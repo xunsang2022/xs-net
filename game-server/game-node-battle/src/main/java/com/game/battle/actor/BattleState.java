@@ -19,7 +19,6 @@ final class BattleState {
     private boolean created;
     private boolean ended;
     private long frameNumber;
-    private BattleSnapshot lastSnapshot = new BattleSnapshot(0L, Map.of());
 
     BattleState(String battleId, int maxPlayers) {
         this.battleId = battleId;
@@ -120,20 +119,6 @@ final class BattleState {
             participant.directionX = 0;
             participant.directionY = 0;
         }
-        Map<Long, ParticipantSnapshot> snapshot = new LinkedHashMap<>();
-        participants.forEach((playerId, participant) -> snapshot.put(playerId, new ParticipantSnapshot(
-                playerId,
-                participant.lastClientSequence,
-                participant.positionX,
-                participant.positionY,
-                participant.directionX,
-                participant.directionY,
-                participant.attack,
-                participant.defense,
-                participant.hp,
-                participant.maxHp
-        )));
-        lastSnapshot = new BattleSnapshot(frameNumber, Map.copyOf(snapshot));
     }
 
     boolean end() {
@@ -152,53 +137,8 @@ final class BattleState {
         return frameNumber;
     }
 
-    ParticipantSnapshot participant(Long playerId) {
-        ParticipantState participant = participants.get(playerId);
-        return participant == null ? null : new ParticipantSnapshot(
-                playerId,
-                participant.lastClientSequence,
-                participant.positionX,
-                participant.positionY,
-                participant.directionX,
-                participant.directionY,
-                participant.attack,
-                participant.defense,
-                participant.hp,
-                participant.maxHp
-        );
-    }
-
-    int size() {
-        return participants.size();
-    }
-
-    String battleId() {
-        return battleId;
-    }
-
-    BattleSnapshot lastSnapshot() {
-        return lastSnapshot;
-    }
-
     private static boolean validDirection(Integer value) {
         return value != null && value >= -1 && value <= 1;
-    }
-
-    record ParticipantSnapshot(
-            Long playerId,
-            long lastClientSequence,
-            int positionX,
-            int positionY,
-            int directionX,
-            int directionY,
-            int attack,
-            int defense,
-            int hp,
-            int maxHp
-    ) {
-    }
-
-    record BattleSnapshot(long frameNumber, Map<Long, ParticipantSnapshot> participants) {
     }
 
     private static final class ParticipantState {

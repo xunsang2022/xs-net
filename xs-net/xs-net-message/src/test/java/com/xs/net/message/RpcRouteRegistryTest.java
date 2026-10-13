@@ -27,6 +27,6 @@ public class RpcRouteRegistryTest extends TestCase {
             }
         };
 
-        assertEquals(1000, RpcRouteRegistry.from(registry).require(1000).spec().rpcNum());
+        assertEquals(1000, RpcRouteRegistry.from(registry).find(1000).spec().rpcNum());
     }
 }

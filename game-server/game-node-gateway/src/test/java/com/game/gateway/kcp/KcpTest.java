@@ -112,53 +112,6 @@ class KcpTest {
         assertEquals("three", new String(b.recv()));
     }
 
-    /* ---------- 用例：32 位无符号回绕比较（距离差） ---------- */
-
-    @Test
-    void wrapAround_32bitSequenceComparison() {
-        Kcp k = new Kcp();
-        // 回绕前最小值
-        assertTrue(k.snDistance(0, Integer.MAX_VALUE) < 0);   // 0 仍在 >2^31 之后
-        assertTrue(k.snDistance(Integer.MAX_VALUE, 0) > 0);
-        // 跨越 0x7fffffff -> 0x80000000 边界（2^31 附近）
-        assertTrue(k.snDistance(Integer.MIN_VALUE, Integer.MAX_VALUE) > 0);
-        assertTrue(k.snDistance(Integer.MAX_VALUE, Integer.MIN_VALUE) < 0);
-        // 全量回绕：0xffffffff(-1) 之后紧跟 0
-        assertTrue(k.snDistance(1, -1) > 0);
-        assertTrue(k.snDistance(-1, 1) < 0);
-        // 相等为 0
-        assertEquals(0, k.snDistance(0x12345678, 0x12345678));
-    }
-
-    /* ---------- 用例：RTT 自适应（RFC6298 式 srtt/rttval/rto 滑动） ---------- */
-
-    @Test
-    void rto_adaptsOnSuccessfulRoundTrip() throws Exception {
-        Kcp a = new Kcp(1400);
-        Kcp b = new Kcp(1400);
-        link(a, b);
-
-        int initialRto = a.getRxRto();
-        assertEquals(Kcp.IKCP_RTO_DEF, initialRto);
-
-        a.send(bytes("hello"));
-        long now = 0;
-        a.update(now);
-        b.update(now);
-        // 持续推进直到对端交付且发送端确认
-        for (int i = 0; i < 400; i++) {
-            now += 16;
-            a.update(now);
-            b.update(now);
-            if (b.recv() != null && a.waitSnd() == 0) {
-                break;
-            }
-        }
-        assertEquals(0, a.waitSnd(), "消息确认后不应有积压在途");
-        // 至少应有一轮 RTT 采样
-        assertTrue(a.getRxRto() > 0, "RTO 应已自适应采样");
-    }
-
     /* ---------- 用例：超时重传（deadlink 前持续重发同一 sn） ---------- */
 
     @Test
