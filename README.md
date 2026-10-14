@@ -2,18 +2,32 @@
 
 XS-NET 是面向 Java 游戏服务端的框架与示例工作区，围绕 Apache Pekko Typed/Cluster、RPC 消息契约、Protobuf 和多平台客户端 SDK 构建。
 
-[English](README_EN.md) · [架构说明](ARCHITECTURE.md) · [OpenWiki](openwiki/index.md) · [SDK 生成说明](openwiki/integrations/sdk-generation.md) · [贡献指南](CONTRIBUTING.md) · [变更记录](CHANGELOG.md) · [安全报告](SECURITY.md) · [第三方许可证](THIRD_PARTY_NOTICES.md)
+[English](README_EN.md) · [框架说明](xs-net/README.md) · [游戏服务端说明](game-server/README.md) · [OpenWiki](openwiki/index.md) · [SDK 生成说明](openwiki/framework/xs-net-sdk/sdk-generation.md) · [架构说明](ARCHITECTURE.md) · [贡献指南](CONTRIBUTING.md) · [变更记录](CHANGELOG.md) · [安全报告](SECURITY.md) · [第三方许可证](THIRD_PARTY_NOTICES.md)
 
 ## 项目组成
 
 仓库包含两个 Maven reactor：
 
-| 目录 | 内容 |
-| --- | --- |
-| `xs-net/` | 可复用框架模块：Actor/集群封装、消息契约、传输抽象、RPC Maven 插件、SDK 模板与工具 |
-| `game-server/` | 展示框架用法的游戏服务端示例：Gateway、Login、Logic 与协议定义 |
+| 目录 | 内容 | 说明文档 |
+| --- | --- | --- |
+| `xs-net/` | 可复用框架模块：Actor/集群封装、消息契约、传输抽象、RPC Maven 插件、SDK 模板与工具 | [框架 README](xs-net/README.md) |
+| `game-server/` | 展示框架用法的游戏服务端示例：Gateway、Login、Logic 与协议定义 | [游戏服务端 README](game-server/README.md) |
 
 Gateway 提供 Netty TCP/UDP/WebSocket 接入；Logic 使用 Pekko Cluster Sharding。当前示例还集成 Redis、PostgreSQL、JWT、指标和客户端 SDK 生成。
+
+## 文档导航
+
+| 文档 | 说明 |
+| --- | --- |
+| [框架 README](xs-net/README.md) | `xs-net/` 可复用框架：Actor/集群、消息契约、传输抽象、RPC 插件与 SDK 生成 |
+| [游戏服务端 README](game-server/README.md) | `game-server/` 示例服务端：Gateway/Login/Logic 的模块划分、协议与构建启动 |
+| [OpenWiki 索引](openwiki/index.md) | 工程 Wiki 根索引，含通用、框架、业务三部分 |
+
+OpenWiki 分区入口：
+
+- 通用：[快速上手](openwiki/general/quickstart.md) · [运行时架构](openwiki/general/architecture/overview.md) · [源码地图](openwiki/general/architecture/source-map.md) · [消息注册流程](openwiki/general/architecture/message-registration.md)
+- 框架层：[消息框架概念](openwiki/framework/xs-net-message/concepts.md) · [SDK 生成说明](openwiki/framework/xs-net-sdk/sdk-generation.md)
+- 业务层：[业务层总览](openwiki/business/game-server/index.md) · [运行时流程](openwiki/business/game-server/workflows/runtime-flows.md) · [工程与运维指南](openwiki/business/game-server/operations/engineering-guide.md) · [Gateway 传输说明](openwiki/business/game-node-gateway/transport.md)
 
 ## 环境要求
 
@@ -41,7 +55,7 @@ Windows PowerShell：
 bash ./mvnw -pl xs-net -am clean verify
 ```
 
-首次构建会下载 Maven 依赖。SDK 代码由 Maven 插件生成；生成说明见 [OpenWiki SDK 生成说明](openwiki/integrations/sdk-generation.md)。
+首次构建会下载 Maven 依赖。SDK 代码由 Maven 插件生成；生成说明见 [OpenWiki SDK 生成说明](openwiki/framework/xs-net-sdk/sdk-generation.md)。
 
 ## 本地运行示例
 
