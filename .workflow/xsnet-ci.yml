@@ -2,6 +2,10 @@ version: '1.0'
 name: xsnet-ci
 displayName: XS-NET CI
 
+variables:
+  global:
+    - XSNET_WIKI_TOKEN
+
 triggers:
   trigger: auto
   push:
@@ -9,6 +13,7 @@ triggers:
       precise:
         - master
         - main
+
 stages:
   - name: sync_wiki
     displayName: 同步 OpenWiki 到 Gitee Wiki
@@ -34,7 +39,7 @@ stages:
             git config user.email "gitee-ci@users.noreply.gitee.com"
             git add -A
             if ! git diff --cached --quiet; then
-              git commit -m "docs: sync openwiki from xs-net ${GIT_COMMIT:-unknown}"
+              git commit -m "docs: sync openwiki from xs-net ${GITEE_COMMIT:-unknown}"
               wiki_auth_header="$(git -C "$source_workspace" config --get http.https://gitee.com/.extraheader || true)"
               if [ -n "$wiki_auth_header" ]; then
                 git -c "http.https://gitee.com/.extraheader=$wiki_auth_header" push origin HEAD
