@@ -75,4 +75,34 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.valid").value(true))
                 .andExpect(jsonPath("$.channelId").isNotEmpty());
     }
+
+    @Test
+    void issueRejectsMissingPlayerId() throws Exception {
+        mockMvc.perform(post("/api/auth/issue")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"playerName\":\"bob\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void issueRejectsNonPositivePlayerId() throws Exception {
+        mockMvc.perform(post("/api/auth/issue")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"playerId\":0}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void issueIsRateLimitedPerIp() throws Exception {
+        for (int i = 0; i < AuthController.ISSUE_MAX_REQUESTS; i++) {
+            mockMvc.perform(post("/api/auth/issue")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"playerId\":1}"))
+                    .andExpect(status().isOk());
+        }
+        mockMvc.perform(post("/api/auth/issue")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"playerId\":1}"))
+                .andExpect(status().isTooManyRequests());
+    }
 }

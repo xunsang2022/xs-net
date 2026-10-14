@@ -174,9 +174,11 @@
                 <artifactId>xs-net-rpc-maven-plugin</artifactId>
                 <version>0.0.6</version>
                 <configuration>
+                    <!-- convertersOnly 只扫描本模块自身的 @ProtoRecord 源类型（PlayerPO），
+                         由它派生 PlayerInfoData 后生成 PO → 协议记录转换器；
+                         不再扫描 game-message-action 源码，避免把仅作协议字段声明的 PlayerInfoProto 误当作转换源。 -->
                     <sourceDirectories>
                         <sourceDirectory>${project.basedir}/src/main/java</sourceDirectory>
-                        <sourceDirectory>${project.basedir}/../game-message-action/src/main/java</sourceDirectory>
                     </sourceDirectories>
                     <convertersOnly>true</convertersOnly>
                 </configuration>
@@ -186,6 +188,23 @@
                         <goals>
                             <goal>generate</goal>
                         </goals>
+                    </execution>
+                    <execution>
+                        <id>generate-rpc-handlers</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <!-- handlersOnly 需要同时扫描本模块 Actor 源码与 game-message-action 中的 @Rpc 记录，
+                                 才能把「单参数 DTO 处理方法」解析到对应的 rpcNum。 -->
+                            <sourceDirectories>
+                                <sourceDirectory>${project.basedir}/src/main/java</sourceDirectory>
+                                <sourceDirectory>${project.basedir}/../game-message-action/src/main/java</sourceDirectory>
+                            </sourceDirectories>
+                            <convertersOnly>false</convertersOnly>
+                            <handlersOnly>true</handlersOnly>
+                            <handlerJavaPackage>com.game.logic.management</handlerJavaPackage>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

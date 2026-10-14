@@ -12,6 +12,7 @@ spring:
           max-active: 32
           max-idle: 32
           min-idle: 4
+      password: 123456
   datasource:
     url: jdbc:postgresql://localhost:5432/gamedb
     username: root

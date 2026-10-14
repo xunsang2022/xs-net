@@ -61,8 +61,13 @@ public final class KcpSession implements ClientEndpoint {
         kcp.update(System.currentTimeMillis());
     }
 
-    /** 向客户端发送一段原始应用层字节（走 KCP 可靠层）。 */
-    public void sendBytes(byte[] data) {
+    /**
+     * 向客户端发送一段原始应用层字节（走 KCP 可靠层）。
+     * <p>加锁监视器即本会话实例：与 {@link KcpAuthHandler} 的 {@code synchronized (session)} 块使用同一
+     * 监视器，从而把下行（ChannelActor 线程）与 KCP 输入/演进（业务线程池、后台定时线程）对底层
+     * {@link Kcp} 实例的访问串行化——这是 {@link Kcp} 非线程安全的前提条件。</p>
+     */
+    public synchronized void sendBytes(byte[] data) {
         lastActiveMs = System.currentTimeMillis();
         kcp.send(data);
         kcp.update(System.currentTimeMillis());
@@ -100,8 +105,8 @@ public final class KcpSession implements ClientEndpoint {
         // UDP 无连接；发送一个空载荷标记会话关闭，客户端可据此感知
         try {
             sendBytes(new byte[0]);
-        } catch (Exception ignored) {
-            // 会话已失效，忽略发送失败
+        } catch (Exception e) {
+            log.warn("Failed to notify KCP session close: channelId={}, remote={}", channelId, remote, e);
         }
     }
 

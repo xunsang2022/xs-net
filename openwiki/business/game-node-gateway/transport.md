@@ -56,7 +56,7 @@ TCP 的可靠性、顺序和流量控制由操作系统 TCP 栈提供，但 TCP 
 
 1. `NettyServer` 创建 Netty `ServerBootstrap`，`NettyChannelInitializer` 配置 pipeline。
 2. `LengthFieldBasedFrameDecoder` 依据前四字节恢复完整帧，避免粘包和半包直接进入业务处理。
-3. `AuthHandler` 将首个帧体当作 UTF-8 JWT 校验；成功后将 `cid -> TcpClientEndpoint` 登记进 `ChannelRegistry`。
+3. `AuthHandler` 将首个帧体当作 UTF-8 JWT 校验（复用 `AuthSupport.resolve` 验签并取 `channelId`，再用 `AuthSupport.admitReconnect` 做单账号并发校验）；成功后将 `cid -> TcpClientEndpoint` 登记进 `ChannelRegistry`，并以 `AuthSupport.markLoginIngress` 记录登录入口时间戳。
 4. 后续帧体交给 `GatewayMessageRouter`；下行时 `TcpClientEndpoint` 通过 `NettyFramer` 再补回 4 字节大端长度。
 
 TCP 的队头阻塞是它最重要的取舍：某个字节段丢失时，后续字节即使已经到达，应用也必须等待缺失段重传。对于登录、背包、支付、聊天这类要求严格顺序和完整性的消息，这通常是更简单、稳妥的选择。
@@ -77,7 +77,7 @@ TCP 的队头阻塞是它最重要的取舍：某个字节段丢失时，后续�
 
 认证和可靠交付的职责分开：
 
-1. 客户端先发送 `HELLO(JWT)` 数据报。`UdpAuthHandler` 校验 JWT，以远端 `ip:port` 建立会话，并用 JWT 中的 `cid` 创建 `UdpSession`、注册到 `ChannelRegistry`。
+1. 客户端先发送 `HELLO(JWT)` 数据报。`UdpAuthHandler` 校验 JWT（复用 `AuthSupport`），以远端 `ip:port` 建立会话，并用 JWT 中的 `cid` 创建 `UdpSession`、注册到 `ChannelRegistry`。
 2. `UdpSession` 将后续数据报交给 `UdpReliableLayer`。该层维护发送序号、累计确认号、在途窗口和乱序缓存。
 3. DATA 包带单调递增的 `seq`；接收方只按连续序号向上层交付，同时回传累计 `ACK`；未确认包在重传间隔到期后重发。
 4. 已按序交付的 payload 是完整 `NetMessage` 字节，随后进入统一的 `GatewayMessageRouter`。
@@ -108,7 +108,7 @@ UDP datagram
 
 1. `KcpServer` 在 `NioDatagramChannel` 上接收 UDP 数据报，将每个远端地址映射为一个 `KcpSession`。
 2. `KcpSession.receive` 调用 `Kcp.input(datagram)`，再调用 `Kcp.update(now)` 推进状态机；`Kcp.recv()` 只在一条应用消息完成重组后才返回字节数组。
-3. `KcpAuthHandler` 将首条已交付的应用消息作为 UTF-8 JWT 校验，认证成功后把会话作为 `ClientEndpoint` 注册；认证后的已交付消息进入 `GatewayMessageRouter`。
+3. `KcpAuthHandler` 将首条已交付的应用消息作为 UTF-8 JWT 校验（复用 `AuthSupport.resolve`），认证成功后把会话作为 `ClientEndpoint` 注册；认证后的已交付消息进入 `GatewayMessageRouter`。
 4. 下行调用 `KcpSession.write(NetMessage)`，最终执行 `Kcp.send(message.toByteArray())`；KCP 的 output 回调通过 UDP 写出分段。
 5. `KcpServer` 的后台调度器周期调用会话 `updateNow()`，驱动超时重传、窗口更新，并清理认证超时或空闲会话。
 

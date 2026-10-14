@@ -78,7 +78,7 @@ public class LogConsumer {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 if (!running.get() || Thread.currentThread().isInterrupted()) {
                     break;
                 }
@@ -105,6 +105,21 @@ public class LogConsumer {
                 .map(r -> new LogStreamRecord(r.getId().getValue(), r.getValue()))
                 .toList();
 
+        DecodedBatch decoded = decodeRecords(streamRecords);
+        if (!decoded.batch().isEmpty()) {
+            persistBatch(decoded.batch());
+        }
+        if (!decoded.acked().isEmpty()) {
+            redis.opsForStream().acknowledge(LOG_EVENTS_KEY, LOG_GROUP, decoded.acked().toArray(new String[0]));
+            Metrics.counter("log.consumer.ack").increment(decoded.acked().size());
+        }
+    }
+
+    /**
+     * 解码一批日志事件：正常事件进入待落库批次，坏消息写入死信并计入 ack，不阻塞整批。
+     * 返回本批待落库 PO 与应 ACK 的 stream id。
+     */
+    private DecodedBatch decodeRecords(List<LogStreamRecord> streamRecords) {
         List<LogEventPO> batch = new ArrayList<>();
         List<String> acked = new ArrayList<>();
         for (LogStreamRecord record : streamRecords) {
@@ -118,7 +133,7 @@ public class LogConsumer {
                         event.playerId(),
                         event.createTime()));
                 acked.add(record.id());
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 redis.opsForStream().add(LOG_DEAD_LETTER_KEY, Map.of(
                         "sourceId", record.id(),
                         "error", String.valueOf(e.getMessage()),
@@ -128,30 +143,32 @@ public class LogConsumer {
                 acked.add(record.id());
             }
         }
+        return new DecodedBatch(batch, acked);
+    }
 
-        if (!batch.isEmpty()) {
-            try {
-                List<String> insertedIds;
-                try (SqlSession session = sessionFactory.openSession(false)) {
-                    try {
-                        insertedIds = session.getMapper(LogEventMapper.class).insertIgnoreBatch(batch);
-                        session.commit();
-                    } catch (RuntimeException exception) {
-                        session.rollback();
-                        throw exception;
-                    }
+    /** 批量 INSERT 日志事件；失败时不 ACK，Redis 保留 pending 供后续重认领。 */
+    private void persistBatch(List<LogEventPO> batch) {
+        try {
+            List<String> insertedIds;
+            try (SqlSession session = sessionFactory.openSession(false)) {
+                try {
+                    insertedIds = session.getMapper(LogEventMapper.class).insertIgnoreBatch(batch);
+                    session.commit();
+                } catch (RuntimeException exception) {
+                    session.rollback();
+                    throw exception;
                 }
-                Metrics.counter("log.consumer.duplicates").increment(batch.size() - insertedIds.size());
-            } catch (RuntimeException exception) {
-                Metrics.counter("log.consumer.database_failures").increment();
-                // Do not ACK here: Redis keeps the entries pending for reclaim.
-                throw exception;
             }
+            Metrics.counter("log.consumer.duplicates").increment(batch.size() - insertedIds.size());
+        } catch (RuntimeException exception) {
+            Metrics.counter("log.consumer.database_failures").increment();
+            // Do not ACK here: Redis keeps the entries pending for reclaim.
+            throw exception;
         }
-        if (!acked.isEmpty()) {
-            redis.opsForStream().acknowledge(LOG_EVENTS_KEY, LOG_GROUP, acked.toArray(new String[0]));
-            Metrics.counter("log.consumer.ack").increment(acked.size());
-        }
+    }
+
+    /** 解码结果：待落库批次与已确定 ACK 的 stream id。 */
+    private record DecodedBatch(List<LogEventPO> batch, List<String> acked) {
     }
 
     private List<MapRecord<String, String, String>> reclaimPending() {

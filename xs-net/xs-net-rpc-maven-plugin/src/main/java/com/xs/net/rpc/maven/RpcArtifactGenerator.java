@@ -187,6 +187,24 @@ final class RpcArtifactGenerator {
                 renderer.render("templates/GeneratedProtoConverters.vm", context));
     }
 
+    /** handlersOnly 模式：生成「rpcNum → 方法名」映射类 GeneratedRpcHandlers。 */
+    void generateHandlers(Map<Integer, String> methodNames, Path outputDirectory, String handlerJavaPackage)
+            throws Exception {
+        VelocityRenderer renderer = new VelocityRenderer();
+        List<Map<String, Object>> entries = new ArrayList<>();
+        for (Map.Entry<Integer, String> entry : methodNames.entrySet()) {
+            Map<String, Object> view = new LinkedHashMap<>();
+            view.put("number", entry.getKey());
+            view.put("methodName", entry.getValue());
+            entries.add(view);
+        }
+        Map<String, Object> context = new HashMap<>();
+        context.put("handlerPackage", handlerJavaPackage);
+        context.put("methodNames", entries);
+        write(outputDirectory.resolve(handlerJavaPackage.replace('.', '/')).resolve("GeneratedRpcHandlers.java"),
+                renderer.render("templates/GeneratedRpcHandlersMap.vm", context));
+    }
+
     private Map<String, List<MessageModel>> messagesByProtoFile(RpcModel model) throws MojoFailureException {
         Map<String, List<MessageModel>> messagesByProtoFile = new LinkedHashMap<>();
         for (MessageModel message : model.messages()) {
@@ -317,10 +335,27 @@ final class RpcArtifactGenerator {
     }
 
     private String protocolValidationReport(RpcModel model) {
-        return "status=PASS\n"
-                + "rpc_count=" + model.messages().size() + "\n"
-                + "duplicate_rpc_numbers=0\n"
-                + "duplicate_message_names=0\n"
-                + "generated_at=build-time\n";
+        StringBuilder report = new StringBuilder();
+        report.append("status=PASS\n")
+                .append("rpc_count=").append(model.messages().size()).append("\n")
+                .append("duplicate_rpc_numbers=0\n")
+                .append("duplicate_message_names=0\n")
+                .append("generated_at=build-time\n");
+        // 逐消息输出「字段名→字段号」清单，作为协议向后兼容基线：
+        // 提交该清单后，CI 或人审通过 git diff 可发现字段号被复用（同号换了字段名）或已有字段被删除。
+        report.append("proto_message_fields:\n");
+        for (MessageModel message : model.messages()) {
+            report.append("  ").append(message.name()).append("(#").append(message.number()).append("):\n");
+            message.fields().stream().sorted(Comparator.comparingInt(FieldModel::number))
+                    .forEach(field -> report.append("    ").append(field.name()).append('=')
+                            .append(field.number()).append('\n'));
+        }
+        for (NestedMessageModel nested : model.nestedMessages()) {
+            report.append("  ").append(nested.name()).append(":\n");
+            nested.fields().stream().sorted(Comparator.comparingInt(FieldModel::number))
+                    .forEach(field -> report.append("    ").append(field.name()).append('=')
+                            .append(field.number()).append('\n'));
+        }
+        return report.toString();
     }
 }

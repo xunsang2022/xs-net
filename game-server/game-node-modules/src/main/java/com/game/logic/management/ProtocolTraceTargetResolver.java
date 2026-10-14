@@ -41,19 +41,16 @@ public final class ProtocolTraceTargetResolver {
         if (actorType == null) {
             throw new IllegalArgumentException("No Logic actor is registered for protocol: " + protocolNumber);
         }
+        // 方法名改由 node-modules 自身生成的 handler 元数据（rpcNum → 方法名）提供。
+        String methodName = GeneratedRpcHandlers.methodNames().get(protocolNumber);
+        if (methodName == null) {
+            throw new IllegalArgumentException("Cannot resolve Logic handler for protocol: " + protocolNumber);
+        }
         return new ProtocolTraceTarget(
                 protocolNumber,
                 protocolNumber,
                 spec.dtoClass(),
                 actorType,
-                handlerMethod(actorType, spec, protocolNumber));
-    }
-
-    /** 使用生成时已校验过的 RPC 元数据定位 Actor 或其组件中的处理方法。 */
-    private static String handlerMethod(Class<?> actorType, RpcMessageSpec<?> spec, int protocolNumber) {
-        if (spec.handler() == null || !actorType.getName().equals(spec.handler().actorType())) {
-            throw new IllegalArgumentException("Cannot resolve Logic handler for protocol: " + protocolNumber);
-        }
-        return spec.handler().methodName();
+                methodName);
     }
 }

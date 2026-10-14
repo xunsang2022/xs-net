@@ -10,10 +10,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: "*"
+        include: health,info
   endpoint:
     health:
-      show-details: always
+      show-details: never
 
 # Logging Configuration
 logging:
@@ -21,6 +21,8 @@ logging:
     root: INFO
 
 # JWT Configuration
+# 生产环境必须通过环境变量 JWT_SECRET 注入；未设置时回退到下面的本地开发默认值，
+# 该默认值仅用于本地调试，切勿在生产使用
 jwt:
-  secret: xs-net-dev-jwt-secret-key-32bytes-minimum!!
+  secret: "${JWT_SECRET:xs-net-local-dev-only-secret-key-32bytes}"
   expiration: 86400000

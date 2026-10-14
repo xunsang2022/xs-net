@@ -25,7 +25,7 @@ GameGatewayApplication.main
 
 ### Login（Spring Boot，非集群成员）
 
-`application.yml` 通过 `spring.autoconfigure.exclude` 排除 `GameFrameworkAutoConfiguration`，因此不创建 ActorSystem。启动只装配 `JwtUtil` 与 `AuthController`。
+`application.yml` 通过 `spring.autoconfigure.exclude` 排除 `GameFrameworkAutoConfiguration`，因此不创建 ActorSystem。启动只装配 `JwtUtil`（签名密钥来自环境变量 `JWT_SECRET`，为空或不足 32 字节即启动快速失败）与 `AuthController`（`/api/auth/issue` 内置按客户端 IP 的 `ClientIpFixedWindowRateLimiter` 固定窗口限流）；Actuator 仅暴露 `health,info`。
 
 ### Logic（Spring Boot，非 Web）
 
@@ -70,11 +70,12 @@ TCP、WebSocket 和自研 UDP 共享同一模型：**首个 `HELLO(JWT)` 包 →
   -> AuthHandler（挂 business 线程池）
 
 首帧：XS packet(packetId=HELLO)，body = UTF-8 JWT
-  -> jwtUtil.validateToken -> Claims
-  -> channelId = claims.cid，缺失即失败
-  -> max-connections-per-account 检查（ChannelRegistry.isActive）
+  -> AuthSupport.resolve：jwtUtil.validateToken -> Claims，channelId = claims.cid，缺失即失败
+  -> AuthSupport.admitReconnect(channelId, packet.random(), max-connections-per-account)
+       （同 channelId 已有活跃连接：random 相同则替换旧的，否则拒绝并计 gateway.connection.rejected）
   -> ChannelRegistry.register(channelId, TcpClientEndpoint)
-  -> gateway.auth.success / gateway.auth.failure / gateway.connection.rejected
+  -> AuthSupport.markLoginIngress(channelId)：认证成功即记录登录入口时间戳
+  -> AuthSupport.countSuccess / countFailure：gateway.auth.success / gateway.auth.failure
 
 后续帧：XS packet(packetId=DATA)，body = NetMessage Protobuf 字节 -> GatewayMessageRouter.route(body, channelId)
 ```
@@ -82,6 +83,8 @@ TCP、WebSocket 和自研 UDP 共享同一模型：**首个 `HELLO(JWT)` 包 →
 注意：由于拆帧在 `AuthHandler` 之前，**JWT 帧同样使用 XS packet，前 4 字节是 body 长度字段**，JWT 位于 `HELLO` 包的 body 中。实现与 SDK 都遵循完整 XS packet 格式，而不是简单的"长度前缀 + NetMessage"。
 
 连接断开时 `channelInactive` 从 `ChannelRegistry` 移除并清理认证超时任务。
+
+TCP、UDP、KCP 三处 `authenticate` 的主干共用 `com.game.gateway.netty.AuthSupport`：`resolve`（验签 → channelId）、`admitReconnect`（单账号并发校验）、`countSuccess`/`countFailure`/`countC2S`、`markLoginIngress`（认证成功即记录登录入口时间戳），以及 `TCP_METRICS`/`UDP_METRICS`/`KCP_METRICS` 指标名常量；各 Handler 只保留握手回执、会话创建/清理等传输特化逻辑。
 
 ### WebSocket（8083，路径 `/game`）
 
@@ -122,56 +125,34 @@ GatewayMessageRouter.route(body, channelId)
   -> route.playerId(dto)：为空则丢弃
   -> 组装 RequestContext（withIdentity 覆盖 channelId；过期则
          记录 gateway.ingress.rejected{reason=expired} 并丢弃）
-  -> 分支：
-       LoginRequest  -> ChannelRegistry.recordLoginIngress(channelId, nanoTime)
-                        构造 PlayerEnterCommand(playerId, playerName, channelId)
-                        AkkaKit.tell(..., PlayerMessage.class, command, playerId, context)
-       LogoutRequest -> 用认证 channelId 重建 LogoutRequest 再投递
-       其他           -> 直接投递该 DTO
+  -> AkkaKit.tell(GameRpcMessages.INSTANCE, PlayerMessage.class, dto, playerId, context)
+       LoginRequest(1000) / LogoutRequest(1001) 等 DTO 均按解码结果直接投递到 PlayerMessage 角色，
+       认证通道通过 RequestContext.withIdentity(playerId, channelId) 覆盖到上下文
 ```
 
-关键设计：**客户端协议 1000（`LoginRequest`）不会原样进入 Logic**，网关把它转换成内部协议 3003（`PlayerEnterCommand`）再投递，这就是 GM 追踪接口在追踪登录时必须填写 3003 的原因。
+关键设计：`LoginRequest(1000)` 直接投递到 `PlayerMessage`，不再转换为内部协议；GM 追踪接口在追踪登录时按 `1000` 过滤。
 
 投递到 Pekko 后的路径见 [领域概念](../../framework/xs-net-message/concepts.md#路由与身份)：校验 → 拦截器 → `entityRef.tell(NetMessage)`；跨节点由 Artery 经 `NetMessageSerializer` 传输，远端 `RpcActor.onNetMessage` 解码、恢复上下文并 `tell` 给自己。
 
 ## 登录加载与首次响应
 
-`PlayerActor` 收到 3003 后的完整流程：
+`PlayerActor` 在构造期即完成玩家数据加载：`PlayerInfo.loadingModel(playerId)` 先读 Redis 缓存 `player:{playerId}`，未命中再经 `DBSyncEngineRegistry.loadOrCreate("player", playerId)` 读数据库（`INSERT ... ON CONFLICT ... RETURNING`），并把结果回写 Redis。加载是同步的，没有阶段机、加载超时定时器或消息暂存。
+
+`PlayerInfo` 直接处理 `LoginRequest(1000)`：
 
 ```text
-PlayerEnterCommand
-  -> lifecycle.onPlayerEnter
-       phase == NEW -> beginLoading（设 id/name、phase=LOADING）
-                       startSingleTimer(LOAD_TIMEOUT_KEY, 3000ms)
-                       stateSync.loadFromCache(playerId)       [redis-io-executor]
-       phase == ONLINE -> applyEnter：更新 name（若变化则标脏）→ markOnlineFields → 发 SC_Login
-       其他            -> 记录 WARN 后忽略
-
-CacheLoadResult（命中且非空）
-  -> writeInitialState -> prepareOnlineState（fromHash + 补齐 id/name + markOnlineFields + version+1）
-  -> stateSync.writeInitialState(...)                      [redis-io-executor]
-
-CacheLoadResult（未命中或读失败）
-  -> stateSync.loadFromDatabase(playerId)                   [db-io-executor]
-       DBSyncEngine.loadOrCreate：INSERT ... ON CONFLICT ... RETURNING ...
-
-DatabaseLoadResult（为空或出错）
-  -> cancel 超时定时器 -> failLoading -> stash.clear -> Actor 停止
-
-InitialRedisWriteResult（成功）
-  -> cancel 超时定时器 -> clearDirtyMatching -> markOnline
-  -> stateSync.startFlushTimer()
-  -> onLoginMessage 内联发送：data.toVo() 转出协议记录
-                        LoginResponse(result, token, playerInfo) -> S2C
-                        -> sendRpc(resp, pendingChannelId)
-  -> recordLoginLogicTotal
-  -> stash.unstashAll(Behaviors.same())
-
-LoadTimeout（加载超过 3 秒）
-  -> failLoading -> stash.clear -> Actor 停止
+LoginRequest(1000) -> PlayerActor -> PlayerInfo.onLoginMessage
+  -> 已在线则忽略
+  -> 记录 pendingChannelId；name 变化则 setName（标脏）
+  -> markOnlineFields：online=1、last_login_at/updated_at、version+1（标脏）
+  -> online = true
+  -> redisStore.saveRedis(data)
+  -> refreshFlushTimerIfNeeded()（启动脏数据刷新单次定时器）
+  -> services.sendRpc(pendingChannelId, LoginResponse(0, null, data.toVo()))
+  -> 记录 login.s2c.send.duration / login.logic.total.duration
 ```
 
-缓存命中与未命中分别计入 `login.redis.load.duration{cache=hit|miss|failure}`、`login.database.load.duration`、`login.redis.create.duration`、`login.logic.total.duration`，以及 `login.s2c.send.nano` 时间戳。
+上述登录埋点均已接线：`PlayerInfo.loadingModel` 分别记录 Redis 命中/未命中/读失败的 `login.redis.load.duration{cache=hit|miss|failure}` 与 DB 加载的 `login.database.load.duration`，登录响应路径记录 `login.s2c.send.duration`（S2C 发送耗时 Timer）与 `login.logic.total.duration`。`login.redis.create.duration` 仅在 `LogicMetrics` 中定义（预留），登录路径当前未调用 `recordLoginRedisCreate`。
 
 ## S2C 下行
 
@@ -193,14 +174,13 @@ Logic：services.sendRpc(response, channelId)
 ### 客户端登出（1001 → 1003）
 
 ```text
-LogoutRequest(1001) -> PlayerActor -> lifecycle.onLogoutMessage
-  -> 记录 pendingLogout，beginDestroy()
-       -> beginDestroyLifecycle（要求 ONLINE）：phase=DESTROYING，online=false，标记 online/updated_at 脏
-       -> cancelFlushTimer
-       -> stateSync.destroy(完整快照, version)            [redis-io-executor]
-  -> DestroyResult
-       -> completeDestroy：写 Redis 成功且 DBSync 接收成功才算完成
-       -> 发送 LogoutResponse(1003) -> Actor 停止
+LogoutRequest(1001) -> PlayerActor -> PlayerInfo.onLogoutMessage
+  -> 若在线：beginDestroy()
+       online=false、cancelFlushTimer
+       标记 online=0 / updated_at 脏字段
+       ActorServerSync.destroyAll()：经 db-io-executor 异步落库所有注册模型
+       redisStore.deletePlayerCache(playerId)
+  -> sendResponse(LogoutResponse(1003)) -> Actor 停止（Behaviors.stopped）
 ```
 
 ### GM 踢人
@@ -222,7 +202,7 @@ POST /admin/gm/kick  (X-GM-Token)
 
 ### Actor 意外停止
 
-`PostStop` 时若 `shouldPersistOnStop()`（`ONLINE` 或 `DESTROYING`）为真，`persistStopped` 会在 redis-io-executor 上补写 Redis，并在成功后把完整快照提交给 `DBSyncEngine`。
+`PostStop` 信号触发 `ActorServerSync.persistAllStopped()`：把所有注册模型（如 `PlayerPO`）的完整快照经 `db-io-executor` 异步提交给 `DBSyncEngineRegistry.saveNow`，作为意外停止时的补偿持久化。
 
 ## 状态持久化
 
@@ -262,18 +242,22 @@ LogConsumer（守护线程 log-consumer，消费者组 db-sync）
 ## 协议与 SDK 生成
 
 ```text
-Java record + @Rpc/@ProtoField（三个 sourceDirectories）
-  -> xs-rpc:generate（generate-sources）
-       RpcSourceScanner（JavaParser）-> RpcModel
+Java record + @Rpc/@ProtoField、@ProtoRecord 声明类（game-message-action 自身 src/main/java）
+  -> xs-rpc:generate（generate-sources，全量模式只扫该模块自身）
+       RpcSourceScanner（JavaParser）-> RpcModel（roleClass 由 record 实现的 @Roles 接口推断，handler 元数据为 null）
        RpcArtifactGenerator（Velocity）
-         -> src/main/proto/*.proto（含 ActorModels.proto）、rpc_routes.proto、rpc_routes.md、rpc_protocol_validation.txt
-         -> target/generated-sources/rpc：GameRpcMessages / GeneratedRpcCodec / GeneratedRpcHandlers
-         -> target/generated-sources/rpc：@ProtoRecord 派生的协议记录源码
+         -> src/main/proto/*.proto（含 ActorModels.proto）、rpc_routes.proto、rpc_routes.md、rpc_protocol_validation.txt（含 proto_message_fields 段）
+         -> target/generated-sources/rpc：GameRpcMessages / GeneratedRpcCodec
+         -> target/generated-sources/rpc：@ProtoRecord 声明类派生的协议记录源码
   -> protobuf-maven-plugin 编译 proto -> com.game.protocol.pb
 
-@ProtoRecord(classType, number) 标注的 PO（game-node-modules）
-  -> xs-rpc:generate（convertersOnly = true，game-node-modules 内）
+@ProtoRecord 源 PO（game-node-modules 自身 src/main/java）
+  -> xs-rpc:generate（convertersOnly = true，只扫自身）
          -> target/generated-sources/rpc-converters：GeneratedProtoConverters（PO → 协议记录）
+
+Actor 单参数处理方法（game-node-modules 自身 + ../game-message-action/src/main/java）
+  -> xs-rpc:generate（handlersOnly = true）
+         -> target/generated-sources/rpc-handlers/com/game/logic/management：GeneratedRpcHandlers（rpcNum → 方法名）
 
 scripts/Generate-Sdks.ps1
   -> mvn generate-sources（xs-net-sdk）产出 target/generated-proto

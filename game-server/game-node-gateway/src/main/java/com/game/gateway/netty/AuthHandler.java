@@ -4,7 +4,6 @@ import com.game.comment.util.JwtUtil;
 import com.game.gateway.config.NettyConfig;
 import com.xs.net.transport.PacketFrame;
 import com.xs.net.transport.PacketId;
-import io.jsonwebtoken.Claims;
 import io.micrometer.core.instrument.Metrics;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
@@ -15,7 +14,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -29,10 +27,8 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
 
-    private static final String METRIC_AUTH_SUCCESS = "gateway.auth.success";
-    private static final String METRIC_AUTH_FAILURE = "gateway.auth.failure";
+    /** 重复连接拒绝计数（TCP 特有；成功/失败/上行指标名见 {@link AuthSupport}）。 */
     private static final String METRIC_CONN_REJECTED = "gateway.connection.rejected";
-    private static final String METRIC_C2S_MESSAGES = "gateway.c2s.messages";
 
     /** JWT 验签组件。 */
     @NonNull
@@ -97,51 +93,45 @@ public class AuthHandler extends SimpleChannelInboundHandler<ByteBuf> {
 
     private void authenticate(ChannelHandlerContext ctx, PacketFrame packet) {
         try {
-            byte[] tokenBytes = packet.body();
-            String token = new String(tokenBytes, StandardCharsets.UTF_8);
-            Claims claims = jwtUtil.validateToken(token);
-            if (claims == null) {
+            AuthSupport.Result result = AuthSupport.resolve(jwtUtil, packet.body());
+            if (result.failure() == AuthSupport.Failure.INVALID_TOKEN) {
                 log.warn("Channel auth failed: invalid token");
-                Metrics.counter(METRIC_AUTH_FAILURE).increment();
+                AuthSupport.countFailure(AuthSupport.TCP_METRICS);
                 failAuth(ctx);
                 return;
             }
-            channelId = jwtUtil.getChannelId(claims);
-            if (channelId == null || channelId.isBlank()) {
+            if (result.failure() == AuthSupport.Failure.MISSING_CHANNEL_ID) {
                 log.warn("Channel auth failed: token has no channelId");
-                Metrics.counter(METRIC_AUTH_FAILURE).increment();
+                AuthSupport.countFailure(AuthSupport.TCP_METRICS);
                 failAuth(ctx);
                 return;
             }
-            // 单账号/单通道并发连接上限：已存在活跃连接时拒绝新连接
+            channelId = result.channelId();
             connectionRandom = packet.random();
-            ClientEndpoint existing = ChannelRegistry.INSTANCE.get(channelId);
-            if (config.getMaxConnectionsPerAccount() > 0 && existing != null && existing.isActive()) {
-                if (existing.connectionRandom() != connectionRandom) {
-                    log.warn("Reject duplicate active connection: channelId={}", channelId);
-                    Metrics.counter(METRIC_CONN_REJECTED).increment();
-                    failAuth(ctx);
-                    return;
-                }
-                ChannelRegistry.INSTANCE.remove(channelId, existing);
-                existing.close();
+            // 单账号/单通道并发连接上限：已存在活跃连接时拒绝新连接
+            if (!AuthSupport.admitReconnect(channelId, connectionRandom, config.getMaxConnectionsPerAccount())) {
+                log.warn("Reject duplicate active connection: channelId={}", channelId);
+                Metrics.counter(METRIC_CONN_REJECTED).increment();
+                failAuth(ctx);
+                return;
             }
             registeredEndpoint = new TcpClientEndpoint(ctx.channel(), connectionRandom);
             ChannelRegistry.INSTANCE.register(channelId, registeredEndpoint);
             authenticated = true;
             cancelAuthTimeout();
+            AuthSupport.markLoginIngress(channelId);
             ctx.writeAndFlush(NettyFramer.encodeAck(connectionRandom, 0));
-            Metrics.counter(METRIC_AUTH_SUCCESS).increment();
+            AuthSupport.countSuccess(AuthSupport.TCP_METRICS);
         } catch (Exception e) {
             log.error("Channel auth error", e);
-            Metrics.counter(METRIC_AUTH_FAILURE).increment();
+            AuthSupport.countFailure(AuthSupport.TCP_METRICS);
             ctx.close();
         }
     }
 
     private void handleGameMessage(ChannelHandlerContext ctx, byte[] body) {
         try {
-            Metrics.counter(METRIC_C2S_MESSAGES).increment();
+            AuthSupport.countC2S(AuthSupport.TCP_METRICS);
             router.route(body, channelId);
         } catch (Exception e) {
             log.error("Failed to handle game message, closing channel: channelId={}", channelId, e);

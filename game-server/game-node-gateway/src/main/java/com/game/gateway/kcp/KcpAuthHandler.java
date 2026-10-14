@@ -1,10 +1,9 @@
 package com.game.gateway.kcp;
 
 import com.game.comment.util.JwtUtil;
+import com.game.gateway.netty.AuthSupport;
 import com.game.gateway.netty.ChannelRegistry;
 import com.game.gateway.netty.GatewayMessageRouter;
-import io.jsonwebtoken.Claims;
-import io.micrometer.core.instrument.Metrics;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.DatagramChannel;
@@ -14,7 +13,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -30,10 +28,6 @@ import java.util.concurrent.ExecutorService;
 @Slf4j
 @RequiredArgsConstructor
 public class KcpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> {
-
-    private static final String METRIC_AUTH_SUCCESS = "gateway.kcp.auth.success";
-    private static final String METRIC_AUTH_FAILURE = "gateway.kcp.auth.failure";
-    private static final String METRIC_C2S_MESSAGES = "gateway.kcp.c2s.messages";
 
     /** KCP 握手验签器。 */
     @NonNull
@@ -81,7 +75,7 @@ public class KcpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
             return;
         }
         try {
-            Metrics.counter(METRIC_C2S_MESSAGES).increment();
+            AuthSupport.countC2S(AuthSupport.KCP_METRICS);
             router.route(message, session.channelId());
         } catch (Exception e) {
             log.error("Failed to handle KCP game message", e);
@@ -91,32 +85,28 @@ public class KcpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
     /** 未认证会话的首个应用层载荷当作 JWT 校验。 */
     private void authenticate(KcpSession session, byte[] tokenBytes) {
         try {
-            String token = new String(tokenBytes, StandardCharsets.UTF_8);
-            Claims claims = jwtUtil.validateToken(token);
-            if (claims == null) {
-                Metrics.counter(METRIC_AUTH_FAILURE).increment();
+            AuthSupport.Result result = AuthSupport.resolve(jwtUtil, tokenBytes);
+            if (!result.success()) {
+                AuthSupport.countFailure(AuthSupport.KCP_METRICS);
                 removeSession(session);
                 return;
             }
-            String channelId = jwtUtil.getChannelId(claims);
-            if (channelId == null || channelId.isBlank()) {
-                Metrics.counter(METRIC_AUTH_FAILURE).increment();
-                removeSession(session);
-                return;
-            }
+            String channelId = result.channelId();
+            // KCP 会话不可复用旧连接语义：同 channelId 已有活跃连接即拒绝（差异逻辑，与 TCP/UDP 的重连替换不同）
             if (config.getMaxConnectionsPerAccount() > 0
                     && ChannelRegistry.INSTANCE.isActive(channelId)) {
-                Metrics.counter(METRIC_AUTH_FAILURE).increment();
+                AuthSupport.countFailure(AuthSupport.KCP_METRICS);
                 removeSession(session);
                 return;
             }
             session.authenticateAs(channelId);
             ChannelRegistry.INSTANCE.register(channelId, session);
+            AuthSupport.markLoginIngress(channelId);
             // 回空载荷（0 长度）作为 auth-ok
             session.sendBytes(new byte[0]);
-            Metrics.counter(METRIC_AUTH_SUCCESS).increment();
+            AuthSupport.countSuccess(AuthSupport.KCP_METRICS);
         } catch (Exception e) {
-            Metrics.counter(METRIC_AUTH_FAILURE).increment();
+            AuthSupport.countFailure(AuthSupport.KCP_METRICS);
             log.error("KCP auth error", e);
             removeSession(session);
         }

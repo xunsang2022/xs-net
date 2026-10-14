@@ -1,0 +1,22 @@
+package ${handlerPackage};
+
+import java.util.Map;
+
+/** handlersOnly 模式生成：RPC 编号到 Actor 处理方法名的只读映射。 */
+public final class GeneratedRpcHandlers {
+    private GeneratedRpcHandlers() {}
+
+    private static final Map<Integer, String> METHOD_NAMES = Map.ofEntries(
+#foreach($entry in ${methodNames})
+        Map.entry(${entry.number}, "${entry.methodName}")#if($foreach.hasNext),#end
+#end
+    );
+
+    public static Map<Integer, String> methodNames() {
+        return METHOD_NAMES;
+    }
+
+    public static String methodName(int rpcNum) {
+        return METHOD_NAMES.get(rpcNum);
+    }
+}

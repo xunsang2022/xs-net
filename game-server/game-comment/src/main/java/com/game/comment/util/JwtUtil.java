@@ -24,7 +24,16 @@ public class JwtUtil {
      * @param expiration token 有效期（毫秒）
      */
     public JwtUtil(String secret, long expiration) {
-        this.signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        // 快速失败：不使用弱默认密钥。空密钥或长度不足 32 字节（HS256 最小 256 位）直接拒绝启动
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalArgumentException("JWT secret must not be blank; configure jwt.secret / JWT_SECRET");
+        }
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length < 32) {
+            throw new IllegalArgumentException(
+                    "JWT secret must be at least 32 bytes (256-bit) for HS256, actual=" + keyBytes.length);
+        }
+        this.signingKey = Keys.hmacShaKeyFor(keyBytes);
         // JwtParser 是线程安全的，可复用，避免每次校验都重新构建
         this.parser = Jwts.parser().verifyWith(signingKey).build();
         this.expiration = expiration;

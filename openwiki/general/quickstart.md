@@ -68,10 +68,10 @@ xs-net 是一个 Java 21 Maven 工作区，一个仓库里包含两层内容：
 ```text
 客户端（Unity / TypeScript / Cocos Creator / C++）
   -> TCP 8082 | WebSocket 8083 | UDP 2002 | KCP 2003        首包：HELLO(JWT)
-  -> Gateway：AuthHandler / WebSocketGameHandler / UdpAuthHandler / KcpAuthHandler
+  -> Gateway：AuthHandler / WebSocketGameHandler / UdpAuthHandler / KcpAuthHandler（TCP/UDP/KCP 认证主干共用 AuthSupport）
   -> GatewayMessageRouter：按 rpcNum 查路由表、解码 DTO、提取 playerId
   -> Pekko Cluster Sharding（Artery / aeron-udp）
-  -> Logic：PlayerActor / SceneActor / GMActor   Battle 节点：BattleActor
+  -> Logic：PlayerActor / GMActor   Battle 节点：BattleActor
   -> S2C -> ChannelActor(entityId = channelId) -> ChannelRegistry -> ClientEndpoint.write
 
 Login HTTP 8081：签发 JWT（sub = playerId，cid = channelId）
@@ -89,16 +89,16 @@ Logic：Redis（player:{id} 状态 + log:events Streams）-> DBSyncEngine / LogC
 | RPC 注册表、信封编解码、请求上下文 | `xs-net/xs-net-message` | `MessageAbleTest`、`NetMessageGoldenTest`、`RequestContextTest`、`RpcRouteRegistryTest` |
 | Actor 分片、角色绑定、投递拒绝路径 | `xs-net/xs-net-kernel`（`AkkaKit`、`NodeActor`、`RpcActor`） | `RpcActorTest`、`AkkaKitRpcRoutingTest` |
 | 客户端接入：TCP/WebSocket/UDP/KCP、认证、S2C 写回 | `game-server/game-node-gateway` | Gateway 各传输与路由测试（见 [源码地图](general/architecture/source-map.md)） |
-| 玩家状态、Redis、异步落库、日志消费 | `game-server/game-node-modules` | `PlayerLifecycleTest`、`DBSyncEngineTest`、`LogEventCodecTest` |
+| 玩家状态、Redis、异步落库、日志消费 | `game-server/game-node-modules`、`game-server/game-event-sourcing` | `RedisStoreTest`、`DBSyncEngineP0Test`、`LogEventCodecTest` |
 | 战斗执行模型与高频输入 | `game-server/game-node-battle` | `BattleActorDispatcherTest`、`BattleExecutorTest`、`BattleLoadTest` |
 | JWT 签发与校验 | `game-server/game-node-login` + `game-server/game-comment` | `AuthControllerTest` |
 | 客户端 SDK 与模板 | `xs-net/xs-net-sdk`、`xs-net/xs-net-rpc-maven-plugin` | `scripts/Generate-Sdks.ps1` + 各语言模板测试 |
 
 ## 当前必须知道的约束
 
-- **协议号是全局契约**。`RpcSourceScanner` 在构建期拒绝重复编号、重复消息名、重复 `@ProtoField` 编号，以及缺少 Actor 处理方法的 `INTERNAL` 消息。修改已发布的编号需要兼容性评估。
+- **协议号是全局契约**。`RpcSourceScanner` 在构建期拒绝重复编号、重复消息名、重复 `@ProtoField` 编号，以及未实现任何 `@Roles` 接口的 `INTERNAL` 消息。修改已发布的编号需要兼容性评估。
 - **`@Rpc(kind = MESSAGE)` 用于客户端请求和服务端响应**：请求和响应分别独立声明，各自拥有独立的协议号。
-- **`@ProtoRecord` 是第三种声明方式**：标在模型类上，按注解里的 `classType`（全限定类名字符串）与字段级 `@ProtoField` 生成一条 `kind = ACTOR_MODEL` 的可传输消息及 PO → 协议记录的转换代码；不要在源码里重复声明生成的记录。
+- **`@ProtoRecord` 是第三种声明方式**：标在类的字段上，按注解里的 `classType`（全限定类名字符串）与字段级 `@ProtoField` 生成一条 `kind = ACTOR_MODEL` 的可传输消息；协议记录由 `game-message-action` 内的声明类（如 `PlayerInfoProto`）生成，PO → 协议记录的转换代码由 `game-node-modules` 的 `convertersOnly` 生成。不要在源码里重复声明生成的记录。
 - **`roleClass` 决定分片实体键**。`AkkaKit` 以 DTO 接口类型的简单类名创建 `EntityTypeKey`；同一 role 接口下的所有消息共享一个分片类型。
 - **消息注册表是 JVM 级静态状态**。`MessageAble.initialize(...)` 只初始化一次，`NodeActor` 与各启动类都依赖它。同一 JVM 内不要创建多个独立运行时。
 - **TCP/WebSocket/自研 UDP 共用 XS packet**。格式为 `length(4) | packetId(2) | sendSeq(4) | random(4) | headCRC(2) | bodyCRC(2) | body(N)`；TCP 由 `LengthFieldBasedFrameDecoder` 按 `length` 拆包，JWT 位于 `HELLO` 的 body 中。

@@ -16,6 +16,7 @@ import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pekko.actor.typed.ActorSystem;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -30,7 +31,7 @@ import java.util.Map;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable {
+public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable, DisposableBean {
     private final RedisConnectionFactory connectionFactory;
     private final StringRedisTemplate redisTemplate;
     private final RedisStore redisStore;
@@ -198,5 +199,15 @@ public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable {
         if (server != null) {
             server.close();
         }
+    }
+
+    /**
+     * Spring 容器关闭回调：委托 {@link #close()} 释放资源。
+     * <p>容器扫描的组件不会自动推断 destroy 方法，显式实现 {@link DisposableBean}
+     * 才能保证关闭时终止 ActorSystem、停止线程池（如 DBSyncEngine 的调度/分片池）等。</p>
+     */
+    @Override
+    public void destroy() {
+        close();
     }
 }

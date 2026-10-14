@@ -40,11 +40,55 @@ final class RpcSourceScanner {
     RpcModel scan(List<Path> sourceDirectories) throws IOException, MojoFailureException {
         List<CompilationUnit> units = parseUnits(sourceDirectories);
         Map<String, RecordSource> recordSources = recordSources(units);
-        Map<String, RecordDeclaration> records = new HashMap<>();
-        recordSources.forEach((type, source) -> records.put(type, source.record()));
         Map<String, MessageModel> actorModels = actorModelMessages(recordSources);
 
-        // 角色接口：所有标注 @Roles 的接口（如 PlayerMessage、S2C），用于为纯下行消息绑定其角色，从而触发对应 shard 代理的创建
+        // 全量扫描不再依赖业务源码：角色由 record 实现的 @Roles 接口推断，handler 一律置 null。
+        Set<String> roleInterfaces = roleInterfaces(units);
+
+        Map<String, NestedMessageModel> nestedMessages = new HashMap<>();
+        List<MessageModel> messages = rpcMessages(units, recordSources, actorModels, roleInterfaces, nestedMessages);
+        messages.addAll(actorModels.values());
+        List<ConverterModel> converters = converters(units, recordSources);
+        validate(messages, nestedMessages);
+        messages.sort(Comparator.comparingInt(MessageModel::number).thenComparing(MessageModel::name));
+        return new RpcModel(List.copyOf(messages), nestedMessages.values().stream()
+                .sorted(Comparator.comparing(NestedMessageModel::name)).toList(), List.copyOf(converters),
+                generatedRecords(recordSources));
+    }
+
+    /**
+     * handlersOnly 模式：由业务模块扫描自身 Actor 源码，为每个单参数 DTO 处理方法解析其 @Rpc(number)，
+     * 生成「rpcNum → 方法名」映射，替代原先全量生成时的 handler 元数据。
+     */
+    Map<Integer, String> scanHandlersOnly(List<Path> sourceDirectories) throws IOException, MojoFailureException {
+        List<CompilationUnit> units = parseUnits(sourceDirectories);
+        Map<String, RecordSource> recordSources = recordSources(units);
+        Map<String, RecordDeclaration> records = new HashMap<>();
+        recordSources.forEach((type, source) -> records.put(type, source.record()));
+        Map<String, MethodBinding> handlerByDto = handlerBindings(sourceTypes(units), records);
+        Map<Integer, String> methodNames = new java.util.TreeMap<>();
+        for (Map.Entry<String, MethodBinding> entry : handlerByDto.entrySet()) {
+            RecordDeclaration record = records.get(entry.getKey());
+            if (record == null) {
+                continue;
+            }
+            AnnotationExpr rpc = annotation(record.getAnnotations(), "Rpc").orElse(null);
+            if (rpc == null) {
+                continue;
+            }
+            int number = intAttribute(rpc, "number");
+            String methodName = entry.getValue().methodName();
+            String existing = methodNames.putIfAbsent(number, methodName);
+            if (existing != null && !existing.equals(methodName)) {
+                throw new MojoFailureException("Duplicate RPC handler number " + number + ": "
+                        + existing + " and " + methodName);
+            }
+        }
+        return new LinkedHashMap<>(methodNames);
+    }
+
+    /** 角色接口：所有标注 @Roles 的接口（如 PlayerMessage、S2C），用于为纯下行消息绑定其角色，从而触发对应 shard 代理的创建。 */
+    private Set<String> roleInterfaces(List<CompilationUnit> units) {
         Set<String> roleInterfaces = new HashSet<>();
         for (CompilationUnit unit : units) {
             String pkg = unit.getPackageDeclaration().map(value -> value.getNameAsString()).orElse("");
@@ -54,8 +98,11 @@ final class RpcSourceScanner {
                 }
             }
         }
+        return roleInterfaces;
+    }
 
-        // 角色接口与 handler：Actor 自身或其持有的组件可以声明单参数 DTO 处理方法。
+    /** 收集全部非接口类型声明及其类型解析上下文，供 handler 方法扫描使用。 */
+    private Map<String, SourceType> sourceTypes(List<CompilationUnit> units) {
         Map<String, SourceType> typesByName = new HashMap<>();
         for (CompilationUnit unit : units) {
             String packageName = unit.getPackageDeclaration().map(value -> value.getNameAsString()).orElse("");
@@ -68,6 +115,12 @@ final class RpcSourceScanner {
                 }
             }
         }
+        return typesByName;
+    }
+
+    /** 角色接口与 handler：Actor 自身或其持有的组件可以声明单参数 DTO 处理方法。 */
+    private Map<String, MethodBinding> handlerBindings(Map<String, SourceType> typesByName,
+                                                       Map<String, RecordDeclaration> records) {
         Map<String, MethodBinding> handlerByDto = new HashMap<>();
         for (SourceType sourceType : typesByName.values()) {
             actor(sourceType.declaration(), sourceType.packageName(), sourceType.imports()).ifPresent(actor -> {
@@ -84,9 +137,15 @@ final class RpcSourceScanner {
                 }
             });
         }
+        return handlerByDto;
+    }
 
+    /** 解析全部 @Rpc record 消息（MESSAGE/INTERNAL），并把过程中发现的嵌套消息写入 nestedMessages。 */
+    private List<MessageModel> rpcMessages(List<CompilationUnit> units, Map<String, RecordSource> recordSources,
+                                           Map<String, MessageModel> actorModels,
+                                           Set<String> roleInterfaces, Map<String, NestedMessageModel> nestedMessages)
+            throws MojoFailureException {
         List<MessageModel> messages = new ArrayList<>();
-        Map<String, NestedMessageModel> nestedMessages = new HashMap<>();
         try {
             for (CompilationUnit unit : units) {
                 String packageName = unit.getPackageDeclaration().map(value -> value.getNameAsString()).orElse("");
@@ -97,25 +156,21 @@ final class RpcSourceScanner {
                         try {
                             String kind = enumAttribute(value, "kind");
                             if ("MESSAGE".equals(kind)) {
-                                // MESSAGE 类型：尝试查找 handler，如果有则关联
-                                MethodBinding binding = handlerByDto.get(dtoType);
-                                String roleType = binding != null ? binding.roleType()
-                                        : downlinkRole(record, packageName, imports, roleInterfaces);
-                                String responseDtoType = binding != null ? binding.responseDtoType() : null;
+                                // 纯下行消息：角色完全由 record 实现的 @Roles 接口推断，不再查 handler。
+                                String roleType = downlinkRole(record, packageName, imports, roleInterfaces);
                                 messages.add(message(intAttribute(value, "number"), messageName(dtoType), dtoType,
                                         recordSources, actorModels, nestedMessages, roleType, Direction.HTTP_RESPONSE, true,
-                                        binding != null ? binding.actorType() : null,
-                                        binding != null ? binding.componentField() : null,
-                                        binding != null ? binding.methodName() : null,
-                                        responseDtoType, kind));
+                                        null, null, null, null, kind));
                                 return;
                             }
-                            MethodBinding binding = requireHandler(handlerByDto, dtoType, record);
-                            requireRole(record, binding.roleType(), packageName, imports);
                             if ("INTERNAL".equals(kind)) {
+                                String roleType = downlinkRole(record, packageName, imports, roleInterfaces);
+                                if (roleType == null) {
+                                    throw new MojoFailureException("INTERNAL RPC DTO must implement a registered role interface: " + dtoType);
+                                }
                                 messages.add(message(intAttribute(value, "number"), messageName(dtoType), dtoType,
-                                        recordSources, actorModels, nestedMessages, binding.roleType(), Direction.INTERNAL, false,
-                                        binding.actorType(), binding.componentField(), binding.methodName(), null, kind));
+                                        recordSources, actorModels, nestedMessages, roleType, Direction.INTERNAL, false,
+                                        null, null, null, null, kind));
                                 return;
                             }
                             throw new MojoFailureException("Unsupported RPC kind: " + kind);
@@ -128,17 +183,16 @@ final class RpcSourceScanner {
         } catch (ScanException exception) {
             throw exception.failure();
         }
-        messages.addAll(actorModels.values());
-        List<ConverterModel> converters = converters(units, recordSources);
-        validate(messages, nestedMessages);
-        messages.sort(Comparator.comparingInt(MessageModel::number).thenComparing(MessageModel::name));
-        List<GeneratedRecordModel> generatedRecords = recordSources.values().stream()
+        return messages;
+    }
+
+    /** 收集由 @ProtoRecord 生成、需要落地为源码文件的协议记录。 */
+    private List<GeneratedRecordModel> generatedRecords(Map<String, RecordSource> recordSources) {
+        return recordSources.values().stream()
                 .filter(source -> source.generatedSource() != null)
                 .map(source -> new GeneratedRecordModel(source.packageName(), source.record().getNameAsString(),
                         source.generatedSource()))
                 .sorted(Comparator.comparing(GeneratedRecordModel::typeName)).toList();
-        return new RpcModel(List.copyOf(messages), nestedMessages.values().stream()
-                .sorted(Comparator.comparing(NestedMessageModel::name)).toList(), List.copyOf(converters), generatedRecords);
     }
 
     /** 仅扫描 @ProtoRecord 声明的源类型到协议记录类型转换，不解析 RPC 消息。 */
@@ -330,31 +384,6 @@ final class RpcSourceScanner {
         return current;
     }
 
-    private MethodBinding requireHandler(Map<String, MethodBinding> handlerByDto, String dtoType, RecordDeclaration record)
-            throws MojoFailureException {
-        MethodBinding binding = handlerByDto.get(dtoType);
-        if (binding == null) {
-            throw new MojoFailureException("No actor method handled message DTO "
-                    + dtoType + "; a handler in an actor extending RpcActor<Role> with single parameter of this type is required");
-        }
-        return binding;
-    }
-
-    private void requireRole(RecordDeclaration record, String roleType, String packageName, Map<String, String> imports)
-            throws MojoFailureException {
-        if (roleType == null) {
-            throw new MojoFailureException("RPC DTO must implement a registered role interface: " + record.getNameAsString());
-        }
-        Set<String> implemented = new HashSet<>();
-        for (ClassOrInterfaceType implementedType : record.getImplementedTypes()) {
-            implemented.add(resolveReference(implementedType.getNameAsString(), packageName, imports));
-        }
-        if (!implemented.contains(roleType)) {
-            throw new MojoFailureException("RPC DTO must implement role interface " + roleType + ": "
-                    + record.getNameAsString());
-        }
-    }
-
     /**
      * 纯下行（MESSAGE）消息若实现了某个 @Roles 角色接口（如 S2C），则绑定该角色，
      * 使生成规格携带 roleClass，从而在非宿主节点创建对应的 shard 代理。
@@ -501,10 +530,6 @@ final class RpcSourceScanner {
             }
             if (!names.add(message.name())) {
                 throw new MojoFailureException("Duplicate RPC name: " + message.name());
-            }
-            if (message.direction() == Direction.INTERNAL
-                    && (message.roleType() == null || message.actorType() == null || message.handlerMethod() == null)) {
-                throw new MojoFailureException("RPC handler must belong to an actor extending RpcActor<Role>: " + message.name());
             }
         }
         for (NestedMessageModel nested : nestedMessages.values()) {

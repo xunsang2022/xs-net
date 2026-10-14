@@ -30,7 +30,12 @@ import java.util.function.Supplier;
  */
 @Slf4j
 public final class ActorServerSync {
-    /** 注册的模型列表。 */
+    /**
+     * 注册的模型列表。
+     * <p>并发前提：本组件的全部访问（构造期 addModel、onFlushDirty、destroyAll、persistAllStopped）
+     * 均只在所属 Actor 的单线程中串行执行——addModel 在 Actor 构造期调用，其余在消息处理或 PostStop 信号中调用，
+     * 不存在跨线程访问，因此使用非线程安全的 ArrayList 是安全的。</p>
+     */
     private final List<ModelEntry<?>> models = new ArrayList<>();
 
     /**

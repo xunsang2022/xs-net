@@ -12,9 +12,10 @@ import com.xs.net.message.MessageAble;
 import com.xs.net.message.RequestContext;
 import com.xs.net.message.pb.NetMessage;
 import io.micrometer.core.instrument.Metrics;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 客户端通道 Actor（Akka sharding，entityId = channelId）。
@@ -26,13 +27,8 @@ public class ChannelActor extends RpcActor<S2C> {
     private static final String METRIC_S2C_MESSAGES = "gateway.s2c.messages";
     private static final String METRIC_S2C_DROPPED = "gateway.s2c.dropped";
 
-    private static final AtomicLong S2C_ARRIVE_NANOS = new AtomicLong(0L);
-    private static final AtomicLong S2C_WRITE_NANOS = new AtomicLong(0L);
-
-    static {
-        Metrics.gauge("gateway.s2c.arrive.nano", S2C_ARRIVE_NANOS);
-        Metrics.gauge("gateway.s2c.write.nano", S2C_WRITE_NANOS);
-    }
+    /** S2C 从进入 ChannelActor 到写回端点的处理耗时（含信封构建），用于观测网关内下行时延。 */
+    private static final Timer S2C_WRITE_DURATION = Metrics.timer("gateway.s2c.write.duration");
 
     private final String entityId;
 
@@ -61,14 +57,14 @@ public class ChannelActor extends RpcActor<S2C> {
             return this;
         }
         try {
-            S2C_ARRIVE_NANOS.set(System.nanoTime());
+            long startNanos = System.nanoTime();
             NetMessage netMessage = MessageAble.toNetMessage(message);
             RequestContext context = currentRequestContext();
             if (context != null) {
                 netMessage = context.applyTo(netMessage.toBuilder()).build();
             }
             endpoint.write(netMessage);
-            S2C_WRITE_NANOS.set(System.nanoTime());
+            S2C_WRITE_DURATION.record(System.nanoTime() - startNanos, TimeUnit.NANOSECONDS);
             Long ingressNanos = ChannelRegistry.INSTANCE.takeLoginIngress(entityId);
             if (ingressNanos != null) {
                 Metrics.timer("gateway.login.roundtrip", "transport", "tcp-udp")

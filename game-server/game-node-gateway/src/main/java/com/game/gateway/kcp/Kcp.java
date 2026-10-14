@@ -93,7 +93,11 @@ public final class Kcp {
     private int probeWait;
     private int fastresend;   // >0 时为快速重传阈值
 
-    /* ---------- 四条双向队列（与 ikcp 内部缓冲一致） ---------- */
+    /* ---------- 四条双向队列（与 ikcp 内部缓冲一致） ----------
+     * 非线程安全：本类所有字段（含下列队列）在“仅由持有它的 KcpSession 监视器串行访问”时才安全。
+     * 该监视器 = KcpSession 实例：KcpSession.sendBytes/write（下行 ChannelActor 线程）已用 synchronized 方法，
+     * 与 KcpAuthHandler 的 synchronized (session) 块（业务线程池 input、后台定时 update）共用同一监视器，
+     * 因而这些集合保持 ArrayList/ArrayDeque 即可，无需并发容器（并发容器会破坏这里的迭代/有序删除语义）。 */
     private final ArrayDeque<Segment> sndQueue = new ArrayDeque<>();
     private final ArrayDeque<Segment> rcvQueue = new ArrayDeque<>();
     private final List<Segment> sndBuf = new ArrayList<>();

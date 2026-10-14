@@ -70,8 +70,8 @@ public final class UdpSession implements ClientEndpoint {
         // UDP 无连接，关闭仅标记失效；发送 ERROR 提示客户端
         try {
             sendPacket(UdpReliableLayer.TYPE_ERROR, 0, layer.contiguous(), null);
-        } catch (Exception ignored) {
-            // 会话已失效，忽略发送失败
+        } catch (Exception e) {
+            log.warn("Failed to notify UDP session close: channelId={}, remote={}", channelId, remote, e);
         }
     }
 

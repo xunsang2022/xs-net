@@ -28,13 +28,13 @@ game-server
   game-message-action    业务协议 record、@Rpc/@ProtoField 注解、路由接口、RPC 注册表装配
   game-node-gateway      Spring Boot：Netty 四协议接入、认证、路由、S2C 回写、GM/Actuator
   game-node-login        Spring Boot：仅签发与校验 JWT
-  game-node-modules      Spring Boot（非 Web）：PlayerActor、SceneActor、GMActor、Redis、DBSyncEngine、LogConsumer
+  game-node-modules      Spring Boot（非 Web）：PlayerActor、GMActor、Redis、DBSyncEngine、LogConsumer
   game-node-battle       普通 Java：BattleActor、专用战斗执行器池
 ```
 
 框架层不感知 Netty：`xs-net-transport` 只定义 `FrameCodec`、`TransportAdapter`、`TransportSession`、`TransportMessageHandler`、`BackpressureDecision`、`IngressAdmissionController` 等契约。TCP/WebSocket/UDP/KCP 的具体实现全部在 `game-node-gateway` 内，因为它们绑定了具体的会话与认证语义。
 
-业务协议的声明来源是注解：`game-message-action` 中的 Java record，以及 `game-node-modules` 中标注 `@ProtoRecord` 的模型类（其 `@ProtoField` 字段会被生成成协议记录）。scanner 源码目录同时配置了 `game-message-action`、`game-node-modules`、`game-node-battle`，因此 Actor 里的处理方法也参与协议生成。
+业务协议的声明来源是注解，且**只在 `game-message-action` 内采集**：手写 Java record，以及标注 `@ProtoRecord` 的声明类（其 `@ProtoField` 字段会被生成成协议记录，例如 `PlayerInfoProto` → `PlayerInfoData`）。全量 `generate` 只扫描 message-action 自身 `src/main/java`，`roleClass` 由 record 实现的 `@Roles` 接口推断，handler 元数据不再内联（一律 `null`）。`game-node-modules` 中标注 `@ProtoRecord` 的模型类（`PlayerPO`）只在 node-modules 的 `convertersOnly` 执行里参与生成 PO → 协议记录的转换器；「rpcNum → 方法名」映射则在其 `handlersOnly` 执行里生成。
 
 ## 运行角色
 
@@ -43,7 +43,7 @@ game-server
 面向客户端的接入层，承担四件事：
 
 1. 终止 TCP 8082、WebSocket 8083、UDP 2002、KCP 2003 四类连接/会话；
-2. TCP/WebSocket/自研 UDP 用首个 `HELLO(JWT)` XS packet 完成认证，把 JWT 的 `cid` 绑定为 `channelId` 并写入 `ChannelRegistry`；KCP 保持独立的 KCP 应用层握手；
+2. TCP/WebSocket/自研 UDP 用首个 `HELLO(JWT)` XS packet 完成认证，把 JWT 的 `cid` 绑定为 `channelId` 并写入 `ChannelRegistry`；TCP/UDP/KCP 三处认证主干共用 `com.game.gateway.netty.AuthSupport`（验签、单账号并发校验、指标计数与登录入口打点）；KCP 保持独立的 KCP 应用层握手；
 3. 按 `rpcNum` 解码上行 `NetMessage`，提取 `playerId`，经 Pekko Cluster Sharding 投递到 Logic；
 4. 通过 `ChannelActor`（entityId = `channelId`）把 S2C 消息写回 `ClientEndpoint`。
 
@@ -62,10 +62,9 @@ Logic 持有的 Actor：
 | Actor | role 接口 | 实体 ID | 职责 |
 | --- | --- | --- | --- |
 | `PlayerActor` | `PlayerMessage`（`@Roles("logic")`） | `playerId` | 登录加载、在线状态、脏数据刷新、登出与销毁 |
-| `SceneActor` | `SceneMessage` | 场景 ID | 场景成员集合维护，并向玩家回推场景变更 |
 | `GMActor` | `GMMessage` | 固定 `management` | GM 请求审核（审计写入失败即拒绝），再分发 `GmKickPlayerCommand` |
 
-`PlayerActor` 由两个组件构成：`PlayerLifecycle` 负责阶段机与业务消息，`PlayerStateSync` 负责 Redis/数据库读写。两者的异步结果都通过 `pipeToSelf` 回到 Actor 邮箱，保证状态修改仍在单线程内串行。
+`PlayerActor` 由 `PlayerInfo`（登录、在线状态与脏数据刷新等业务消息）与 `ActorServerSync`（把注册的 `XsModel` 脏数据定时同步到 PostgreSQL）组成。玩家数据在 Actor 构造期由 `PlayerInfo.loadingModel` **同步**加载：先读 Redis 缓存，未命中再读数据库并回写缓存。
 
 ### Battle（普通 Java，`game-node-battle`）
 
@@ -124,7 +123,6 @@ Pekko 远程传输通过 `application.conf` 中的绑定走自定义序列化器
 | Gateway 路由 | `GatewayMessageRouter` 在调用线程上直接投递，只有准入计数使用原子变量 |
 | Pekko 默认分片 | `pekko.actor.xs-entity-dispatcher`，线程池 256（`XS_ENTITY_POOL` 可覆盖） |
 | PlayerActor | `pekko.actor.player-dispatcher`，线程池 8（`XS_PLAYER_POOL`） |
-| SceneActor | `pekko.actor.scene-dispatcher`，线程池 8（`XS_SCENE_POOL`） |
 | BattleActor | `pekko.actor.battle-control-dispatcher`，线程池 4；战斗本体在 `BattleExecutorPool` 的 8 个执行器线程 |
 | Logic 阻塞 I/O | `redis-io-executor`（默认 16）与 `db-io-executor`（默认 8）两个固定池，队列 1024，拒绝策略 AbortPolicy |
 | DBSync | 单调度线程 + `flush-concurrency`（默认 8）个工作线程 |
@@ -139,7 +137,7 @@ Pekko 远程传输通过 `application.conf` 中的绑定走自定义序列化器
 - 种子节点：本地开发固定为 `gateway@127.0.0.1:2001` 与 `logic@127.0.0.1:4001`；`application-cluster.conf` 替换为 `gateway-1` / `logic-1` 主机名。
 - `numberOfShards = 100`，`remember-entities = off`：实体不持久化位置记忆，重启后由分片重新分配。
 - `NodeActor.init` 的逻辑：扫描 `game.framework.actor-base-packages` 下所有具体 `AbstractBehavior` 子类，找到其消息接口上的 `@Roles`；角色匹配本节点则注册**本地实体**，不匹配则为注册表中的每个角色创建**代理分片**（空实现的 `Behaviors.receive`，只用于把消息转发到远端）。
-- 因此，一个角色要能被跨节点投递，必须同时满足：实现 `@Roles` 接口、声明 `@Rpc`、且在某个 `RpcActor<Role>` 中有单参数处理方法。
+- 因此，一个角色要能被跨节点投递，消息必须实现 `@Roles` 接口并声明 `@Rpc`（`roleClass` 由此推断、注册表据此创建代理分片）；此外在宿主节点的某个 `RpcActor<Role>` 中要有单参数处理方法才能真正被处理——该方法是运行时要求，不再由生成期校验（方法名由 `handlersOnly` 采集）。
 
 ## 静态状态与生命周期风险
 

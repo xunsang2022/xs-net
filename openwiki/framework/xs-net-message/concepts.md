@@ -17,13 +17,13 @@ tags: [xs-net, concepts, rpc, routing]
 | `messageClass` | 对应的 Protobuf 生成类型 |
 | `parser` | Protobuf `Parser<T>`，用于解析 `NetMessage.data` |
 | `dtoClass` | 业务层 record 类型（`@ProtoField` 声明的那一个） |
-| `roleClass` | 目标角色的 `@Roles` 接口，为 `null` 表示不可路由 |
+| `roleClass` | 目标角色的 `@Roles` 接口，为 `null` 表示不可路由；生成期由 record 实现的 `@Roles` 接口推断 |
 | `direction` | `INTERNAL` / `HTTP_RESPONSE` |
 | `publicVisible` | 是否允许来自客户端（后续可做网关侧的白名单校验） |
 | `playerRoutingRequired` | 是否必须从载荷提取 `playerId` 才能路由 |
 | `channelRoutingRequired` | 是否必须携带 `channelId` 才能下行 |
 | `codec` | `RpcPayloadCodec<DTO, Proto>`，DTO 与 protobuf 的双向转换 |
-| `handler` | `RpcHandlerMetadata`，记录 Actor 类型、组件字段、方法名、请求/响应类型 |
+| `handler` | `RpcHandlerMetadata`，记录 Actor 类型、组件字段、方法名、请求/响应类型；**全量生成时恒为 `null`**（方法名改由业务模块 `handlersOnly` 生成的 `GeneratedRpcHandlers` 提供） |
 
 `decode` / `encode` 在缺少 codec 或类型不符时抛异常，不做静默降级。
 
@@ -62,7 +62,7 @@ scanner 对所有 `kind = MESSAGE` 的消息标记 `publicVisible = true`，对 
 
 ## 协议声明与生成
 
-业务协议只有两种声明来源，均由 `xs-net-rpc-maven-plugin` 的 `generate` goal 在 `generate-sources` 阶段扫描：一是 `@Rpc` + `@ProtoField` 手写的 Java record（主路径），二是 `@ProtoRecord` 标注的模型类（由字段级 `@ProtoField` 派生协议记录，见本节末尾）。手写 record 的形态：
+业务协议只有两种声明来源，均由 `xs-net-rpc-maven-plugin` 的 `generate` goal 在 `generate-sources` 阶段扫描：一是 `@Rpc` + `@ProtoField` 手写的 Java record（主路径），二是 `@ProtoRecord` 标注的声明类（由字段级 `@ProtoField` 派生协议记录，见本节末尾）。全量生成**只扫描 `game-message-action` 自身** `src/main/java`，不再扫描业务模块源码：`roleClass` 由 record 实现的 `@Roles` 接口推断，handler 元数据不内联（一律 `null`）。手写 record 的形态：
 
 ```java
 @Rpc(kind = Rpc.Kind.MESSAGE, number = 1001)
@@ -82,18 +82,29 @@ public record LogoutRequest(
 - 每个 record 组件必须有 `@ProtoField(number)`，编号从 1 开始且在同一消息内唯一；没有 `@ProtoField` 或缺字段直接构建失败。
 - `@ProtoField` 的 `@Target` 同时允许 `RECORD_COMPONENT` 与 `FIELD`：前者用于协议 record 组件，后者用于 `@ProtoRecord` 标注的 PO 字段。
 - 支持的 Java 类型只有 `String` / `Integer`·`int` / `Long`·`long` / `Boolean`·`boolean` / `Double`·`double` / `Float`·`float` / `byte[]`；泛型与数组被拒绝。
-- `kind = MESSAGE` 的消息若需要 Actor 处理，必须能在扫描到的 `RpcActor<R>`（含其字段组件）里找到"单参数且参数类型为该 DTO"的方法。
-- `kind = INTERNAL` 同样要求处理方法，但不生成响应规格。
-- `kind = MESSAGE` 不要求 handler；若实现了某个 `@Roles` 接口（如 `S2C`），scanner 会把该角色写入规格，使非宿主节点也创建对应代理分片。
-- `INTERNAL` 的 DTO 必须实现 handler 所属 Actor 的角色接口，否则构建失败。
+- `kind = MESSAGE` 的规格不要求处理方法，生成期也不扫描 Actor，`roleClass` 完全由 record 实现的 `@Roles` 接口推断（如 `S2C`），使非宿主节点也创建对应代理分片；是否需要运行时处理方法由业务语义决定，插件不再校验（方法名改由业务模块 `handlersOnly` 采集进 `GeneratedRpcHandlers`）。
+- `kind = INTERNAL` 的 DTO 必须实现某个已注册的 `@Roles` 接口，否则构建失败；它同样不要求处理方法，且不生成响应规格。
 - 全局校验：RPC 编号唯一、消息名唯一、字段编号合法。
 - 消息名派生：`*Request` → `CS_<Base>`，`*Response` → `SC_<Base>`，其他保持类名。
 - proto 文件按角色分组：实现角色接口的进入 `<RoleSimpleName>s.proto`，`kind = ACTOR_MODEL` 的记录进入 `ActorModels.proto`，其余进入 `comment.proto`。
 - 一个消息字段引用到其他 proto 文件中的消息类型时，scanner 会在该 `.proto` 顶部补上 `import "<file>.proto";`。
 
-### PO 派生协议记录（`@ProtoRecord`）
+### `@ProtoRecord` 派生协议记录与转换器
 
-`@ProtoField` 也允许出现在模型类字段上，由 `@ProtoRecord` 触发协议记录生成，用来避免在 `game-message-action` 里手写与 PO 重复的字段表：
+`@ProtoField` 也允许出现在类字段上，由 `@ProtoRecord` 触发协议记录生成，用来避免手写与 PO 重复的字段表。改造后**声明与转换分处两个模块**：
+
+- **协议记录声明**在 `game-message-action`（全量生成只扫该模块自身），用一个字段表声明类承载，照 `PlayerInfoProto` 的写法：
+
+```java
+@ProtoRecord(classType = "com.game.message.s2c.PlayerInfoData", number = 2102)
+public class PlayerInfoProto {           // 仅声明字段，无业务逻辑
+    @ProtoField(number = 1) private Long id;
+    @ProtoField(number = 2) private String name;
+    // ... 字段与 node-modules 的 PlayerPO 一一对应；未在协议中的字段不列
+}
+```
+
+- **转换器**在 `game-node-modules`：源 PO（`PlayerPO` extends `GameModel`）保留同名 `@ProtoRecord` 与字段级 `@ProtoField`，由 node-modules 自身的 `convertersOnly` 执行（只扫本模块）生成 PO → 协议记录的转换代码：
 
 ```java
 @ProtoRecord(classType = "com.game.message.s2c.PlayerInfoData", number = 2102)
@@ -108,7 +119,7 @@ public class PlayerPO extends GameModel<PlayerPO> {
 
 - `classType` 是**全限定类名字符串**（不是 `Class` 字面量），因此被引用的协议记录不存在也不会导致编译失败；若源码里已存在同名 record，则直接复用、不生成。
 - `number` 是这条 ACTOR_MODEL 规格的 RPC 编号，必须全局唯一。
-- 生成内容三件：`classType` 指定的协议记录源码（带 `@Rpc(kind = Rpc.Kind.ACTOR_MODEL, number)` 与逐字段 `@ProtoField`）、对应的 proto 消息，以及 PO → 协议记录的转换方法。
+- 生成内容：message-action 侧产出 `classType` 指定的协议记录源码（带 `@Rpc(kind = Rpc.Kind.ACTOR_MODEL, number)` 与逐字段 `@ProtoField`）与对应 proto 消息；node-modules 侧单独产出 PO → 协议记录的转换方法。两侧字段表必须保持一致。
 - `Timestamp` 字段在生成记录中映射为 `Long`（Unix 毫秒），转换代码调用 `getTime()`；其他字段要求源/目标类型一致，否则构建失败。
 - 其他消息引用这条记录时，字段按**消息类型**引用并复用其 codec；只有非消息的普通 record 才会走 `Nested*` 嵌套定义。
 
@@ -126,7 +137,7 @@ services.sendRpc(new LoginResponse(0, null, playerPO.toVo()), channelId);
 - 已注册但未加载时，框架首次转换会按约定类名加载一次转换器持有类（默认 `com.game.message.convert.GeneratedProtoConverters`，可用系统属性 `xs.model.converter-class` 覆盖）；找不到或未注册则抛 `IllegalStateException`，不做静默降级。
 
 
-生成产物：`GameRpcMessages`（注册表 + `ROUTES`）、`GeneratedRpcCodec`（逐消息的 DTO⇄protobuf 编解码）、`GeneratedRpcHandlers`（编号 → Actor/方法/请求类型的清单）、`GeneratedProtoConverters`（PO → 协议记录的转换方法，仅在 `convertersOnly = true` 的执行中生成），以及 `src/main/proto/` 下的 `.proto`、`rpc_routes.md`、`rpc_routes.proto`、`rpc_protocol_validation.txt`。`@ProtoRecord` 派生的协议记录源码写入 message-action 的生成源码目录（`com/game/message/<pkg>/<Record>.java`），与手写 record 一起编译。
+生成产物：`GameRpcMessages`（注册表 + `ROUTES`，handler 元数据为 `null`）、`GeneratedRpcCodec`（逐消息的 DTO⇄protobuf 编解码），二者由 message-action 全量生成；`GeneratedProtoConverters`（PO → 协议记录的转换方法，仅 node-modules 的 `convertersOnly = true` 执行生成）；`GeneratedRpcHandlers`（`rpcNum → 方法名` 映射，仅 node-modules 的 `handlersOnly = true` 执行生成，包名 `com.game.logic.management`），以及 `src/main/proto/` 下的 `.proto`、`rpc_routes.md`、`rpc_routes.proto`、`rpc_protocol_validation.txt`。`@ProtoRecord` 声明类派生的协议记录源码写入 message-action 的生成源码目录（`com/game/message/<pkg>/<Record>.java`），与手写 record 一起编译。
 
 ## 角色与分片
 
@@ -135,13 +146,12 @@ services.sendRpc(new LoginResponse(0, null, playerPO.toVo()), channelId);
 | 角色接口 | 名称 | 宿主节点 |
 | --- | --- | --- |
 | `PlayerMessage` | `logic` | Logic |
-| `SceneMessage` | `logic` | Logic |
 | `GMMessage` | `logic` | Logic |
 | `BattleMessage` | `battle` | Battle |
 | `S2C` | `gateway` | Gateway |
 | `GatewayControlMessage` | `gateway` | Gateway |
 
-`AkkaKit.entityTypeKey(actorCmdClass)` 用**角色接口类的简单类名**作为 `EntityTypeKey`（例如 `PlayerMessage`），因此一个角色下的所有 DTO 共享同一个分片类型；实体 ID 由调用方给出（`playerId`、`sceneId`、`battleId`、`channelId`）。
+`AkkaKit.entityTypeKey(actorCmdClass)` 用**角色接口类的简单类名**作为 `EntityTypeKey`（例如 `PlayerMessage`），因此一个角色下的所有 DTO 共享同一个分片类型；实体 ID 由调用方给出（`playerId`、`battleId`、`channelId`）。
 
 节点启动时 `NodeActor` 做两件事：
 
@@ -196,33 +206,26 @@ Actor 内发送方向的入口 `ActorServices#sendRpc(message, targetEntityId)` 
 
 `channelId` 是"一个客户端连接/会话"的标识，不是用户标识：同一玩家重新连接会得到新的 `channelId`（除非客户端复用 `X-Channel-Id`）。
 
-- Login `/api/auth/issue`：请求头 `X-Channel-Id` 缺省时生成 UUID，作为 JWT 的 `cid`；
+- Login `/api/auth/issue`：请求头 `X-Channel-Id` 缺省时生成 UUID，作为 JWT 的 `cid`；该端点按客户端 IP 做固定窗口限流（`ClientIpFixedWindowRateLimiter`），超限返回 429；
 - Gateway 认证成功后把 `channelId -> ClientEndpoint` 写入 `ChannelRegistry`；
 - `ClientEndpoint` 抽象统一 TCP Channel、UDP 会话、KCP 会话与 WebSocket 通道，`write(NetMessage)` 负责各自的编码与发送；
 - `S2C` 消息经 `ChannelActor` 处理：找到 endpoint、检查 `isActive()`、写入 `NetMessage`，失败计入 `gateway.s2c.dropped`；
 - `max-connections-per-account`（默认 1）在认证时拒绝同一 `channelId` 的重复活跃连接。
 
-`ChannelRegistry` 同时注册 `gateway.online.connections` 指标，并提供登录往返计时用的 `recordLoginIngress` / `takeLoginIngress`。
+`ChannelRegistry` 同时注册 `gateway.online.connections` 指标，并提供登录往返计时用的 `recordLoginIngress` / `takeLoginIngress`；入口时间戳由 `AuthSupport.markLoginIngress` 在 TCP/UDP/KCP 认证成功时写入，`ChannelActor` 写回首个 S2C 时用 `takeLoginIngress` 取出并记录 `gateway.login.roundtrip`。
 
 ## 玩家状态模型
 
 `PlayerPO` 对应 Redis hash `player:{playerId}` 和 PostgreSQL `users` 行，持久化字段为 `id`、`name`、`email`、`online`、`last_login_at`、`updated_at`、`version`；`expectedVersion` 是仅供写入时使用的乐观锁字段，不映射到表或 Redis。`PlayerPO` 继承 `GameModel` 并实现 xs-net 的 `XsModel` 契约，`setProperty` 根据 setter 方法引用定位字段、记录脏字段；未知或非持久化字段会被拒绝。Redis Hash 的字段名通过模型支持将 camelCase 转为 snake_case。
 
-同一个 `PlayerPO` 还通过 `@ProtoRecord` 与逐字段 `@ProtoField` 声明对外协议字段（见上一节的 PO 派生协议记录）：生成的 `com.game.message.s2c.PlayerInfoData` 是 RPC 2102 的 ACTOR_MODEL 记录，登录成功时调用 `data.toVo()` 转换后放进 `LoginResponse.playerInfo` 下发。`expectedVersion` 既不落库也不上协议。修改 `PlayerPO` 字段时，必须同时评估表结构、Redis Hash 与协议编号/字段号三处影响。
+`PlayerPO` 通过 `@ProtoRecord` 与逐字段 `@ProtoField` 参与对外协议（见上一节 `@ProtoRecord` 派生协议记录与转换器），但**只用于在 node-modules 生成 PO → 协议记录的转换器**；真正的 `com.game.message.s2c.PlayerInfoData`（RPC 2102 的 ACTOR_MODEL 记录）由 `game-message-action` 的 `PlayerInfoProto` 声明生成。登录成功时调用 `data.toVo()` 转换后放进 `LoginResponse.playerInfo` 下发。`expectedVersion` 既不落库也不上协议。修改 `PlayerPO` 字段时，必须同时评估表结构、Redis Hash、`PlayerInfoProto` 的字段/编号与协议三处影响。
 
-生命周期阶段（`PlayerLifecycle.Phase`）：
+玩家加载与在线状态（`PlayerInfo`）：
 
-```text
-NEW -> LOADING -> ONLINE -> DESTROYING -> DESTROYED
-         ^                               |
-         +---------- failLoading --------+
-```
-
-- `beginLoading` 只在 `NEW` 生效；加载超时由 `LOAD_TIMEOUT_KEY` 定时器控制，`LOAD_TIMEOUT_MS = 3000`；
-- 加载期间的消息进入 512 容量的 `StashBuffer`，加载完成后 `unstashAll`；
-- `markOnline` 把 `LOADING` 推进到 `ONLINE`，并设置 `online=true`、`last_login_at`/`updated_at`、`version+1` 与对应脏字段；
-- 销毁时 `beginDestroyLifecycle` 要求当前为 `ONLINE`，随后写离线快照并提交数据库同步；
-- `shouldPersistOnStop()` 在 Actor 意外停止时判断是否补偿持久化（`ONLINE` 或 `DESTROYING`）。
+- 玩家数据在 `PlayerActor` 构造期由 `PlayerInfo.loadingModel` **同步**加载：先读 Redis 缓存 `player:{playerId}`，未命中再经 `DBSyncEngineRegistry.loadOrCreate` 读数据库并回写 Redis；没有阶段机、加载超时定时器与消息暂存；
+- `onLoginMessage` 处理 `LoginRequest`：置 `online=true`，写 `online`/`last_login_at`/`updated_at` 与 `version+1` 脏字段，保存 Redis 并启动脏数据刷新定时器，随后回发 `LoginResponse`；
+- 登出（`LogoutRequest`）或 GM 踢出：置 `online=false`、取消刷新定时器、写离线状态并调用 `ActorServerSync.destroyAll()` 持久化，随后 Actor 停止；
+- `PostStop` 时 `ActorServerSync.persistAllStopped()` 在 `db-io-executor` 上补偿持久化所有注册模型。
 
 `version` 是乐观锁：每次状态变更自增。DBSync 通过 `PlayerMapper.upsertBatch` 执行 PostgreSQL UPSERT，并用 `expectedVersion` 判断版本是否匹配；未返回成功 ID 的记录保留到下一轮重试。`clearDirtyMatching` 只清除"值仍等于已持久化内容"的字段，避免异步写期间的新修改被误清。
 
@@ -235,7 +238,6 @@ NEW -> LOADING -> ONLINE -> DESTROYING -> DESTROYED
 | 网关全局准入 | 4096 在途 | 拒绝该消息，`gateway.ingress.rejected{reason=capacity}` |
 | 网关单连接准入 | 256 在途 | 同上 |
 | 网关过期请求 | `deadlineEpochMs` | 拒绝，`reason=expired` |
-| 玩家加载暂存 | 512 条 | 由 `StashBuffer` 语义决定（溢出时由 Pekko 处理） |
 | DBSync 脏缓冲 | `maxDirtyRecords` / `maxDirtyBytes` | `submit` 返回 false，状态不落库 |
 | DBSync 重试 | `maxRetryAttempts` | 进入 `terminalFailures`，不再重试并记 `dbsync.retry.exhausted` |
 | 日志消费 | 死信 key `log:events:dead-letter` | 坏消息跳过整批，写入死信 |

@@ -47,6 +47,11 @@ public final class LogicContext {
         return registry;
     }
 
+    /** 返回登录指标；未装配时返回 null，调用方需安全跳过。 */
+    public static LogicMetrics getLogicMetrics() {
+        return logicMetrics;
+    }
+
     public static RedisStore getRedisStore() {
         RedisStore store = redisStore;
         if (store == null) {

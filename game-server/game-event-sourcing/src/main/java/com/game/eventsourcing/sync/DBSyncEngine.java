@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -208,22 +209,30 @@ public class DBSyncEngine {
             return;
         }
         long startNanos = System.nanoTime();
-        long now = System.nanoTime();
-        List<DirtyRecord> snapshot = dirty.snapshot(config.getMaxDirtyRecords()).stream()
+        List<List<DirtyRecord>> shards = shard(selectFlushableRecords(System.nanoTime()), config.getFlushConcurrency());
+        executeShards(shards);
+        reportFlush(startNanos);
+    }
+
+    /** 选出本轮可刷写的脏记录：排除终态失败与退避未到期的记录。 */
+    private List<DirtyRecord> selectFlushableRecords(long now) {
+        return dirty.snapshot(config.getMaxDirtyRecords()).stream()
                 .filter(record -> !terminalFailures.contains(record.key()))
                 .filter(record -> {
                     RetryState rs = retryStates.get(record.key());
                     return rs == null || rs.nextRetryNanos() <= now;
                 })
                 .toList();
-        List<List<DirtyRecord>> shards = shard(snapshot, config.getFlushConcurrency());
+    }
+
+    /** 执行各分片：未 start() 时同步执行，否则提交到 flushPool 并行执行。 */
+    private void executeShards(List<List<DirtyRecord>> shards) {
         if (flushPool == null) {
             for (List<DirtyRecord> shard : shards) {
                 if (!shard.isEmpty()) {
                     flushShard(shard);
                 }
             }
-            reportFlush(startNanos);
             return;
         }
         List<Future<?>> futures = new ArrayList<>();
@@ -240,6 +249,11 @@ public class DBSyncEngine {
                 flushShard(shard);
             }
         }
+        awaitShards(futures);
+    }
+
+    /** 等待各分片完成；分片超时或失败时保留记录走重试。 */
+    private void awaitShards(List<Future<?>> futures) {
         for (Future<?> f : futures) {
             try {
                 // 加超时，避免某个分片卡死拖垮整个 flush
@@ -251,11 +265,13 @@ public class DBSyncEngine {
                 if (metrics != null) {
                     metrics.recordFlushFailure();
                 }
-            } catch (Exception e) {
-                log.error("flush shard interrupted/failed", e);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.error("flush shard wait interrupted", e);
+            } catch (ExecutionException e) {
+                log.error("flush shard execution failed", e);
             }
         }
-        reportFlush(startNanos);
     }
 
     private void reportFlush(long startNanos) {
@@ -290,7 +306,7 @@ public class DBSyncEngine {
                     persistedKeys = new HashSet<>(raw);
                     persistedKeys.retainAll(batchKeys);
                 }
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 log.error("flush batch failed, {} records retained for retry", batch.size(), e);
                 if (metrics != null) {
                     metrics.recordFlushFailure();

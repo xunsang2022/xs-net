@@ -205,7 +205,8 @@ public class AkkaKit {
                 roles.add(iterator.next());
             }
         } catch (Exception e) {
-            log.warn("获取节点角色失败，使用默认角色", e);
+            // Cluster 扩展可能尚未启动或尚未形成集群，此时退回空角色集合；记录系统名便于定位问题。
+            log.warn("获取节点角色失败，使用默认角色，system={}", system.name(), e);
         }
         return roles;
     }

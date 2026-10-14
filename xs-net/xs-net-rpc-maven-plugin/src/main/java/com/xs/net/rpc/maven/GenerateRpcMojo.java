@@ -10,6 +10,7 @@ import org.apache.maven.project.MavenProject;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 @Mojo(name = "generate", defaultPhase = LifecyclePhase.GENERATE_SOURCES, threadSafe = true)
 public final class GenerateRpcMojo extends AbstractMojo {
@@ -41,6 +42,16 @@ public final class GenerateRpcMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.build.directory}/generated-sources/rpc-converters")
     private String converterOutputDirectory;
 
+    /** 仅生成 Actor handler 的「rpcNum → 方法名」映射类，供业务模块在自身模块内生成。 */
+    @Parameter(defaultValue = "false")
+    private boolean handlersOnly;
+
+    @Parameter(defaultValue = "com.game.message.rpc")
+    private String handlerJavaPackage;
+
+    @Parameter(defaultValue = "${project.build.directory}/generated-sources/rpc-handlers")
+    private String handlerOutputDirectory;
+
     @Parameter(defaultValue = "${project}", readonly = true, required = true)
     private MavenProject project;
 
@@ -52,6 +63,13 @@ public final class GenerateRpcMojo extends AbstractMojo {
         try {
             List<Path> sourcePaths = sourceDirectories.stream().map(Path::of).toList();
             RpcArtifactGenerator generator = new RpcArtifactGenerator();
+            if (handlersOnly) {
+                Map<Integer, String> methodNames = new RpcSourceScanner().scanHandlersOnly(sourcePaths);
+                generator.generateHandlers(methodNames, Path.of(handlerOutputDirectory), handlerJavaPackage);
+                project.addCompileSourceRoot(handlerOutputDirectory);
+                getLog().info("Generated " + methodNames.size() + " rpc handler mappings");
+                return;
+            }
             if (convertersOnly) {
                 List<ConverterModel> converters = new RpcSourceScanner().scanConverters(sourcePaths);
                 generator.generateConverters(converters, Path.of(converterOutputDirectory), converterJavaPackage);

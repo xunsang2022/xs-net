@@ -62,7 +62,7 @@ Logic 通过 Spring Boot 的 `spring.data.redis.*` 配置 Redis/Lettuce 连接�
 | `log:events` | Stream | 业务日志事件 |
 | `log:events:dead-letter` | Stream | 日志消费坏消息 |
 
-所有阻塞 Redis 调用都在 `redis-io-executor` 上执行，通过 `CompletableFuture` + `pipeToSelf` 回到 Actor。**不要在 Actor 消息处理方法里直接访问 Redis**，否则会阻塞分片调度线程。
+需要在 Actor 内异步取得结果的阻塞 Redis 调用（如 `GMActor` 的审计写入）在 `redis-io-executor` 上执行，通过 `CompletableFuture` + `pipeToSelf` 把结果回填到 Actor。**不要在 Actor 消息处理方法里直接访问 Redis**，否则会阻塞分片调度线程。
 
 ## PostgreSQL
 
@@ -84,16 +84,16 @@ Logic 使用 Spring Boot 的 `spring.datasource.*` 创建 Hikari 数据源；连
 | --- | --- |
 | Gateway 认证/连接 | `gateway.auth.success`、`gateway.auth.failure`、`gateway.connection.rejected`、`gateway.online.connections` |
 | Gateway 入站 | `gateway.c2s.messages`、`gateway.ingress.rejected{reason}` |
-| Gateway 下行 | `gateway.s2c.messages`、`gateway.s2c.dropped`、`gateway.s2c.arrive.nano`、`gateway.s2c.write.nano`、`gateway.login.roundtrip` |
+| Gateway 下行 | `gateway.s2c.messages`、`gateway.s2c.dropped`、`gateway.s2c.write.duration`（Timer）、`gateway.login.roundtrip` |
 | 各传输自有计数器 | `gateway.udp.*`、`gateway.websocket.*`、KCP 对应计数器 |
 | 框架投递 | `xs.rpc.routing.rejected{reason}`、`xs.rpc.actor.envelope.dropped{reason}`、`xs.rpc.context.calls{source_node}` |
-| Logic 登录 | `login.redis.load.duration{cache}`、`login.database.load.duration`、`login.redis.create.duration`、`login.logic.total.duration`、`login.s2c.send.nano` |
+| Logic 登录 | `login.redis.load.duration{cache}`、`login.database.load.duration`、`login.redis.create.duration`、`login.logic.total.duration`、`login.s2c.send.duration`（Timer） |
 | Logic 持久化 | `dbsync.flush.duration`、`dbsync.flush.failures`、`dbsync.retry.exhausted`、`dbsync.dirty.size`、`dbsync.dirty.bytes` |
 
 ### 端点与部署
 
 - Gateway：Spring Boot Actuator，8080，暴露 `health,info,metrics,prometheus`，并启用 liveness/readiness 探针；
-- Login：Actuator，8081；
+- Login：Actuator，8081，已收敛为仅暴露 `health,info`；
 - Logic：`LogicPrometheusServer`，9090，路径 `/metrics`，同时承载受令牌保护的 `/admin/gm/trace`；令牌为空时管理端点不注册；
 - `deploy/observability/`：Prometheus 抓取配置 + 三条告警规则 + Grafana provisioning 与 `xs-net-runtime` 仪表盘；
 - `deploy/cluster/docker-compose.yml`：1 Login + 2 Gateway + 2 Logic + Redis + PostgreSQL，配合 `application-cluster.conf` 使用 `gateway-1` / `logic-1` 作为种子。
@@ -102,7 +102,7 @@ Logic 使用 Spring Boot 的 `spring.datasource.*` 创建 Hikari 数据源；连
 
 **GM 踢人**：Gateway 的 `GmController`（`/admin/gm/kick`）要求 `X-GM-Token`，令牌未配置时返回 404；`GMActor` 先写审计日志，写失败即拒绝（fail-closed）。
 
-**协议追踪**：Logic 启动时解包并预加载 Arthas agent（`maven-dependency-plugin` 在 `package` 阶段解压 `arthas-packaging:4.0.5:bin`），并以 `-Darthas.ip=127.0.0.1 -Darthas.httpPort=-1` 限制为仅本机、无 HTTP 端口。`/admin/gm/trace` 接收 `protocolNumber` 与 `timeoutMs`（1000–30000），由 `ProtocolTraceTargetResolver` 把协议号解析为 Actor 与处理方法，再由 `ProcessArthasTraceClient` 执行追踪。客户端登录协议 1000 在网关被转换为 3003，因此追踪登录时要填 3003。
+**协议追踪**：Logic 启动时解包并预加载 Arthas agent（`maven-dependency-plugin` 在 `package` 阶段解压 `arthas-packaging:4.0.5:bin`），并以 `-Darthas.ip=127.0.0.1 -Darthas.httpPort=-1` 限制为仅本机、无 HTTP 端口。`/admin/gm/trace` 接收 `protocolNumber` 与 `timeoutMs`（1000–30000），由 `ProtocolTraceTargetResolver` 把协议号解析为 Actor 与处理方法（Actor 取自其内部角色映射，方法名取自 node-modules 自身生成的 `com.game.logic.management.GeneratedRpcHandlers`），再由 `ProcessArthasTraceClient` 执行追踪。客户端登录协议为 1000，网关直接投递到 `PlayerActor`，因此追踪登录时填 1000。
 
 ## 多语言 SDK 生成
 
@@ -128,7 +128,7 @@ SDK 不维护为仓库根目录下的独立工程，而是由 `xs-net/xs-net-sdk
 | 需求 | 受支持的接入点 |
 | --- | --- |
 | 新增业务协议 | `@Rpc`/`@ProtoField` record + Actor 单参数处理方法 |
-| 让模型数据进协议 | `@ProtoRecord(classType, number)` + 字段级 `@ProtoField`（插件生成协议记录与转换代码） |
+| 让模型数据进协议 | `@ProtoRecord(classType, number)` + 字段级 `@ProtoField`（message-action 内声明类生成协议记录，node-modules 的源 PO 生成转换器） |
 | 新增角色/节点类型 | `@Roles` 接口 + `RpcActor<Role>` + 新节点的 `application.conf` 角色声明 |
 | 新增传输 | `game-node-gateway` 内新增 Server + 认证 Handler + `ClientEndpoint` 实现 |
 | 绕过分片邮箱的快速路径 | `AkkaKit.registerDeliveryInterceptor(roleClass, interceptor)` |

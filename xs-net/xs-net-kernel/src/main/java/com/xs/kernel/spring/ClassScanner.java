@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URL;
 import java.util.*;
 import java.util.function.Predicate;
@@ -44,7 +45,7 @@ public class ClassScanner {
                             result.add(clazz);
                         }
                     }
-                } catch (Exception e) {
+                } catch (IOException e) {
                     log.error("扫描包 {} 时发生错误", basePackage, e);
                 }
             }
@@ -159,8 +160,8 @@ public class ClassScanner {
                         }
                     } catch (ClassNotFoundException | LinkageError e) {
                         log.debug("无法加载类：{}", className);
-                    } catch (Throwable t) {
-                        log.warn("加载类 {} 时发生非致命异常，已跳过：{}", className, t.toString());
+                    } catch (RuntimeException e) {
+                        log.warn("加载类 {} 时发生非致命异常，已跳过：{}", className, e.toString());
                     }
                 }
             }
@@ -175,7 +176,7 @@ public class ClassScanner {
      * @param packageName 包名
      * @return 类列表
      */
-    private static List<Class<?>> scanPackage(String packageName) throws Exception {
+    private static List<Class<?>> scanPackage(String packageName) throws IOException {
         List<Class<?>> classes = new ArrayList<>();
         String packagePath = packageName.replace('.', '/');
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();

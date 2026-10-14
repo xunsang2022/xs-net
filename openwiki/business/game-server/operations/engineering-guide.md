@@ -130,7 +130,7 @@ dotnet run --project xs-net/xs-net-sdk/target/code/unity/LoadTest/XsNet.LoadTest
 | `game.websocket.port` / `path` | 8083 / `/game` | WebSocket |
 | `game.udp.*` / `game.kcp.*` | 见 yml | 端口、窗口、重传间隔、超时、线程数 |
 | `game.management.token` | `${GM_TOKEN:}` | 为空时 `/admin/gm/*` 返回 404 |
-| `jwt.secret` / `jwt.expiration` | 开发默认值 / 86400000 | Gateway 与 Login 必须一致，≥32 字节 |
+| `jwt.secret` / `jwt.expiration` | `${JWT_SECRET:}` / 86400000 | 必须由环境变量 `JWT_SECRET` 注入（Gateway 与 Login 一致，≥32 字节）；空或过短密钥会由 `JwtUtil` 启动快速失败，配置文件不再保留明文默认值 |
 
 ### Logic / Battle
 
@@ -148,7 +148,7 @@ Logic 配置由 Spring Boot 外部化配置加载。Redis、数据源分别使�
 | --- | --- | --- | --- |
 | `numberOfShards` | 各 `application.conf` | 100 | 分片数，建议 10 × 预期节点数 |
 | `xs-entity-dispatcher.fixed-pool-size` | `application.conf` | 256（`XS_ENTITY_POOL`） | 未指定 `@ActorDispatcher` 的实体并发度 |
-| `player-dispatcher` / `scene-dispatcher` | Logic `application.conf` | 8（`XS_PLAYER_POOL` / `XS_SCENE_POOL`） | 玩家/场景 Actor 并发度 |
+| `player-dispatcher` | Logic `application.conf` | 8（`XS_PLAYER_POOL`） | 玩家 Actor 并发度 |
 | `game.udp.window` / `retry-interval-ms` | Gateway yml | 32 / 200 | 轻量可靠 UDP 的在途窗口与重传节奏 |
 | `game.kcp.window` / `retry-interval-ms` | Gateway yml | 32 / 200 | KCP 窗口与节拍 |
 | 网关准入 | 代码常量 | 全局 4096、每连接 256 | `GatewayMessageRouter` 内的硬编码上限 |
@@ -165,13 +165,13 @@ Logic 配置由 Spring Boot 外部化配置加载。Redis、数据源分别使�
 | 症状 | 检查点 |
 | --- | --- |
 | 节点起不来或反复 HandshakeTimeout | 种子节点是否可达；`PEKKO_HOSTNAME` / `PEKKO_PORT` 是否唯一；集群名是否都是 `game-system`；种子列表里不要有未部署的地址 |
-| 客户端认证一直被拒 | Gateway 与 Login 的 `jwt.secret` 是否完全一致（≥32 字节）；token 是否含 `cid`；是否超过 `auth-timeout-seconds` |
+| 客户端认证一直被拒 | 两端是否注入一致的 `JWT_SECRET`（落到 `jwt.secret`，≥32 字节）；token 是否含 `cid`；是否超过 `auth-timeout-seconds` |
 | 连接建立后没有 S2C | `ChannelRegistry` 是否有活跃 endpoint；`gateway.s2c.dropped` 是否增长；客户端是否与服务端 `max-frame-length` 一致 |
 | 上行消息静默丢失 | 依次看 `gateway.ingress.rejected{reason=capacity\|expired}`、`xs.rpc.routing.rejected{reason}`、`xs.rpc.actor.envelope.dropped{reason}`；未知 `rpcNum` 只打印 WARN 不打指标 |
-| 登录卡住或 Actor 反复停止 | Redis/PostgreSQL 是否可达；`LOAD_TIMEOUT_MS = 3000` 是否触发；缓存读失败会转 DB，DB 也失败才停止 Actor |
+| 登录卡住或 Actor 反复停止 | Redis/PostgreSQL 是否可达；`PlayerInfo.loadingModel` 先读 Redis 缓存、未命中再读 DB，读失败会抛出并停止 Actor |
 | 状态不落库 | `dbsync.dirty.size` / `dbsync.dirty.bytes` 是否增长；`dbsync.flush.failures` 与 `dbsync.retry.exhausted`；`users` 表结构与 `PlayerMapper.xml` 是否一致；乐观锁冲突是否持续 |
 | 日志丢失或重复 | `log:events:dead-letter` 是否有坏消息；消费者组 `db-sync` 的 pending 列表；`source_stream_id` 唯一索引是否存在 |
-| 实体分布不均或投递失败 | 角色是否在目标节点注册；`@Roles` 与 `@ActorDispatcher` 是否齐全；是否存在"只实现了 `@Rpc` 但没有 Actor 处理方法"的消息（构建期就会失败） |
+| 实体分布不均或投递失败 | 角色是否在目标节点注册；`@Roles` 与 `@ActorDispatcher` 是否齐全；是否存在"只声明了 `@Rpc` 但宿主 Actor 里没有单参数处理方法"的消息（生成期不再校验，需人工确认；`GeneratedRpcHandlers` 可作为方法名核对入口） |
 | 文档与实现对不上 | 先看 [传输协议说明](../game-node-gateway/transport.md)，实现路径以 `com.game.gateway.netty` 与 `com.game.gateway.kcp` 为准 |
 
 ## 按变更区域的验证矩阵
@@ -180,8 +180,8 @@ Logic 配置由 Spring Boot 外部化配置加载。Redis、数据源分别使�
 | --- | --- |
 | `xs-net-message`（信封、上下文、注册表） | `xs-net-message` 全部测试 + `game-message-action` 的 `GameMessagesGoldenTest` + `RpcTransportTest` |
 | `xs-net-kernel`（分片、投递、拦截器、模型契约） | `xs-net-kernel` 全部测试 + `game-node-battle` 的 `BattleActorDispatcherTest` |
-| `xs-net-rpc-maven-plugin` / 协议声明 | 插件测试 + 重建 `game-message-action` 并检查 `rpc_protocol_validation.txt` + `scripts/Generate-Sdks.ps1` |
-| `@ProtoRecord` 模型协议（如 `PlayerPO` → `PlayerInfoData`） | 插件测试 + 重建 `game-message-action`（生成记录与 `ActorModels.proto`）+ 重建 `game-node-modules`（生成 `GeneratedProtoConverters`）+ `GameMessagesGoldenTest` / `RpcTransportTest` |
+| `xs-net-rpc-maven-plugin` / 协议声明 | 插件测试 + 重建 `game-message-action` 并检查 `rpc_protocol_validation.txt`（重点 diff 其 `proto_message_fields:` 段，发现字段号复用/删除）+ `scripts/Generate-Sdks.ps1` |
+| `@ProtoRecord` 模型协议（`PlayerInfoProto` → `PlayerInfoData`，`PlayerPO` → 转换器） | 插件测试 + 重建 `game-message-action`（由 `PlayerInfoProto` 生成记录与 `ActorModels.proto`）+ 重建 `game-node-modules`（由 `PlayerPO` 生成 `GeneratedProtoConverters`，并生成 `GeneratedRpcHandlers`）+ `GameMessagesGoldenTest` / `RpcTransportTest` |
 | Gateway 传输或认证 | `game-node-gateway` 全部测试；实机验证对应协议的认证与 S2C 往返 |
 | Logic 状态与持久化 | `game-node-modules` 全部测试；本地起 Redis+PostgreSQL 跑一次登录/登出，确认 `users` 行与 `version` 变化 |
 | Battle 执行模型 | `game-node-battle` 全部测试（含 `BattleLoadTest`） |

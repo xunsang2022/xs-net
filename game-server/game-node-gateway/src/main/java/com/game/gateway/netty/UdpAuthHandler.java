@@ -2,8 +2,6 @@ package com.game.gateway.netty;
 
 import com.game.comment.util.JwtUtil;
 import com.game.gateway.config.UdpConfig;
-import io.jsonwebtoken.Claims;
-import io.micrometer.core.instrument.Metrics;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -14,7 +12,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
@@ -27,10 +24,6 @@ import java.util.concurrent.ExecutorService;
 @Slf4j
 @RequiredArgsConstructor
 public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> {
-
-    private static final String METRIC_AUTH_SUCCESS = "gateway.udp.auth.success";
-    private static final String METRIC_AUTH_FAILURE = "gateway.udp.auth.failure";
-    private static final String METRIC_C2S_MESSAGES = "gateway.udp.c2s.messages";
 
     /** UDP 握手验签器。 */
     @NonNull
@@ -76,25 +69,19 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
 
     private void authenticate(DatagramChannel channel, InetSocketAddress sender, byte[] tokenBytes, long connectionRandom) {
         try {
-            String token = new String(tokenBytes, StandardCharsets.UTF_8);
-            Claims claims = jwtUtil.validateToken(token);
-            if (claims == null) {
-                Metrics.counter(METRIC_AUTH_FAILURE).increment();
+            AuthSupport.Result result = AuthSupport.resolve(jwtUtil, tokenBytes);
+            if (result.failure() == AuthSupport.Failure.INVALID_TOKEN) {
+                AuthSupport.countFailure(AuthSupport.UDP_METRICS);
                 return;
             }
-            String channelId = jwtUtil.getChannelId(claims);
-            if (channelId == null || channelId.isBlank()) {
-                Metrics.counter(METRIC_AUTH_FAILURE).increment();
+            if (result.failure() == AuthSupport.Failure.MISSING_CHANNEL_ID) {
+                AuthSupport.countFailure(AuthSupport.UDP_METRICS);
                 return;
             }
-            ClientEndpoint existing = ChannelRegistry.INSTANCE.get(channelId);
-            if (config.getMaxConnectionsPerAccount() > 0 && existing != null && existing.isActive()) {
-                if (existing.connectionRandom() != connectionRandom) {
-                    Metrics.counter(METRIC_AUTH_FAILURE).increment();
-                    return;
-                }
-                ChannelRegistry.INSTANCE.remove(channelId, existing);
-                existing.close();
+            String channelId = result.channelId();
+            if (!AuthSupport.admitReconnect(channelId, connectionRandom, config.getMaxConnectionsPerAccount())) {
+                AuthSupport.countFailure(AuthSupport.UDP_METRICS);
+                return;
             }
             UdpSession session = new UdpSession(
                     channelId,
@@ -105,12 +92,13 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
                     body -> handleGameMessage(channelId, body));
             sessions.put(sender, session);
             ChannelRegistry.INSTANCE.register(channelId, session);
+            AuthSupport.markLoginIngress(channelId);
             // 回 ACK 确认握手完成
             channel.writeAndFlush(new DatagramPacket(
                     UdpReliableLayer.encode(UdpReliableLayer.TYPE_ACK, 0, connectionRandom, null), sender));
-            Metrics.counter(METRIC_AUTH_SUCCESS).increment();
+            AuthSupport.countSuccess(AuthSupport.UDP_METRICS);
         } catch (Exception e) {
-            Metrics.counter(METRIC_AUTH_FAILURE).increment();
+            AuthSupport.countFailure(AuthSupport.UDP_METRICS);
             log.error("UDP auth error", e);
         }
     }
@@ -118,7 +106,7 @@ public class UdpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
     /** 可靠层交付的上行 DATA 消息（NetMessage 字节）→ 解码并路由 Logic。 */
     private void handleGameMessage(String channelId, byte[] body) {
         try {
-            Metrics.counter(METRIC_C2S_MESSAGES).increment();
+            AuthSupport.countC2S(AuthSupport.UDP_METRICS);
             router.route(body, channelId);
         } catch (Exception e) {
             log.error("Failed to handle UDP game message", e);

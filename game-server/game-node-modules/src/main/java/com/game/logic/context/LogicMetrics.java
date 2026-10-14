@@ -26,7 +26,7 @@ public final class LogicMetrics {
     private final Timer loginDatabaseLoadTimer;
     private final Timer loginRedisCreateTimer;
     private final Timer loginLogicTotalTimer;
-    private final AtomicLong loginS2cSendNanos = new AtomicLong(0L);
+    private final Timer loginS2cSendTimer;
 
     public LogicMetrics(MeterRegistry registry) {
         this.registry = registry;
@@ -45,8 +45,9 @@ public final class LogicMetrics {
                 .register(registry);
         this.loginLogicTotalTimer = Timer.builder("login.logic.total.duration")
                 .register(registry);
-        Gauge.builder("login.s2c.send.nano", loginS2cSendNanos, AtomicLong::get)
-                .description("PlayerActor ready to send S2C when nanoTime()")
+        // 记录耗时而非绝对时间戳：绝对 nanoTime 作 Gauge 无法告警。
+        this.loginS2cSendTimer = Timer.builder("login.s2c.send.duration")
+                .description("登录处理到 S2C 响应发送的耗时")
                 .register(registry);
     }
 
@@ -76,8 +77,9 @@ public final class LogicMetrics {
         loginLogicTotalTimer.record(durationNanos, TimeUnit.NANOSECONDS);
     }
 
-    public void setLoginS2cSendNanos(long nanoTime) {
-        loginS2cSendNanos.set(nanoTime);
+    /** 记录登录 S2C 响应发送耗时（仅内部使用，语义由时间戳改为耗时）。 */
+    public void recordLoginS2cSend(long durationNanos) {
+        loginS2cSendTimer.record(durationNanos, TimeUnit.NANOSECONDS);
     }
 
     /** 单引擎同步指标实现：flush 延迟 / 失败 / 重试耗尽 / 终态回收 / 容量拒绝 / 脏记录积压，全部带 engine tag。 */

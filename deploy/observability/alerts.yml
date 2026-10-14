@@ -22,3 +22,45 @@ groups:
           severity: critical
         annotations:
           summary: A Gateway metrics target is unavailable
+      - alert: GatewayAuthFailureSpike
+        expr: increase(gateway_auth_failure_total[5m]) > 20
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Gateway authentication failures spiked
+      - alert: GatewayIngressRejected
+        expr: increase(gateway_ingress_rejected_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Gateway ingress rejected due to capacity or expired deadline
+      - alert: GatewayS2cDropped
+        expr: increase(gateway_s2c_dropped_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Gateway is dropping S2C messages
+      - alert: LoginLogicSlow
+        expr: rate(login_logic_total_duration_seconds_sum[5m]) / rate(login_logic_total_duration_seconds_count[5m]) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Average login logic latency is above 300ms
+      - alert: DbsyncSubmitRejected
+        expr: increase(dbsync_submit_rejected_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: DBSync rejected submissions because the dirty buffer is full
+      - alert: DbsyncRetryExhausted
+        expr: increase(dbsync_retry_exhausted_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: DBSync records exhausted retries and became terminal failures

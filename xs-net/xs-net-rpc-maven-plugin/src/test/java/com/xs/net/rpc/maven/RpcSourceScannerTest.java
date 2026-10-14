@@ -10,6 +10,7 @@ import static java.nio.file.Files.createDirectories;
 import static java.nio.file.Files.writeString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -50,7 +51,9 @@ class RpcSourceScannerTest {
         assertEquals(java.util.List.of(6, 7, 8, 9), model.messages().stream().map(MessageModel::number).toList());
         assertEquals("sample.PlayerMessage", model.messages().getFirst().roleType());
         assertEquals("sample.S2C", model.messages().get(1).roleType());
-        assertEquals("sample.PlayerActor", model.messages().getFirst().actorType());
+        // 全量扫描不再依赖 handler：actorType/handler 一律为 null
+        assertNull(model.messages().getFirst().actorType());
+        assertNull(model.messages().getFirst().handlerMethod());
 
         Path target = temporaryDirectory.resolve("target");
         new RpcArtifactGenerator().generate(model, target.resolve("proto"), target.resolve("java"),
@@ -82,8 +85,7 @@ class RpcSourceScannerTest {
         assertTrue(routesProto.contains("RPC_HTTP_RESULT = 8"));
         assertTrue(routesProto.contains("RPC_ENTER = 9"));
         assertTrue(registry.contains("RpcMessageRegistryBuilder"));
-        assertTrue(registry.contains("new com.xs.net.message.RpcHandlerMetadata(\"sample.PlayerActor\", \"request\", sample.Request.class, null)"));
-        assertTrue(registry.contains("new com.xs.net.message.RpcHandlerMetadata(\"sample.PlayerActor\", \"enter\", sample.Enter.class, null)"));
+        assertFalse(registry.contains("RpcHandlerMetadata"));
         assertTrue(codec.contains("RpcPayloadCodec<sample.Request"));
         assertTrue(java.nio.file.Files.isRegularFile(target.resolve("java/com/game/message/rpc/GeneratedRpcHandlers.java")));
     }
@@ -100,6 +102,8 @@ class RpcSourceScannerTest {
                     int number() default 0;
                 }
                 class RpcActor<T> {}
+                @interface Roles { String value(); }
+                @Roles("logic")
                 interface PlayerMessage {}
                 @Rpc(kind = Rpc.Kind.MESSAGE, number = 6)
                 record Request(@ProtoField(number = 1) String playerId) implements PlayerMessage {}
@@ -121,7 +125,7 @@ class RpcSourceScannerTest {
     }
 
     @Test
-    void bindsComponentHandlerToItsOwningActor() throws Exception {
+    void generatesHandlerMethodNameMapFromActorAndComponentsInHandlersOnlyMode() throws Exception {
         Path source = sourceDirectory();
         writeString(source.resolve("sample/Actor.java"), """
                 package sample;
@@ -135,25 +139,30 @@ class RpcSourceScannerTest {
                 interface PlayerMessage {}
                 @Rpc(kind = Rpc.Kind.INTERNAL, number = 6)
                 record Enter(@ProtoField(number = 1) String playerId) implements PlayerMessage {}
+                @Rpc(kind = Rpc.Kind.INTERNAL, number = 9)
+                record Leave(@ProtoField(number = 1) String playerId) implements PlayerMessage {}
                 class PlayerActor extends RpcActor<PlayerMessage> {
                     private final PlayerLifecycle lifecycle = new PlayerLifecycle();
+                    private void onLeave(Leave leave) {}
                 }
                 class PlayerLifecycle {
                     private void onEnter(Enter enter) {}
                 }
                 """);
 
-        RpcModel model = new RpcSourceScanner().scan(java.util.List.of(source));
-        MessageModel message = model.messages().getFirst();
-        assertEquals("sample.PlayerActor", message.actorType());
-        assertEquals("lifecycle", message.handlerComponent());
-        assertEquals("onEnter", message.handlerMethod());
+        java.util.Map<Integer, String> methodNames = new RpcSourceScanner().scanHandlersOnly(java.util.List.of(source));
+        assertEquals("onEnter", methodNames.get(6));
+        assertEquals("onLeave", methodNames.get(9));
+        assertEquals(2, methodNames.size());
 
         Path target = temporaryDirectory.resolve("target");
-        new RpcArtifactGenerator().generate(model, target.resolve("proto"), target.resolve("java"),
-                "game.message", "com.game.protocol.pb", "com.game.message.rpc");
-        String registry = java.nio.file.Files.readString(target.resolve("java/com/game/message/rpc/GameRpcMessages.java"));
-        assertTrue(registry.contains("new com.xs.net.message.RpcHandlerMetadata(\"sample.PlayerActor\", \"lifecycle\", \"onEnter\", sample.Enter.class, null)"));
+        new RpcArtifactGenerator().generateHandlers(methodNames, target, "com.game.message.rpc");
+        String generated = java.nio.file.Files.readString(target.resolve("com/game/message/rpc/GeneratedRpcHandlers.java"));
+        assertTrue(generated.contains("package com.game.message.rpc;"));
+        assertTrue(generated.contains("Map.entry(6, \"onEnter\")"));
+        assertTrue(generated.contains("Map.entry(9, \"onLeave\")"));
+        assertTrue(generated.contains("public static Map<Integer, String> methodNames()"));
+        assertTrue(generated.contains("public static String methodName(int rpcNum)"));
     }
 
     @Test

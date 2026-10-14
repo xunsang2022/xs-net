@@ -37,12 +37,15 @@ flowchart TB
 
 ### 输入源
 
-三个 sourceDirectories 参与扫描：
-- `game-message-action`：业务协议 record
-- `game-node-modules`：Actor 处理方法，以及带 `@ProtoRecord` 的模型类（PO）
-- `game-node-battle`：战斗 Actor 处理方法
+**全量模式**（`game-message-action` 的 `xs-rpc:generate`）只扫描**自身** `src/main/java`，不再扫描 `../game-node-modules`、`../game-node-battle`：
 
-`game-node-modules` 自身还会再跑一次 `xs-rpc:generate`（`convertersOnly = true`），扫描自身与 `game-message-action` 源码，只产出 PO → 协议记录的转换代码，不重复生成 proto 与注册表。
+- 手写 `@Rpc` 协议 record，以及 `@ProtoRecord` 声明类（例如 `com.game.message.s2c.PlayerInfoProto`，声明 RPC 2102 的 `PlayerInfoData`）都在这里；
+- `roleClass` 一律由 record 实现的 `@Roles` 接口推断，**不再通过扫描业务 Actor 的 handler 反推**；`kind = INTERNAL` 的 DTO 同样必须实现某个 `@Roles` 接口，否则构建失败。
+
+业务模块 `game-node-modules` 自身再跑两次 `xs-rpc:generate`，各自只扫描约定源码、只产出对应代码：
+
+- `convertersOnly = true`：只扫描自身 `src/main/java`，由本模块的 `@ProtoRecord` 源类型（`PlayerPO`）生成 PO → 协议记录的转换器（`GeneratedProtoConverters`），不再扫描 `game-message-action`；
+- `handlersOnly = true`：扫描自身 `src/main/java` 与 `../game-message-action/src/main/java`，把「单参数 DTO 处理方法」解析为 `rpcNum → 方法名` 映射，生成 `GeneratedRpcHandlers`（`handlerJavaPackage = com.game.logic.management`）。全量生成不再内联 handler 元数据，方法名由此处补齐。
 
 ### 生成产物
 
@@ -53,15 +56,15 @@ flowchart TB
 | `*.proto` | `src/main/proto/` | Protocol Buffers 定义（含 `ActorModels.proto`） |
 | `rpc_routes.proto` | `src/main/proto/` | 路由表 proto |
 | `rpc_routes.md` | 项目根 | 路由表文档 |
-| `GameRpcMessages.java` | `target/generated-sources/rpc/` | 消息注册表装配 |
-| `GeneratedRpcCodec.java` | `target/generated-sources/rpc/` | DTO ↔ Protobuf 编解码 |
-| `GeneratedRpcHandlers.java` | `target/generated-sources/rpc/` | Actor 方法处理器 |
-| 协议记录源码 | `target/generated-sources/rpc/com/game/message/**` | `@ProtoRecord(classType)` 指定的 record |
-| `GeneratedProtoConverters.java` | `game-node-modules/target/generated-sources/rpc-converters/` | PO → 协议记录的转换方法（`convertersOnly` 执行） |
+| `GameRpcMessages.java` | `game-message-action/target/generated-sources/rpc/` | 消息注册表装配；全量模式下每条规格的 handler 元数据为 `null` |
+| `GeneratedRpcCodec.java` | `game-message-action/target/generated-sources/rpc/` | DTO ↔ Protobuf 编解码 |
+| 协议记录源码 | `game-message-action/target/generated-sources/rpc/com/game/message/**` | `@ProtoRecord(classType)`（如 `PlayerInfoProto`）派生的 record |
+| `GeneratedProtoConverters.java` | `game-node-modules/target/generated-sources/rpc-converters/` | PO → 协议记录的转换方法（`convertersOnly` 执行，只扫描 node-modules 自身） |
+| `GeneratedRpcHandlers.java` | `game-node-modules/target/generated-sources/rpc-handlers/com/game/logic/management/` | `rpcNum → 方法名` 只读映射（`handlersOnly` 执行） |
 
 ### ACTOR_MODEL 消息
 
-`@ProtoRecord(classType, number)` 标注的模型类会派生一条 `kind = ACTOR_MODEL` 的消息规格：编号取自注解的 `number`，消息名取 `classType` 的简单类名，字段取 PO 上带 `@ProtoField` 的字段（`Timestamp` → `int64` 毫秒），无 `roleClass`（进入 `ActorModels.proto`）、`direction = HTTP_RESPONSE`、`publicVisible = true`。它和其他消息一样进注册表与路由表；引用它的消息字段直接以消息类型引用并复用其 codec。详见 [领域概念](../../framework/xs-net-message/concepts.md#协议声明与生成)。
+`@ProtoRecord(classType, number)` 标注的类（在 `game-message-action` 内，例如 `PlayerInfoProto`）会派生一条 `kind = ACTOR_MODEL` 的消息规格：编号取自注解的 `number`，消息名取 `classType` 的简单类名，字段取该声明类上带 `@ProtoField` 的字段（`Timestamp` → `int64` 毫秒），无 `roleClass`（进入 `ActorModels.proto`）、`direction = HTTP_RESPONSE`、`publicVisible = true`。它和其他消息一样进注册表与路由表；引用它的消息字段直接以消息类型引用并复用其 codec。详见 [领域概念](../../framework/xs-net-message/concepts.md#协议声明与生成)。
 
 ### GameRpcMessages 结构
 
@@ -78,18 +81,13 @@ public final class GameRpcMessages {
             LoginRequest.class,      // messageClass (Protobuf)
             LoginRequest.parser(),   // parser
             LoginRequestDTO.class,   // dtoClass
-            PlayerMessage.class,     // roleClass (目标角色接口)
+            PlayerMessage.class,     // roleClass (record 实现的 @Roles 接口)
             RpcMessageDirection.HTTP_RESPONSE,
             true,                    // publicVisible
             true,                    // playerRoutingRequired
             false,                   // channelRoutingRequired
             GeneratedRpcCodec.INSTANCE,
-            new RpcHandlerMetadata(
-                PlayerActor.class.getName(),
-                "onLoginRequest",
-                LoginRequestDTO.class,
-                null
-            )
+            null                     // handler：全量模式不内联 handler 元数据
         ));
         
         // ... 更多 register 调用
@@ -98,6 +96,8 @@ public final class GameRpcMessages {
     }
 }
 ```
+
+全量模式下每条规格的 `handler` 一律为 `null`：插件不再扫描业务 Actor 源码来推断 actorType / methodName。运行期需要「rpcNum → 方法名」的场景（例如 Logic 的 `ProtocolTraceTargetResolver`）改查业务模块 `handlersOnly` 生成的 `com.game.logic.management.GeneratedRpcHandlers.methodNames()`。
 
 ## 启动时：注册表初始化
 

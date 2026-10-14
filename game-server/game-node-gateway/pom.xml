@@ -17,6 +17,12 @@
             <artifactId>game-comment</artifactId>
             <version>0.0.1-SNAPSHOT</version>
         </dependency>
+        <!-- 显式依赖：网关直接引用 com.game.message.*（NetMessage DTO / RPC 路由表） -->
+        <dependency>
+            <groupId>com.xs</groupId>
+            <artifactId>game-message-action</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
         <dependency>
             <groupId>com.xs</groupId>
             <artifactId>xs-net-transport</artifactId>
