@@ -3,7 +3,6 @@ package com.game.logic.actor.player.core;
 import com.game.logic.actor.core.ActorServerSync;
 import com.game.logic.actor.player.db.PlayerMapper;
 import com.game.logic.actor.player.db.PlayerPO;
-import com.game.logic.actor.player.message.FlushDirty;
 import com.game.logic.context.LogicContext;
 import com.game.logic.context.LogicMetrics;
 import com.game.logic.redis.RedisStore;
@@ -24,9 +23,9 @@ import org.apache.pekko.actor.typed.PostStop;
 import org.apache.pekko.actor.typed.javadsl.Behaviors;
 import org.apache.pekko.actor.typed.javadsl.ReceiveBuilder;
 import org.apache.pekko.actor.typed.javadsl.TimerScheduler;
+import org.apache.pekko.japi.function.Function;
 
 import java.sql.Timestamp;
-import java.time.Duration;
 import java.util.Map;
 
 /** 注册并处理玩家业务消息及玩家在线、加载、销毁生命周期。 */
@@ -38,6 +37,8 @@ public final class PlayerInfo extends SimpleActorServer<PlayerMessage, PlayerPO>
     private boolean online;
     /** 当前玩家绑定的频道 ID。 */
     private String pendingChannelId;
+    /** 是否已在销毁流程中完成落库，避免 PostStop 重复写库。 */
+    private boolean persistedOnDestroy;
 
     public PlayerInfo(
             ActorServices<PlayerMessage> services,
@@ -102,24 +103,34 @@ public final class PlayerInfo extends SimpleActorServer<PlayerMessage, PlayerPO>
     @Override
     public void registerHandlers(ReceiveBuilder<PlayerMessage> builder) {
         builder
-                .onMessage(LoginRequest.class, msg -> services.contextualize(msg, this::onLoginMessage))
-                .onMessage(LogoutRequest.class, msg -> services.contextualize(msg, this::onLogoutMessage))
-                .onMessage(GmKickPlayerCommand.class, msg -> services.contextualize(msg, this::onGmKickPlayer))
-                .onMessage(FlushDirty.class, this::onFlushDirty)
+                .onMessage(LoginRequest.class, msg ->
+                        services.contextualize(msg, persistAfter(this::onLoginMessage)))
+                .onMessage(LogoutRequest.class, msg ->
+                        services.contextualize(msg, persistAfter(this::onLogoutMessage)))
+                .onMessage(GmKickPlayerCommand.class, msg ->
+                        services.contextualize(msg, persistAfter(this::onGmKickPlayer)))
                 .onSignal(PostStop.class, signal -> onPostStop());
     }
 
-    /** 处理脏数据刷新消息：仅在线时刷写，并在处理完后按最新间隔重新排期。 */
-    private Behavior<PlayerMessage> onFlushDirty(FlushDirty message) {
-        if (!online) {
-            return Behaviors.same();
-        }
-        stateSync.onFlushDirty();
-        refreshFlushTimerIfNeeded();
-        return Behaviors.same();
+    /**
+     * 包装消息处理器：一条消息处理完成后，把本次累积的脏字段一次性 write-through 到 Redis。
+     * <p>玩家不在线（登出、踢人已置离线）时跳过，最终状态由 {@link #beginDestroy()} 直接落库。</p>
+     */
+    private <T extends PlayerMessage> Function<T, Behavior<PlayerMessage>> persistAfter(
+            Function<T, Behavior<PlayerMessage>> handler) {
+        return message -> {
+            Behavior<PlayerMessage> behavior = handler.apply(message);
+            if (online && data.hasDirtyFields()) {
+                LogicContext.getRedisStore().saveDirty(data, services.entityId());
+            }
+            return behavior;
+        };
     }
 
-    /** 处理玩家登录请求，重复登录直接忽略。 */
+    /**
+     * 处理玩家登录请求，重复登录直接忽略。
+     * <p>在线期间只写 Redis 缓存，不落库；玩家状态在登出销毁时统一落库。</p>
+     */
     private Behavior<PlayerMessage> onLoginMessage(LoginRequest request) {
         if (online) {
             return Behaviors.same();
@@ -133,9 +144,6 @@ public final class PlayerInfo extends SimpleActorServer<PlayerMessage, PlayerPO>
         }
         markOnlineFields();
         online = true;
-        LogicContext.getRedisStore().saveRedis(data);
-        // 登录成功后启动脏数据刷新周期调度（单次定时器，仅此一次）
-        refreshFlushTimerIfNeeded();
         if (pendingChannelId == null || pendingChannelId.isBlank()) {
             log.warn("Cannot send SC_Login without channelId: playerId={}", data.getId());
             return Behaviors.same();
@@ -149,7 +157,7 @@ public final class PlayerInfo extends SimpleActorServer<PlayerMessage, PlayerPO>
         return Behaviors.same();
     }
 
-    /** 处理玩家登出请求，回复后停止 Actor。 */
+    /** 处理玩家登出请求：落库后回复并停止 Actor。 */
     private Behavior<PlayerMessage> onLogoutMessage(LogoutRequest request) {
         if (online) {
             beginDestroy();
@@ -173,23 +181,27 @@ public final class PlayerInfo extends SimpleActorServer<PlayerMessage, PlayerPO>
         return Behaviors.stopped();
     }
 
-    /** 开始玩家销毁流程，停止刷新定时器并持久化离线状态。 */
+    /**
+     * 开始玩家销毁流程：把最终状态直接落数据库（不再写缓存），DB 确认后才清理 Redis 缓存；
+     * 未确认则不清理，保留在线期间由消息处理 flush 写入的副本兜底。
+     */
     private void beginDestroy() {
         if (!online) {
             return;
         }
         online = false;
-        cancelFlushTimer();
         long now = System.currentTimeMillis();
         data.setProperty(PlayerPO::setOnline, 0)
                 .setProperty(PlayerPO::setUpdatedAt, new Timestamp(now));
-        stateSync.destroyAll();
-        LogicContext.getRedisStore().deletePlayerCache(services.entityId());
+        persistedOnDestroy = true;
+        stateSync.persistAsync(() -> LogicContext.getRedisStore().deletePlayerCache(services.entityId()));
     }
 
-    /** Actor 停止时，为仍需保存的玩家状态安排补偿持久化。 */
+    /** Actor 停止时为尚未落库的玩家状态安排补偿持久化。 */
     private Behavior<PlayerMessage> onPostStop() {
-        stateSync.persistAllStopped();
+        if (!persistedOnDestroy) {
+            stateSync.persistAllStopped();
+        }
         return Behaviors.same();
     }
 
@@ -205,23 +217,6 @@ public final class PlayerInfo extends SimpleActorServer<PlayerMessage, PlayerPO>
             return;
         }
         services.sendRpc(request.channelId(), response);
-    }
-
-    /** 停止脏数据刷新定时器。 */
-    private void cancelFlushTimer() {
-        timers.cancel(FLUSH_KEY);
-    }
-
-    /**
-     * 按当前同步间隔排期下一次脏数据刷新（单次定时器）。
-     * <p>每次触发后重新读取 {@link LogicContext#getSyncIntervalMs()}，因此间隔支持热更新；
-     * 仅在线时排期，销毁后不再续期（beginDestroy 已 cancel）。</p>
-     */
-    private void refreshFlushTimerIfNeeded() {
-        if (!online) {
-            return;
-        }
-        timers.startSingleTimer(FLUSH_KEY, new FlushDirty(), Duration.ofMillis(LogicContext.getSyncIntervalMs()));
     }
 
     /** 更新在线状态、登录时间、更新时间和版本号。 */

@@ -23,14 +23,4 @@ class LogicContextTest {
         LogicContext.setRedisStore(null);
         assertThrows(IllegalStateException.class, LogicContext::getRedisStore);
     }
-
-    @Test
-    void syncIntervalDefaultsAndClampsToPositive() {
-        assertEquals(1000, LogicContext.getSyncIntervalMs());
-        LogicContext.setSyncIntervalMs(250);
-        assertEquals(250, LogicContext.getSyncIntervalMs());
-        LogicContext.setSyncIntervalMs(0);
-        assertEquals(1, LogicContext.getSyncIntervalMs());
-        LogicContext.setSyncIntervalMs(1000);
-    }
 }

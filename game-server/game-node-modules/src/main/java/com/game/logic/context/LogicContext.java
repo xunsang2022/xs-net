@@ -4,7 +4,6 @@ import com.game.eventsourcing.sync.DBSyncEngineRegistry;
 import com.game.eventsourcing.log.LogConsumer;
 import com.game.logic.redis.RedisStore;
 import io.micrometer.core.instrument.MeterRegistry;
-import lombok.Getter;
 import lombok.Setter;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -33,8 +32,6 @@ public final class LogicContext {
     private static volatile ExecutorService redisIoExecutor;
     @Setter
     private static volatile ExecutorService dbIoExecutor;
-    @Getter
-    private static volatile int syncIntervalMs = 1000;
 
     private LogicContext() {
     }
@@ -74,9 +71,5 @@ public final class LogicContext {
             throw new IllegalStateException("DB IO executor has not been initialized");
         }
         return executor;
-    }
-
-    public static void setSyncIntervalMs(int intervalMs) {
-        syncIntervalMs = Math.max(1, intervalMs);
     }
 }

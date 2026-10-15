@@ -9,8 +9,8 @@ spring:
       database: 0
       lettuce:
         pool:
-          max-active: 32
-          max-idle: 32
+          max-active: 64
+          max-idle: 64
           min-idle: 4
       password: 123456
   datasource:
@@ -20,7 +20,7 @@ spring:
     hikari:
       connection-timeout: 5000
       initialization-fail-timeout: -1
-      maximum-pool-size: 50
+      maximum-pool-size: 64
       minimum-idle: 2
 logging:
   level:
@@ -34,11 +34,10 @@ game:
     message-base-packages:
       - com.game.message.actor.logic
       - com.game.message.actor
-  storage:
-    sync-interval-ms: 1000
   io:
     redis-threads: 16
     db-threads: 8
+    queue-capacity: 8192
   db:
     batch-size: 100
     bgsave-seconds: 3

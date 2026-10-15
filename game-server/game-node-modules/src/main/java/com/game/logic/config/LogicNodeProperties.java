@@ -8,20 +8,15 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "game")
 public class LogicNodeProperties {
 
-    private Storage storage = new Storage();
     private Io io = new Io();
     private Db db = new Db();
     private Management management = new Management();
 
     @Data
-    public static class Storage {
-        private int syncIntervalMs = 1000;
-    }
-
-    @Data
     public static class Io {
         private int redisThreads = 16;
         private int dbThreads = 8;
+        private int queueCapacity = 8192;
     }
 
     @Data

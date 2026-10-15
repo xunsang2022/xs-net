@@ -65,7 +65,6 @@ public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable, Dispo
         LogicContext.setRedisStore(redisStore);
         LogicContext.setRedisIoExecutor(ioExecutors.redisIoExecutor());
         LogicContext.setDbIoExecutor(ioExecutors.dbIoExecutor());
-        LogicContext.setSyncIntervalMs(properties.getStorage().getSyncIntervalMs());
         LogicContext.setDbSyncEngineRegistry(dbSyncEngineRegistry);
         LogicContext.setMeterRegistry(meterRegistry);
         LogicContext.setLogicMetrics(logicMetrics);
@@ -121,7 +120,7 @@ public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable, Dispo
     /**
      * 启动运行时配置加载。
      * <p>从系统属性中加载 {@link LogicRuntimeConfiguration}，并按配置的间隔定期重新加载，
-     * 支持运行时动态调整参数（如日志级别、同步间隔）。</p>
+     * 支持运行时动态调整参数（如日志级别）。</p>
      */
     private void startRuntimeConfiguration() {
         runtimeConfiguration = LogicRuntimeConfiguration.fromSystemProperty(this::applyRuntimeConfiguration);
@@ -146,25 +145,14 @@ public class LogicNodeRuntime implements ApplicationRunner, AutoCloseable, Dispo
 
     /**
      * 应用运行时配置变更。
-     * <p>处理动态配置更新，包括：</p>
+     * <p>处理动态配置更新：</p>
      * <ul>
-     *   <li>{@code game.storage.sync-interval-ms} - 数据同步间隔（毫秒）</li>
      *   <li>{@code game.logging.level} - 应用日志级别</li>
      * </ul>
      *
      * @param settings 配置键值对映射
-     * @throws IllegalArgumentException 如果同步间隔格式不正确
      */
     private void applyRuntimeConfiguration(Map<String, String> settings) {
-        String syncInterval = settings.get("game.storage.sync-interval-ms");
-        if (syncInterval != null && !syncInterval.isBlank()) {
-            try {
-                LogicContext.setSyncIntervalMs(Integer.parseInt(syncInterval));
-            } catch (NumberFormatException exception) {
-                throw new IllegalArgumentException(
-                        "game.storage.sync-interval-ms must be a positive integer", exception);
-            }
-        }
         LogbackLevelUpdater.updateApplicationLevel(settings.get("game.logging.level"));
     }
 

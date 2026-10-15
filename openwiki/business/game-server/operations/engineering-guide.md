@@ -148,17 +148,16 @@ Logic 配置由 Spring Boot 外部化配置加载。Redis、数据源分别使�
 | --- | --- | --- | --- |
 | `numberOfShards` | 各 `application.conf` | 100 | 分片数，建议 10 × 预期节点数 |
 | `xs-entity-dispatcher.fixed-pool-size` | `application.conf` | 256（`XS_ENTITY_POOL`） | 未指定 `@ActorDispatcher` 的实体并发度 |
-| `player-dispatcher` | Logic `application.conf` | 8（`XS_PLAYER_POOL`） | 玩家 Actor 并发度 |
+| `player-dispatcher` | Logic `application.conf` | 64（`XS_PLAYER_POOL`） | 玩家 Actor 并发度（登录/登出入口吞吐上限） |
 | `game.udp.window` / `retry-interval-ms` | Gateway yml | 32 / 200 | 轻量可靠 UDP 的在途窗口与重传节奏 |
 | `game.kcp.window` / `retry-interval-ms` | Gateway yml | 32 / 200 | KCP 窗口与节拍 |
 | 网关准入 | 代码常量 | 全局 4096、每连接 256 | `GatewayMessageRouter` 内的硬编码上限 |
 | `game.db.batch-size` | Logic yml | 100 | 单次 `batchUpdate` 记录数 |
 | `game.db.bgsave-seconds` | Logic yml | 3 | DBSync flush 周期 |
 | `game.db.flush-concurrency` | Logic yml | 8 | flush 分片并行度 |
-| `game.io.redis-threads` / `db-threads` | Logic yml | 16 / 8 | 阻塞 I/O 池大小（队列 1024，满则拒绝） |
-| `game.storage.sync-interval-ms` | Logic yml | 1000 | 玩家脏数据刷新周期，可运行时热更 |
+| `game.io.redis-threads` / `db-threads` | Logic yml | 16 / 8 | 阻塞 I/O 池大小（队列 `game.io.queue-capacity`，默认 8192，满则拒绝） |
 
-运行时热更：`-Dgame.config.path=<yaml>` 启用 `LogicRuntimeConfiguration`，按 `game.management.config-reload-interval-ms` 轮询文件修改时间，目前只应用 `game.storage.sync-interval-ms` 与 `game.logging.level`。
+运行时热更：`-Dgame.config.path=<yaml>` 启用 `LogicRuntimeConfiguration`，按 `game.management.config-reload-interval-ms` 轮询文件修改时间，目前只应用 `game.logging.level`。
 
 ## 故障排查
 

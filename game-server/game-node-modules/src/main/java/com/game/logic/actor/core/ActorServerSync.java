@@ -14,25 +14,25 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
 
 /**
- * 通用 Actor 状态同步组件，负责将多个 XsModel 脏数据同步到数据库。
+ * 通用 Actor 状态同步组件，负责把多个 XsModel 的状态异步落库。
  *
  * <p>一个 Actor 可能有多个 ActorServer 组件，每个组件管理不同的 XsModel 数据实体。
  * ActorServerSync 统一管理这些模型的持久化操作。</p>
  *
  * <p>职责包括：
  * <ul>
- *   <li>检查所有注册模型的脏字段并提交到数据库同步引擎</li>
- *   <li>Actor 销毁时异步持久化所有模型的最终状态</li>
+ *   <li>Actor 销毁时异步落库，并在全部确认写入后回调（供调用方清理 Redis 缓存）</li>
  *   <li>Actor 停止时补偿持久化</li>
  * </ul>
  *
- * <p>定时器由调用方自行管理，本组件只提供数据持久化操作方法。</p>
+ * <p>不承担在线期间的周期刷写。落库优先走 db-io 池的立即写；池已满或写入未确认时
+ * 降级到 {@link DBSyncEngineRegistry} 的有界缓冲批写，保证状态不丢。</p>
  */
 @Slf4j
 public final class ActorServerSync {
     /**
      * 注册的模型列表。
-     * <p>并发前提：本组件的全部访问（构造期 addModel、onFlushDirty、destroyAll、persistAllStopped）
+     * <p>并发前提：本组件的全部访问（构造期 addModel、persistAsync、persistAllStopped）
      * 均只在所属 Actor 的单线程中串行执行——addModel 在 Actor 构造期调用，其余在消息处理或 PostStop 信号中调用，
      * 不存在跨线程访问，因此使用非线程安全的 ArrayList 是安全的。</p>
      */
@@ -56,42 +56,30 @@ public final class ActorServerSync {
         return this;
     }
 
-    /** 处理脏数据刷新：遍历所有注册模型，检查并刷写脏字段。 */
-    public void onFlushDirty() {
-        for (ModelEntry<?> entry : models) {
-            flushModel(entry);
-        }
-    }
-
-    /** 刷写单个模型的脏数据。 */
-    private <M extends XsModel<M>> void flushModel(ModelEntry<M> entry) {
-        M model = entry.modelProvider.get();
-        if (!model.hasDirtyFields()) {
-            return;
-        }
-        Map<String, String> dirtySnapshot = Map.copyOf(model.toHash(model.getDirtyFields()));
-        Map<String, String> fullSnapshot = Map.copyOf(model.toHash());
-        long version = model.getVersionValue();
-
-        DBSyncEngineRegistry registry = LogicContext.getDbSyncEngineRegistry();
-        boolean submitted = registry.submit(entry.entityType, Long.parseLong(entry.entityId), fullSnapshot, version);
-        if (submitted) {
-            model.clearDirtyMatching(dirtySnapshot);
-        } else {
-            log.warn("Dirty flush retained because DB sync queue is full: entityType={}, entityId={}, fields={}",
-                    entry.entityType, entry.entityId, dirtySnapshot.keySet());
-        }
-    }
-
     /**
-     * 将所有注册的模型持久化到数据库（Actor 销毁时调用）。
+     * 异步持久化所有注册模型；仅当全部由数据库确认写入后才执行 {@code onPersisted}。
+     *
+     * <p>调用方应先用 Redis 写入最终状态（持久化兜底），再调用本方法；只有当
+     * {@code onPersisted} 被触发时，才可安全清理 Redis 缓存。任何未确认写入
+     * （乐观锁冲突、异常、线程池饱和）都会转入有界缓冲批写重试，且不触发回调，
+     * 从而保留 Redis 中的副本。</p>
+     *
+     * @param onPersisted 全部确认写入后的回调，可为 null
      */
-    public void destroyAll() {
+    public void persistAsync(Runnable onPersisted) {
         DBSyncEngineRegistry registry = LogicContext.getDbSyncEngineRegistry();
         ExecutorService executor = LogicContext.getDbIoExecutor();
+        List<CompletableFuture<Boolean>> futures = new ArrayList<>(models.size());
         for (ModelEntry<?> entry : models) {
-            saveModelAsync(entry, registry, executor);
+            futures.add(saveEntryAsync(entry, registry, executor));
         }
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).whenComplete((ignored, error) -> {
+            boolean allPersisted = error == null
+                    && futures.stream().allMatch(future -> Boolean.TRUE.equals(future.getNow(false)));
+            if (allPersisted && onPersisted != null) {
+                onPersisted.run();
+            }
+        });
     }
 
     /**
@@ -101,12 +89,18 @@ public final class ActorServerSync {
         DBSyncEngineRegistry registry = LogicContext.getDbSyncEngineRegistry();
         ExecutorService executor = LogicContext.getDbIoExecutor();
         for (ModelEntry<?> entry : models) {
-            saveModelAsync(entry, registry, executor);
+            saveEntryAsync(entry, registry, executor);
         }
     }
 
-    /** 异步保存单个模型。 */
-    private <M extends XsModel<M>> void saveModelAsync(
+    /**
+     * 落库单个模型：优先走 db-io 池立即写；只要未由数据库确认写入（乐观锁冲突、异常、
+     * 线程池饱和），一律转入有界缓冲批写重试，保证最终状态必然进入重试通道直至落库。
+     *
+     * <p>返回 false 表示此刻 DB 未确认（可能已入缓冲待重试），调用方据此保留 Redis 副本，
+     * 避免在落库确认前丢数据。</p>
+     */
+    private <M extends XsModel<M>> CompletableFuture<Boolean> saveEntryAsync(
             ModelEntry<M> entry,
             DBSyncEngineRegistry registry,
             ExecutorService executor
@@ -114,20 +108,41 @@ public final class ActorServerSync {
         M model = entry.modelProvider.get();
         Map<String, String> state = Map.copyOf(model.toHash());
         long version = model.getVersionValue();
+        long entityId = Long.parseLong(entry.entityId);
 
         try {
-            CompletableFuture.supplyAsync(
-                    () -> registry.saveNow(entry.entityType, Long.parseLong(entry.entityId), state, version),
-                    executor
-            ).whenComplete((success, error) -> {
-                if (error != null || !Boolean.TRUE.equals(success)) {
-                    log.error("Failed to save entity to database: entityType={}, entityId={}",
-                            entry.entityType, entry.entityId, error);
-                }
-            });
+            return CompletableFuture.supplyAsync(() -> {
+                        if (registry.saveNow(entry.entityType, entityId, state, version)) {
+                            return true;
+                        }
+                        // 乐观锁冲突等未确认：转入有界缓冲，由引擎定时重试直至落库
+                        bufferForRetry(registry, entry.entityType, entityId, state, version);
+                        return false;
+                    }, executor)
+                    .exceptionally(error -> {
+                        log.error("Failed to save entity, fallback to retry buffer: entityType={}, entityId={}",
+                                entry.entityType, entry.entityId, error);
+                        bufferForRetry(registry, entry.entityType, entityId, state, version);
+                        return false;
+                    });
         } catch (RejectedExecutionException exception) {
-            log.error("Unable to schedule database save: entityType={}, entityId={}",
-                    entry.entityType, entry.entityId, exception);
+            // db-io 池已满：转入有界缓冲，由其定时批写 + 重试落库，避免静默丢弃
+            bufferForRetry(registry, entry.entityType, entityId, state, version);
+            return CompletableFuture.completedFuture(false);
+        }
+    }
+
+    /** 把待落库状态转入有界缓冲批写，由其定时重试直至落库；入队失败（缓冲已满）记录错误。 */
+    private void bufferForRetry(
+            DBSyncEngineRegistry registry,
+            String entityType,
+            long entityId,
+            Map<String, String> state,
+            long version
+    ) {
+        if (!registry.submit(entityType, entityId, state, version)) {
+            log.error("Unable to buffer entity state for retry, sync buffer full: entityType={}, entityId={}",
+                    entityType, entityId);
         }
     }
 

@@ -18,10 +18,10 @@ public final class LogicIoExecutors implements AutoCloseable {
         this.dbIoExecutor = dbIoExecutor;
     }
 
-    public static LogicIoExecutors fixed(int redisPoolSize, int dbPoolSize) {
+    public static LogicIoExecutors fixed(int redisPoolSize, int dbPoolSize, int queueCapacity) {
         return new LogicIoExecutors(
-                newExecutor("redis-io-executor", redisPoolSize),
-                newExecutor("db-io-executor", dbPoolSize));
+                newExecutor("redis-io-executor", redisPoolSize, queueCapacity),
+                newExecutor("db-io-executor", dbPoolSize, queueCapacity));
     }
 
     public ExecutorService redisIoExecutor() {
@@ -38,9 +38,12 @@ public final class LogicIoExecutors implements AutoCloseable {
         shutdown(dbIoExecutor);
     }
 
-    private static ExecutorService newExecutor(String name, int poolSize) {
+    private static ExecutorService newExecutor(String name, int poolSize, int queueCapacity) {
         if (poolSize < 1) {
             throw new IllegalArgumentException(name + " pool size must be positive");
+        }
+        if (queueCapacity < 1) {
+            throw new IllegalArgumentException(name + " queue capacity must be positive");
         }
         AtomicInteger sequence = new AtomicInteger();
         ThreadFactory factory = runnable -> {
@@ -53,7 +56,7 @@ public final class LogicIoExecutors implements AutoCloseable {
                 poolSize,
                 0L,
                 TimeUnit.MILLISECONDS,
-                new ArrayBlockingQueue<>(1024),
+                new ArrayBlockingQueue<>(queueCapacity),
                 factory,
                 new ThreadPoolExecutor.AbortPolicy());
     }

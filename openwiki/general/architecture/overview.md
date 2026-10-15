@@ -122,9 +122,9 @@ Pekko 远程传输通过 `application.conf` 中的绑定走自定义序列化器
 | Gateway WebSocket | 与 TCP 结构相同，独立端口与独立线程组 |
 | Gateway 路由 | `GatewayMessageRouter` 在调用线程上直接投递，只有准入计数使用原子变量 |
 | Pekko 默认分片 | `pekko.actor.xs-entity-dispatcher`，线程池 256（`XS_ENTITY_POOL` 可覆盖） |
-| PlayerActor | `pekko.actor.player-dispatcher`，线程池 8（`XS_PLAYER_POOL`） |
+| PlayerActor | `pekko.actor.player-dispatcher`，线程池 64（`XS_PLAYER_POOL`） |
 | BattleActor | `pekko.actor.battle-control-dispatcher`，线程池 4；战斗本体在 `BattleExecutorPool` 的 8 个执行器线程 |
-| Logic 阻塞 I/O | `redis-io-executor`（默认 16）与 `db-io-executor`（默认 8）两个固定池，队列 1024，拒绝策略 AbortPolicy |
+| Logic 阻塞 I/O | `redis-io-executor`（默认 16）与 `db-io-executor`（默认 8）两个固定池，队列容量 `game.io.queue-capacity`（默认 8192），拒绝策略 AbortPolicy |
 | DBSync | 单调度线程 + `flush-concurrency`（默认 8）个工作线程 |
 | LogConsumer | 单个名为 `log-consumer` 的守护线程，阻塞读 Redis Streams |
 

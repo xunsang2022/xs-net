@@ -14,6 +14,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Logic 节点 Actor 状态和日志事件的 Redis 访问层。 */
@@ -61,6 +62,28 @@ public class RedisStore {
         }
         state.clearDirtyMatching(state.toHash());
         return true;
+    }
+
+    /**
+     * 把模型当前全部脏字段一次性 write-through 到 Redis 哈希，并清除这些字段的脏标记。
+     *
+     * <p>由 Actor 在每条消息处理完成后调用：一条消息内的多次属性变更合并为一次 Redis 写入，
+     * 保证在线期间的字段变更都先落到 Redis，不等到落库或进程退出，避免状态丢失。</p>
+     *
+     * @param model    模型实例，必须带 {@link RedisKey} 注解
+     * @param entityId 实体 ID
+     */
+    public void saveDirty(XsModel<?> model, String entityId) {
+        RedisKey annotation = model.getClass().getAnnotation(RedisKey.class);
+        if (annotation == null) {
+            throw new IllegalArgumentException("Model must be annotated with @RedisKey: " + model.getClass().getName());
+        }
+        List<String> fields = model.getDirtyFields();
+        if (fields.isEmpty()) {
+            return;
+        }
+        putHash(annotation.value() + entityId, model.toValueMap(fields));
+        model.clearDirtyMatching(model.toHash(fields));
     }
 
     @SuppressWarnings("unchecked")

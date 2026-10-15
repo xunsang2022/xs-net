@@ -5,8 +5,6 @@ import lombok.Getter;
 import org.apache.pekko.actor.typed.javadsl.TimerScheduler;
 
 public abstract class SimpleActorServer<Message,M extends XsModel<M>> implements ActorServer<Message,M> {
-    /// 脏数据定时刷新消息的唯一键。
-    protected static final Object FLUSH_KEY = new Object();
     /// 定时器
     protected final TimerScheduler<Message> timers;
     protected final ActorServices<Message> services;

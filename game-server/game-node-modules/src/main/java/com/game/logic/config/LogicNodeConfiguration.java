@@ -57,7 +57,8 @@ public class LogicNodeConfiguration {
     public LogicIoExecutors logicIoExecutors(LogicNodeProperties properties) {
         return LogicIoExecutors.fixed(
                 properties.getIo().getRedisThreads(),
-                properties.getIo().getDbThreads());
+                properties.getIo().getDbThreads(),
+                properties.getIo().getQueueCapacity());
     }
 
     @Bean

@@ -143,11 +143,9 @@ GatewayMessageRouter.route(body, channelId)
 ```text
 LoginRequest(1000) -> PlayerActor -> PlayerInfo.onLoginMessage
   -> 已在线则忽略
-  -> 记录 pendingChannelId；name 变化则 setName（标脏）
-  -> markOnlineFields：online=1、last_login_at/updated_at、version+1（标脏）
+  -> 记录 pendingChannelId；name 变化则 setName（标脏，write-through 到 Redis）
+  -> markOnlineFields：online=1、last_login_at/updated_at、version+1（标脏，write-through 到 Redis）
   -> online = true
-  -> redisStore.saveRedis(data)
-  -> refreshFlushTimerIfNeeded()（启动脏数据刷新单次定时器）
   -> services.sendRpc(pendingChannelId, LoginResponse(0, null, data.toVo()))
   -> 记录 login.s2c.send.duration / login.logic.total.duration
 ```
@@ -176,10 +174,10 @@ Logic：services.sendRpc(response, channelId)
 ```text
 LogoutRequest(1001) -> PlayerActor -> PlayerInfo.onLogoutMessage
   -> 若在线：beginDestroy()
-       online=false、cancelFlushTimer
-       标记 online=0 / updated_at 脏字段
-       ActorServerSync.destroyAll()：经 db-io-executor 异步落库所有注册模型
-       redisStore.deletePlayerCache(playerId)
+       online=false
+       标记 online=0 / updated_at：setProperty 钩子 write-through 到 Redis
+       ActorServerSync.persistAsync(...)：直接经 db-io-executor 异步落 DB（未确认时降级到有界缓冲批写）
+       DB 确认写入的回调中才 deletePlayerCache(playerId)；未确认则不清理，保留 Redis 副本
   -> sendResponse(LogoutResponse(1003)) -> Actor 停止（Behaviors.stopped）
 ```
 
@@ -207,13 +205,16 @@ POST /admin/gm/kick  (X-GM-Token)
 ## 状态持久化
 
 ```text
-PlayerActor（每 sync-interval-ms，默认 1000ms）
-  -> onFlushDirty
-       online 且无在途刷写且存在脏字段才执行
-       refreshFlushTimerIfNeeded()：读取 LogicContext.getSyncIntervalMs()，支持热更新
-  -> DBSyncEngine.submit(playerId, 完整快照, version)
-       缓冲区满 -> 返回 false，脏字段保留，下一周期重试
-       成功     -> clearDirtyMatching(已写入的字段)
+在线期间：每条 Actor 消息处理完成后（PlayerInfo.persistAfter 包装），把本次累积的脏字段
+  一次性 write-through 到 Redis 哈希（RedisStore.saveDirty），不落库
+
+PlayerActor 登出/销毁时
+  -> PlayerInfo.beginDestroy()
+       1) 标记 online=0/updated_at：把最终状态直接落库（不再写缓存）
+       2) ActorServerSync.persistAsync(...)：直接经 db-io-executor 异步 DBSyncEngine.saveNow(playerId, 完整快照, version)
+            未确认写入 -> 降级 registry.submit 转入有界缓冲，由定时批写 + 重试最终落库
+       3) 仅当 DB 确认写入后的回调才 deletePlayerCache；未确认则不清理，保留在线期间刷入的 Redis 副本兜底
+  -> PostStop（尚未确认落库时）-> ActorServerSync.persistAllStopped() 异步补偿
 
 DBSyncEngine（后台，每 bgsave-seconds，默认 3s）
   -> snapshot(maxDirtyRecords) 过滤终态失败与退避未到期记录

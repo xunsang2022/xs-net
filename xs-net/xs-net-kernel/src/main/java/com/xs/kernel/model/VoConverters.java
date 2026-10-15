@@ -72,13 +72,15 @@ public final class VoConverters {
             if (bootstrapped) {
                 return;
             }
-            bootstrapped = true;
             try {
                 Class.forName(System.getProperty(CONVERTER_CLASS_PROPERTY, DEFAULT_CONVERTER_CLASS), true,
                         VoConverters.class.getClassLoader());
             } catch (ClassNotFoundException exception) {
                 // 未生成转换器时保持未注册状态，由 convert 抛出明确错误。
             }
+            // 必须在加载完成后才置位：否则并发首次调用会读到 true 却取不到转换器，
+            // 误报 "No protocol converter registered"。
+            bootstrapped = true;
         }
     }
 }
