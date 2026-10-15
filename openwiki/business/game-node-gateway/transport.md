@@ -107,14 +107,27 @@ UDP datagram
 当前 KCP 入口的关键路径是：
 
 1. `KcpServer` 在 `NioDatagramChannel` 上接收 UDP 数据报，将每个远端地址映射为一个 `KcpSession`。
-2. `KcpSession.receive` 调用 `Kcp.input(datagram)`，再调用 `Kcp.update(now)` 推进状态机；`Kcp.recv()` 只在一条应用消息完成重组后才返回字节数组。
+2. `KcpSession.receive` 调用 `Kcp.input(datagram)`，随后立即 `Kcp.flush(now)` 回执 ACK，不被协议节拍门控；`Kcp.recv()` 只在一条应用消息完成重组后才返回字节数组。
 3. `KcpAuthHandler` 将首条已交付的应用消息作为 UTF-8 JWT 校验（复用 `AuthSupport.resolve`），认证成功后把会话作为 `ClientEndpoint` 注册；认证后的已交付消息进入 `GatewayMessageRouter`。
-4. 下行调用 `KcpSession.write(NetMessage)`，最终执行 `Kcp.send(message.toByteArray())`；KCP 的 output 回调通过 UDP 写出分段。
+4. 下行调用 `KcpSession.write(NetMessage)`，最终执行 `Kcp.send(message.toByteArray())` 并立即 `flush` 写出（不等节拍）；KCP 的 output 回调通过 UDP 写出分段。
 5. `KcpServer` 的后台调度器周期调用会话 `updateNow()`，驱动超时重传、窗口更新，并清理认证超时或空闲会话。
 
 KCP 不是"更快的 TCP"这一简单替代品。它需要应用自行调度 `update`，并自行管理 NAT 映射变化、会话清理、带宽和参数调优；但在丢包或抖动网络中，KCP 的可配置重传策略和按消息交付特性常更适合高频实时同步。当前配置通过 `KcpConfig` 控制窗口、更新/重传间隔、认证超时和会话空闲时间。
 
-相关实现：[`Kcp`](../../game-server/game-node-gateway/src/main/java/com/game/gateway/kcp/Kcp.java)、[`KcpAuthHandler`](../../game-server/game-node-gateway/src/main/java/com/game/gateway/kcp/KcpAuthHandler.java)、[`KcpSession`](../../game-server/game-node-gateway/src/main/java/com/game/gateway/kcp/KcpSession.java)、[`KcpServer`](../../game-server/game-node-gateway/src/main/java/com/game/gateway/kcp/KcpServer.java)。
+为避免请求-响应时延被协议节拍放大，收发两侧都采用**即时 flush**：收到数据立即回执 ACK，下行发送立即写出，且 `Kcp` 运行在 `nodelay=1`（关闭拥塞窗口限制、按重传间隔驱动）模式。因此业务时延只取决于网络 RTT，而非 `game.kcp.retry-interval-ms`；该节拍（默认 50ms，与 `KcpServer` 后台维护调度同周期）只影响丢包重传的及时性。
+
+KCP 空闲时不产生任何报文，而网关按 `session-idle-timeout-seconds` 清理空闲会话，因此**客户端必须周期保活**（SDK 以 `NetworkConfig.HeartbeatIntervalMs` 发送 KCP 窗口探测帧 WASK，服务端 `receive` 刷新活跃时间并回 WINS）。缺少保活会导致空闲超过阈值的会话被清理，之后的登出等消息因会话重建（序号不匹配）而丢失。UDP 同理依赖其 HEARTBEAT 帧。
+
+会话按**源地址 + KCP 会话号（conv）**识别：客户端每条连接随机生成 conv，服务端在会话号变化时重建会话。否则同一源地址被新连接复用时（NAT 重映射、端口回收），新连接的序号会落后于旧会话的接收进度而被丢弃，表现为握手一直超时。TCP/UDP 天然没有该问题（前者新建连接，后者 HELLO 带随机 `connectionRandom` 直接重建会话）。
+
+KCP 之上可叠加一层 **XOR 前向纠错（FEC）**：`game.kcp.fec-k > 0` 时，发送端把 k 条 KCP 数据报组成一组并附加 m 条冗余报（线格式 `seq(4)+k(1)+m(1)+idx(1)+len(2)+payload`），接收端收到组内任意 k 条即可本地还原丢失的数据报，不必等 ARQ 超时重传（重传至少要等一个 RTO，而本地还原是零时延）。两个关键设计点：
+
+- **不为凑组引入时延**：组满 k 条即发，调用方每次 flush 结束后把不足 k 条的组补空分片立即发出；接收端只依据冗余报内的长度表判断「恰好缺 1 条非空分片」即还原。因此稀疏流量（游戏握手往往只有一个包）同样受保护——这是 FEC 在网关场景价值最大的地方，按「整组凑满才还原」的朴素实现在此完全失效。
+- **会话识别不能直接读 KCP conv**：FEC 帧头会把 conv 顶进 payload，`KcpAuthHandler` 先用 `FecCodec.isDataShard` 判定是否为数据分片，再由 `FecCodec.peekConv` 直接在原数据报上按帧头偏移读 conv（不复制载荷，与会话识别同一热路径）；冗余分片不含 conv，只投递给已存在的会话。
+
+两端 `fec-k` / `fec-m` 必须一致（默认 `0` / `1`，即关闭）。实测（1000 CCU 经丢包中继，k=2/m=1）：丢包率 3% 时受影响连接从 6.4% 降到 2.5%（登录 >100ms 的连接从 4.1% 降到 0.1%），10% 时从 18.1% 降到 11.7%（登录 >100ms 从 10.8% 降到 0.7%）；零丢包下无时延代价，仅承担 `m/k` 的带宽开销。
+
+相关实现：[`Kcp`](../../game-server/game-node-gateway/src/main/java/com/game/gateway/kcp/Kcp.java)、[`KcpAuthHandler`](../../game-server/game-node-gateway/src/main/java/com/game/gateway/kcp/KcpAuthHandler.java)、[`KcpSession`](../../game-server/game-node-gateway/src/main/java/com/game/gateway/kcp/KcpSession.java)、[`FecCodec`](../../game-server/game-node-gateway/src/main/java/com/game/gateway/kcp/FecCodec.java)、[`KcpServer`](../../game-server/game-node-gateway/src/main/java/com/game/gateway/kcp/KcpServer.java)。
 
 ## WebSocket：浏览器友好的、有消息边界的 TCP 通道
 

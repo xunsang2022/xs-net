@@ -14,7 +14,10 @@ namespace Game.Message.Networking
         public bool UseKcp = false;
         public int ConnectTimeoutMs = 5000;
         public int WindowSize = 32;
-        public int RetryIntervalMs = 200;
+        public int RetryIntervalMs = 50;
+        // FEC 每组数据/冗余分片数，FecK=0 表示关闭
+        public int FecK = 0;
+        public int FecM = 1;
         public int HeartbeatIntervalMs = 3000;
         public int ReadTimeoutMs = 0; // 0 = 无读超时
         public bool AutoReconnect = true;

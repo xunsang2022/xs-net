@@ -52,11 +52,29 @@ public class KcpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
     }
 
     private void processDatagram(DatagramChannel channel, InetSocketAddress sender, byte[] bytes) {
+        boolean fecEnabled = config.getFecK() > 0;
+        // FEC 开启时帧头会遮蔽 KCP 会话号，须先在原数据报上定位内部 KCP 帧（不复制载荷，见统一热路径）
+        boolean carriesSegment = fecEnabled ? FecCodec.isDataShard(bytes) : bytes.length >= Kcp.OVERHEAD;
         KcpSession session = sessions.get(sender);
-        if (session == null) {
-            // 首次到达：按源地址建立未认证会话
-            session = new KcpSession(null, sender, channel, config);
-            sessions.put(sender, session);
+        if (!carriesSegment) {
+            // FEC 关闭：长度不足 KCP 帧头的非法报 → 丢弃；FEC 开启：冗余分片不含会话号，
+            // 只能投递给已存在的会话；尚无会话说明其数据分片未到，本组无从还原，直接丢弃
+            if (!fecEnabled || session == null) {
+                return;
+            }
+        } else {
+            int conv = fecEnabled ? FecCodec.peekConv(bytes) : Kcp.peekConv(bytes);
+            if (session != null && session.conv() != conv) {
+                // 同一源地址换成了新连接（会话号不同）：旧会话的收发进度对新连接无意义，
+                // 必须重建，否则新连接的 JWT 会因序号落后于旧会话进度而被丢弃。
+                removeSession(session);
+                session = null;
+            }
+            if (session == null) {
+                // 首次到达：按源地址建立未认证会话
+                session = new KcpSession(conv, null, sender, channel, config);
+                sessions.put(sender, session);
+            }
         }
         // 每个会话串行处理，保证 KCP 状态机有序；不同会话可并行
         synchronized (session) {
@@ -122,24 +140,24 @@ public class KcpAuthHandler extends SimpleChannelInboundHandler<DatagramPacket> 
     /** 后台定时：驱动各会话 KCP 演进 + 清理超时空闲 / 认证超时会话。 */
     public void tickAndCleanup() {
         long now = System.currentTimeMillis();
+        long idleLimit = config.getSessionIdleTimeoutSeconds() * 1000L;
+        long authLimit = config.getAuthTimeoutSeconds() * 1000L;
         for (Map.Entry<InetSocketAddress, KcpSession> entry : sessions.entrySet()) {
             KcpSession session = entry.getValue();
+            long idle = now - session.lastActiveMs();
+            boolean expired = idle > idleLimit || (!session.isAuthenticated() && idle > authLimit);
+            // 空闲且未过期的会话无需驱动协议：跳过加锁，避免高并发下每个节拍锁住全部会话
+            // （该监视器同时被下行 S2C 回包使用，是全量扫描成为瓶颈的根源）
+            if (!expired && !session.maintenancePending()) {
+                continue;
+            }
             // 与业务线程池中的 receive 保持串行，避免 KCP 状态机并发访问
             synchronized (session) {
-                session.updateNow();
-                long idle = now - session.lastActiveMs();
-                long idleLimit = config.getSessionIdleTimeoutSeconds() * 1000L;
-                if (idle > idleLimit) {
-                    if (session.channelId() != null) {
-                        ChannelRegistry.INSTANCE.remove(session.channelId());
-                    }
-                    sessions.remove(entry.getKey(), session);
+                if (expired) {
+                    removeSession(session);
                     continue;
                 }
-                if (!session.isAuthenticated()
-                        && idle > config.getAuthTimeoutSeconds() * 1000L) {
-                    sessions.remove(entry.getKey(), session);
-                }
+                session.updateNow();
             }
         }
     }

@@ -96,9 +96,22 @@ namespace Game.Message.Networking
 
         private void SendDatagram(byte[] datagram)
         {
-            if (_client != null)
+            // Disconnect 与重传/心跳定时器存在竞态：socket 可能已被关闭，忽略此时的发送
+            var client = _client;
+            if (client == null)
             {
-                _client.Send(datagram, datagram.Length);
+                return;
+            }
+            try
+            {
+                client.Send(datagram, datagram.Length);
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+            catch (SocketException)
+            {
+                // 本机端口耗尽等发送失败：定时器路径不应因此终止进程，交由可靠层重传
             }
         }
 

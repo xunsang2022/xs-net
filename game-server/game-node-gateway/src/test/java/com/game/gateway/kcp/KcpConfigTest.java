@@ -13,7 +13,7 @@ class KcpConfigTest {
     @Test
     void defaults_resolveCorrectly() {
         // 手工构造等价于 application.yml 中 game.kcp.* 的值
-        KcpConfig cfg = new KcpConfig(2003, 32, 200, 60, 10, 1, 32, 64, 65536);
+        KcpConfig cfg = new KcpConfig(2003, 32, 200, 60, 10, 1, 32, 64, 65536, 4194304, 0, 1);
         assertEquals(2003, cfg.getPort());
         assertEquals(32, cfg.getWindow());
         assertEquals(200, cfg.getRetryIntervalMs());
@@ -30,7 +30,7 @@ class KcpConfigTest {
 
     @Test
     void zeroThreads_usesFallback() {
-        KcpConfig cfg = new KcpConfig(2003, 32, 200, 60, 10, 1, 0, 0, 65536);
+        KcpConfig cfg = new KcpConfig(2003, 32, 200, 60, 10, 1, 0, 0, 65536, 4194304, 0, 1);
         int cpus = Runtime.getRuntime().availableProcessors();
         assertEquals(Math.max(2, cpus), cfg.resolveThreads());
         assertEquals(Math.max(2, cpus * 2), cfg.resolveBusinessThreads());
@@ -38,9 +38,9 @@ class KcpConfigTest {
 
     @Test
     void session_carriesKcpAndAuthState() {
-        KcpConfig cfg = new KcpConfig(2003, 32, 200, 60, 10, 1, 32, 64, 65536);
+        KcpConfig cfg = new KcpConfig(2003, 32, 200, 60, 10, 1, 32, 64, 65536, 4194304, 0, 1);
         // DatagramChannel 传 null 仅用于构造；本用例只验证会话状态/KCP 承载，不触发网络写出
-        KcpSession session = new KcpSession(null, null, null, cfg);
+        KcpSession session = new KcpSession(0x12345678, null, null, null, cfg);
         session.authenticateAs("channel-1");
         assertEquals("channel-1", session.channelId());
         assertEquals(true, session.isAuthenticated());

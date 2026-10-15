@@ -51,16 +51,20 @@ game:
     worker-threads: 32        # UDP I/O 线程数（0 = 自动：max(2, CPU 核数)）
     business-threads: 64      # UDP 业务线程池大小（0 = 自动：2 * CPU 核数），承载解码/验签/回 ACK
     max-frame-length: 65536   # 单包最大长度（字节）
+    socket-buffer-bytes: 4194304  # 数据报套接字收发缓冲（字节）；默认过小会在高并发握手突发时丢包
   kcp:
     port: 2003                # KCP 客户端接入端口（标准 KCP 可靠 UDP）
     window: 32                # KCP 收发窗口大小
-    retry-interval-ms: 200    # KCP 协议节拍/重传间隔（毫秒）
+    retry-interval-ms: 50     # KCP 协议节拍/重传间隔（毫秒），同时作为维护调度节拍；请求/响应由收发包即时 flush，该值决定丢包重传的及时性（实测收到 20ms 会因定时器负载反噬）
     session-idle-timeout-seconds: 60  # 会话空闲超时，超时未活动即清理
     auth-timeout-seconds: 10  # 握手认证超时
     max-connections-per-account: 1    # 同一账号最大并发会话，超限拒绝
     worker-threads: 32        # KCP I/O 线程数（0 = 自动：max(2, CPU 核数)）
     business-threads: 64      # KCP 业务线程池大小（0 = 自动：2 * CPU 核数），承载解码/验签/驱动协议
     max-frame-length: 65536   # 单包最大长度（字节）
+    socket-buffer-bytes: 4194304  # 数据报套接字收发缓冲（字节）；默认过小会在高并发握手突发时丢包
+    fec-k: 0                  # FEC 每组数据分片数；0 = 关闭（需与客户端 fec-k/fec-m 一致）
+    fec-m: 1                  # FEC 每组冗余分片数
   management:
     token: ${GM_TOKEN:}
 

@@ -48,6 +48,10 @@ public class KcpServer {
         bootstrap.group(group)
                 .channel(NioDatagramChannel.class)
                 .option(ChannelOption.SO_REUSEADDR, true)
+                // 数据报套接字默认接收缓冲仅约 64KB，高并发握手突发会直接丢包（KCP 只能靠重传补救）；
+                // 显式放大收发缓冲，避免上行报文在内核层被丢弃。
+                .option(ChannelOption.SO_RCVBUF, config.getSocketBufferBytes())
+                .option(ChannelOption.SO_SNDBUF, config.getSocketBufferBytes())
                 .handler(new ChannelInitializer<DatagramChannel>() {
                     @Override
                     protected void initChannel(DatagramChannel ch) {
@@ -62,7 +66,10 @@ public class KcpServer {
             t.setDaemon(true);
             return t;
         });
-        scheduler.scheduleWithFixedDelay(authHandler::tickAndCleanup, 1, 1, TimeUnit.SECONDS);
+        // 后台定时：驱动 KCP 协议演进 + 空闲/认证超时清理。
+        // 节拍与协议重传间隔对齐，保证重传/窗口探测及时；清理按空闲时间判定，高频调用无副作用。
+        scheduler.scheduleWithFixedDelay(authHandler::tickAndCleanup,
+                config.getRetryIntervalMs(), config.getRetryIntervalMs(), TimeUnit.MILLISECONDS);
 
         log.info("KcpServer started on port {} (ioThreads={}, business={})",
                 config.getPort(), config.resolveThreads(), config.resolveBusinessThreads());

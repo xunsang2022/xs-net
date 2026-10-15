@@ -149,8 +149,10 @@ Logic 配置由 Spring Boot 外部化配置加载。Redis、数据源分别使�
 | `numberOfShards` | 各 `application.conf` | 100 | 分片数，建议 10 × 预期节点数 |
 | `xs-entity-dispatcher.fixed-pool-size` | `application.conf` | 256（`XS_ENTITY_POOL`） | 未指定 `@ActorDispatcher` 的实体并发度 |
 | `player-dispatcher` | Logic `application.conf` | 64（`XS_PLAYER_POOL`） | 玩家 Actor 并发度（登录/登出入口吞吐上限） |
+| `game.udp.socket-buffer-bytes` / `game.kcp.socket-buffer-bytes` | Gateway yml | 4194304 | 数据报套接字收发缓冲；默认约 64KB，高并发握手突发会被内核丢包 |
 | `game.udp.window` / `retry-interval-ms` | Gateway yml | 32 / 200 | 轻量可靠 UDP 的在途窗口与重传节奏 |
-| `game.kcp.window` / `retry-interval-ms` | Gateway yml | 32 / 200 | KCP 窗口与节拍 |
+| `game.kcp.window` / `retry-interval-ms` | Gateway yml | 32 / 50 | KCP 窗口与节拍（兼维护调度周期；收发即时 flush，时延不受节拍影响） |
+| `game.kcp.fec-k` / `fec-m` | Gateway yml | 0 / 1 | KCP 之上的 XOR 前向纠错分组（k 条数据 + m 条冗余，`0` = 关闭）；把丢包长尾从等 ARQ 重传变为本地零时延还原，代价是 `m/k` 的带宽开销。两端必须一致 |
 | 网关准入 | 代码常量 | 全局 4096、每连接 256 | `GatewayMessageRouter` 内的硬编码上限 |
 | `game.db.batch-size` | Logic yml | 100 | 单次 `batchUpdate` 记录数 |
 | `game.db.bgsave-seconds` | Logic yml | 3 | DBSync flush 周期 |

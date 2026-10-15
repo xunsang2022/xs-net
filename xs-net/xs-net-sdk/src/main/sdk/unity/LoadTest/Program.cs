@@ -7,11 +7,13 @@ using Game.Message.Networking;
 
 var options = LoadTestOptions.Parse(args);
 var qpsLabel = options.Qps > 0 ? options.Qps.ToString() : "unlimited";
-Console.WriteLine($"protocol={options.Protocol} host={options.Host} port={options.Port} count={options.Count} concurrency={options.Concurrency} qps={qpsLabel}");
+Console.WriteLine($"protocol={options.Protocol} host={options.Host} port={options.Port} count={options.Count} concurrency={options.Concurrency} qps={qpsLabel} hold_seconds={options.HoldSeconds} logout={options.Logout}");
 
 var semaphore = new SemaphoreSlim(options.Concurrency, options.Concurrency);
 var results = new LoginResult?[options.Count];
 var failed = 0;
+var droppedDuringHold = 0;
+var logoutFailed = 0;
 var totalWatch = Stopwatch.StartNew();
 var schedule = options.Qps > 0 ? CreateSchedule(options.Count, options.Qps) : null;
 var tasks = Enumerable.Range(0, options.Count).Select(async _ =>
@@ -22,18 +24,34 @@ var tasks = Enumerable.Range(0, options.Count).Select(async _ =>
         await schedule[index].Task;
     }
     await semaphore.WaitAsync();
+    GameNetworkClient? client = null;
     try
     {
-        var result = await LoginAsync(options, index);
-        results[index] = result;
-        if (!result.Success)
+        var attempt = await LoginAsync(options, index);
+        results[index] = attempt.Result;
+        client = attempt.Client;
+        if (!attempt.Result.Success)
         {
             Interlocked.Increment(ref failed);
-            Console.Error.WriteLine($"player={index + options.PlayerStart} failed: {result.Error}");
+            Console.Error.WriteLine($"player={index + options.PlayerStart} failed: {attempt.Result.Error}");
+        }
+        else if (options.HoldSeconds > 0)
+        {
+            // 保持连接才是真正的 CCU：登录成功后不立即断开，占用并发槽位直到保持时间结束。
+            await Task.Delay(TimeSpan.FromSeconds(options.HoldSeconds));
+            if (attempt.DroppedDuringHold)
+            {
+                Interlocked.Increment(ref droppedDuringHold);
+            }
+            else if (options.Logout && !await LogoutAsync(attempt, options))
+            {
+                Interlocked.Increment(ref logoutFailed);
+            }
         }
     }
     finally
     {
+        client?.Disconnect();
         semaphore.Release();
     }
 });
@@ -42,13 +60,36 @@ totalWatch.Stop();
 
 var succeeded = results.Where(result => result is { Success: true }).Select(result => result!).ToArray();
 Console.WriteLine($"success={succeeded.Length} failed={failed} total_ms={totalWatch.Elapsed.TotalMilliseconds:F0} throughput={succeeded.Length / totalWatch.Elapsed.TotalSeconds:F2}/s");
+if (options.HoldSeconds > 0)
+{
+    Console.WriteLine($"hold_seconds={options.HoldSeconds} target_ccu={options.Concurrency} dropped_during_hold={droppedDuringHold} sustained_ccu={succeeded.Length - droppedDuringHold} logout={options.Logout} logout_failed={logoutFailed}");
+}
 if (succeeded.Length > 0)
 {
     PrintLatency("connect", succeeded.Select(result => result.ConnectLatencyMs).ToArray());
     PrintLatency("login", succeeded.Select(result => result.LoginLatencyMs).ToArray());
     PrintLatency("end_to_end", succeeded.Select(result => result.TotalLatencyMs).ToArray());
 }
+DumpRaw(options, results);
 Environment.ExitCode = failed == 0 ? 0 : 1;
+
+// 多进程分片时把每连接的原始时延落盘，供合并计算全局分位（单进程分位无法跨进程合并）
+static void DumpRaw(LoadTestOptions options, LoginResult?[] results)
+{
+    if (options.RawDumpPath is null)
+    {
+        return;
+    }
+    using var writer = new StreamWriter(options.RawDumpPath, append: false);
+    for (var index = 0; index < results.Length; index++)
+    {
+        var result = results[index];
+        var playerId = options.PlayerStart + index;
+        writer.WriteLine(result is { Success: true }
+            ? $"{playerId},ok,{result.ConnectLatencyMs:F3},{result.LoginLatencyMs:F3},{result.TotalLatencyMs:F3}"
+            : $"{playerId},fail,0,0,0");
+    }
+}
 
 static TaskCompletionSource<bool>[] CreateSchedule(int count, int qps)
 {
@@ -92,7 +133,7 @@ static async Task WaitUntilAsync(long startTimestamp, int index, int qps)
     }
 }
 
-static async Task<LoginResult> LoginAsync(LoadTestOptions options, int index)
+static async Task<LoginAttempt> LoginAsync(LoadTestOptions options, int index)
 {
     var playerId = (options.PlayerStart + index).ToString();
     var channelId = $"load-test-{playerId}-{Guid.NewGuid():N}";
@@ -102,11 +143,24 @@ static async Task<LoginResult> LoginAsync(LoadTestOptions options, int index)
         Host = options.Host,
         TcpPort = options.Port,
         UdpPort = options.Port,
+        KcpPort = options.Port,
         UseUdp = options.Protocol == "udp",
+        UseKcp = options.Protocol == "kcp",
         ConnectTimeoutMs = options.TimeoutMs,
-        ReadTimeoutMs = options.TimeoutMs
+        ReadTimeoutMs = -1,
+        AutoReconnect = false,
+        FecK = options.FecK,
+        FecM = options.FecM
     };
-    using var client = new GameNetworkClient(config);
+    var client = new GameNetworkClient(config);
+    var logoutResponse = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+    var attempt = new LoginAttempt
+    {
+        Client = client,
+        PlayerId = playerId,
+        ChannelId = channelId,
+        LogoutResponse = logoutResponse
+    };
     var connected = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
     var response = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
     client.OnConnected += () => connected.TrySetResult(true);
@@ -114,6 +168,7 @@ static async Task<LoginResult> LoginAsync(LoadTestOptions options, int index)
     {
         connected.TrySetResult(false);
         response.TrySetResult(false);
+        attempt.DroppedDuringHold = true;
     };
     client.OnError += error =>
     {
@@ -121,6 +176,7 @@ static async Task<LoginResult> LoginAsync(LoadTestOptions options, int index)
         response.TrySetException(new IOException(error));
     };
     client.Dispatcher.Register<SC_Login>(RpcRoute.RpcScLogin, message => response.TrySetResult(message.Result == 0));
+    client.Dispatcher.Register<SC_Logout>(RpcRoute.RpcScLogout, _ => logoutResponse.TrySetResult(true));
 
     var totalWatch = Stopwatch.StartNew();
     try
@@ -128,7 +184,7 @@ static async Task<LoginResult> LoginAsync(LoadTestOptions options, int index)
         await Task.Run(() => client.Connect(jwt));
         if (!await WaitAsync(connected.Task, options.TimeoutMs))
         {
-            return LoginResult.Failure("connect timeout");
+            return Fail(attempt, "connect timeout");
         }
 
         var connectLatencyMs = totalWatch.Elapsed.TotalMilliseconds;
@@ -141,21 +197,52 @@ static async Task<LoginResult> LoginAsync(LoadTestOptions options, int index)
         });
         if (!await WaitAsync(response.Task, options.TimeoutMs))
         {
-            return LoginResult.Failure("login response timeout");
+            return Fail(attempt, "login response timeout");
         }
 
-        return response.Task.Result
-            ? LoginResult.Succeeded(connectLatencyMs, loginWatch.Elapsed.TotalMilliseconds, totalWatch.Elapsed.TotalMilliseconds)
-            : LoginResult.Failure("server returned unsuccessful login result");
+        if (!response.Task.Result)
+        {
+            return Fail(attempt, "server returned unsuccessful login result");
+        }
+
+        attempt.Result = LoginResult.Succeeded(connectLatencyMs, loginWatch.Elapsed.TotalMilliseconds, totalWatch.Elapsed.TotalMilliseconds);
+        return attempt;
     }
     catch (Exception exception)
     {
-        return LoginResult.Failure(exception.Message);
+        return Fail(attempt, exception.Message);
     }
-    finally
+}
+
+static LoginAttempt Fail(LoginAttempt attempt, string error)
+{
+    attempt.Client?.Disconnect();
+    attempt.Client = null;
+    attempt.LogoutResponse = null;
+    attempt.Result = LoginResult.Failure(error);
+    return attempt;
+}
+
+static async Task<bool> LogoutAsync(LoginAttempt attempt, LoadTestOptions options)
+{
+    var client = attempt.Client;
+    if (client is null || attempt.LogoutResponse is null || attempt.PlayerId is null || attempt.ChannelId is null)
     {
-        client.Disconnect();
+        return false;
     }
+    try
+    {
+        client.Send(RpcRoute.RpcCsLogout, new CS_Logout
+        {
+            PlayerId = attempt.PlayerId,
+            SessionId = attempt.ChannelId
+        });
+    }
+    catch
+    {
+        return false;
+    }
+    return await WaitAsync(attempt.LogoutResponse.Task, options.TimeoutMs);
 }
 
 static async Task<bool> WaitAsync(Task<bool> task, int timeoutMs)
@@ -196,6 +283,16 @@ internal sealed record LoginResult(
         => new(false, 0, 0, 0, error);
 }
 
+internal sealed class LoginAttempt
+{
+    public GameNetworkClient? Client { get; set; }
+    public LoginResult Result { get; set; } = LoginResult.Failure("not attempted");
+    public bool DroppedDuringHold { get; set; }
+    public string? PlayerId { get; set; }
+    public string? ChannelId { get; set; }
+    public TaskCompletionSource<bool>? LogoutResponse { get; set; }
+}
+
 internal sealed class LoadTestOptions
 {
     public string Host { get; private set; } = "127.0.0.1";
@@ -208,6 +305,12 @@ internal sealed class LoadTestOptions
     public int TimeoutMs { get; private set; } = 10000;
     public int TokenLifetimeSeconds { get; private set; } = 3600;
     public int Qps { get; private set; }
+    public int HoldSeconds { get; private set; }
+    public bool Logout { get; private set; }
+    public int FecK { get; private set; }
+    public int FecM { get; private set; } = 1;
+    /// <summary>原始时延落盘路径；多进程分片合并统计时使用，非空即启用。</summary>
+    public string? RawDumpPath { get; private set; }
 
     public static LoadTestOptions Parse(string[] args)
     {
@@ -215,6 +318,11 @@ internal sealed class LoadTestOptions
         for (var i = 0; i < args.Length; i++)
         {
             var option = args[i];
+            if (option == "--logout")
+            {
+                options.Logout = true;
+                continue;
+            }
             var value = i + 1 < args.Length ? args[++i] : throw new ArgumentException($"missing value for {option}");
             switch (option)
             {
@@ -228,12 +336,23 @@ internal sealed class LoadTestOptions
                 case "--timeout-ms": options.TimeoutMs = int.Parse(value); break;
                 case "--token-lifetime-seconds": options.TokenLifetimeSeconds = int.Parse(value); break;
                 case "--qps": options.Qps = int.Parse(value); break;
+                case "--hold-seconds": options.HoldSeconds = int.Parse(value); break;
+                case "--dump-raw": options.RawDumpPath = value; break;
+                case "--fec":
+                {
+                    var parts = value.Split(',');
+                    if (parts.Length != 2) throw new ArgumentException("--fec must be <k>,<m>");
+                    options.FecK = int.Parse(parts[0]);
+                    options.FecM = int.Parse(parts[1]);
+                    break;
+                }
                 default: throw new ArgumentException($"unknown option {option}");
             }
         }
-        if (options.Protocol is not ("tcp" or "udp")) throw new ArgumentException("--protocol must be tcp or udp");
+        if (options.Protocol is not ("tcp" or "udp" or "kcp")) throw new ArgumentException("--protocol must be tcp, udp or kcp");
         if (options.Count < 1 || options.Concurrency < 1 || options.Concurrency > options.Count) throw new ArgumentException("count and concurrency must be positive, concurrency cannot exceed count");
         if (options.Qps < 0) throw new ArgumentException("--qps must be zero or positive");
+        if (options.HoldSeconds < 0) throw new ArgumentException("--hold-seconds must be zero or positive");
         return options;
     }
 }

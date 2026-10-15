@@ -112,6 +112,11 @@ public final class Kcp {
     }
 
     public Kcp(int mtu) {
+        this(0, mtu);
+    }
+
+    public Kcp(int conv, int mtu) {
+        this.conv = conv;
         this.mtu = Math.max(mtu, IKCP_OVERHEAD + 26);
         this.mss = this.mtu - IKCP_OVERHEAD;
     }
@@ -225,7 +230,10 @@ public final class Kcp {
                 case IKCP_CMD_PUSH:
                     parseUna(una);
                     parseFastack(sn);
-                    rcvBufInsert(sn, frg, ts, buf, cursor, l);
+                    // 与 ikcp 一致：仅当序号 >= rcv_nxt 才入队，避免已交付段（重传）滞留 rcvBuf 头部阻塞后续按序前移
+                    if (itimediff(sn, rcvNxt) >= 0) {
+                        rcvBufInsert(sn, frg, ts, buf, cursor, l);
+                    }
                     acklist.add(sn);
                     acklist.add(ts);
                     break;
@@ -556,6 +564,21 @@ public final class Kcp {
     /** 设置协议节拍间隔(ms)。 */
     public void setInterval(int interval) {
         this.interval = ibound(10, interval, 5000);
+    }
+
+    /** 本端 KCP 会话号。 */
+    public int conv() {
+        return conv;
+    }
+
+    /** 读取一段 UDP 载荷中首个 KCP 帧的会话号；调用方需保证长度不小于 {@link #OVERHEAD}（会话号可为负，不能以符号判非法）。 */
+    public static int peekConv(byte[] datagram) {
+        return readInt(datagram, 0);
+    }
+
+    /** 是否存在需要定时驱动的状态（待发数据、未确认在途、待回 ACK、窗口探测）。供后台扫描跳过空闲会话。 */
+    public boolean hasPendingWork() {
+        return !sndQueue.isEmpty() || !sndBuf.isEmpty() || !acklist.isEmpty() || probe != 0;
     }
 
     /** 设置收发窗口大小。 */

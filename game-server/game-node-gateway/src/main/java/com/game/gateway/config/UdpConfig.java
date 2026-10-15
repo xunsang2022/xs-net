@@ -20,6 +20,7 @@ public class UdpConfig {
     private final int maxFrameLength;
     private final int workerThreads;
     private final int businessThreads;
+    private final int socketBufferBytes;
 
     public UdpConfig(
             @Value("${game.udp.port:2002}") int port,
@@ -30,7 +31,8 @@ public class UdpConfig {
             @Value("${game.udp.max-connections-per-account:1}") int maxConnectionsPerAccount,
             @Value("${game.udp.max-frame-length:65536}") int maxFrameLength,
             @Value("${game.udp.worker-threads:0}") int workerThreads,
-            @Value("${game.udp.business-threads:0}") int businessThreads) {
+            @Value("${game.udp.business-threads:0}") int businessThreads,
+            @Value("${game.udp.socket-buffer-bytes:4194304}") int socketBufferBytes) {
         this.port = port;
         this.window = window;
         this.retryIntervalMs = retryIntervalMs;
@@ -40,6 +42,7 @@ public class UdpConfig {
         this.maxFrameLength = maxFrameLength;
         this.workerThreads = workerThreads;
         this.businessThreads = businessThreads;
+        this.socketBufferBytes = socketBufferBytes;
     }
 
     /** 解析 UDP I/O 线程数：0 表示采用默认策略（max(2, CPU 核数)）。 */

@@ -19,36 +19,72 @@ import java.net.InetSocketAddress;
 @Slf4j
 public final class KcpSession implements ClientEndpoint {
 
+    /** FEC 分组的最大存活时间：整组丢包过多时无法还原，超时直接丢弃避免堆积。 */
+    private static final long FEC_GROUP_MAX_AGE_MS = 5000L;
+
     private final InetSocketAddress remote;
     private final DatagramChannel channel;
     private final KcpConfig config;
     private final Kcp kcp;
+    /** KCP 之上的 XOR 前向纠错层；未启用时为 null。 */
+    private final FecCodec fec;
     private volatile String channelId;
     private volatile boolean authenticated;
     private volatile long lastActiveMs;
+    /** 是否需要后台节拍驱动：空闲会话置 false，避免每节拍对全部会话加锁。 */
+    private volatile boolean maintenancePending = true;
 
-    public KcpSession(String channelId, InetSocketAddress remote, DatagramChannel channel, KcpConfig config) {
+    public KcpSession(int conv, String channelId, InetSocketAddress remote, DatagramChannel channel, KcpConfig config) {
         this.channelId = channelId;
         this.remote = remote;
         this.channel = channel;
         this.config = config;
         this.lastActiveMs = System.currentTimeMillis();
-        this.kcp = new Kcp(1400);
+        this.fec = config.getFecK() > 0
+                ? new FecCodec(config.getFecK(), config.getFecM(),
+                        framed -> channel.writeAndFlush(new DatagramPacket(Unpooled.wrappedBuffer(framed), remote)))
+                : null;
+        // 会话号由客户端首包携带：同一源地址上的新连接会使用不同会话号，据此可识别并重建会话
+        this.kcp = new Kcp(conv, 1400);
         kcp.setWndsize(config.getWindow(), config.getWindow());
-        kcp.setInterval((int) config.getRetryIntervalMs());
-        kcp.setNodelay(0, (int) config.getRetryIntervalMs(), 2, 0);
+        // 低延迟模式：nodelay=1、节拍=重传间隔、fastresend=2、nocwnd=1（关闭拥塞窗口限制）
+        kcp.setNodelay(1, (int) config.getRetryIntervalMs(), 2, 1);
         kcp.setOutput((data, size) -> {
             byte[] payload = new byte[size];
             System.arraycopy(data, 0, payload, 0, size);
-            channel.writeAndFlush(new DatagramPacket(Unpooled.wrappedBuffer(payload), remote));
+            sendDatagram(payload);
         });
+    }
+
+    /** 发出一个 KCP 数据报：启用 FEC 时先做分组编码，否则直接写出。 */
+    private void sendDatagram(byte[] payload) {
+        if (fec == null) {
+            channel.writeAndFlush(new DatagramPacket(Unpooled.wrappedBuffer(payload), remote));
+        } else {
+            fec.encode(payload);
+        }
+    }
+
+    /** 把不足一组的待发分片补齐发出，避免为凑组引入额外时延。 */
+    private void flushFec() {
+        if (fec != null) {
+            fec.flushGroup();
+        }
     }
 
     /** 从网关 DatagramChannel 收到一个 datagram：交给 KCP 输入并驱动协议，交付判读由 AuthHandler 完成。 */
     public void receive(byte[] datagram) {
         lastActiveMs = System.currentTimeMillis();
-        kcp.input(datagram);
-        kcp.update(System.currentTimeMillis());
+        maintenancePending = true;
+        if (fec == null) {
+            kcp.input(datagram);
+        } else {
+            // FEC 层先解码：数据分片立即交付，整组只缺 1 条时本地还原后再交付
+            fec.decode(datagram, kcp::input);
+        }
+        // 立即 flush 回执 ACK，避免被 interval 节拍门控拖慢上行 RTT
+        kcp.flush((int) System.currentTimeMillis());
+        flushFec();
     }
 
     /** 取出 KCP 已组装好的一条可交付应用层消息；无则返回 null。 */
@@ -58,7 +94,19 @@ public final class KcpSession implements ClientEndpoint {
 
     /** 外部定时器驱动 KCP 演进（超时重传 / 窗口更新 / 节点间链路探活）。 */
     public void updateNow() {
-        kcp.update(System.currentTimeMillis());
+        long now = System.currentTimeMillis();
+        kcp.update(now);
+        flushFec();
+        if (fec != null) {
+            fec.evictStale(now, FEC_GROUP_MAX_AGE_MS);
+        }
+        // 驱动后按剩余待处理状态决定下个节拍是否仍需加锁
+        maintenancePending = kcp.hasPendingWork();
+    }
+
+    /** 是否仍有待处理状态（未确认在途/待发 ACK/探测），空闲会话返回 false。 */
+    public boolean maintenancePending() {
+        return maintenancePending;
     }
 
     /**
@@ -69,8 +117,11 @@ public final class KcpSession implements ClientEndpoint {
      */
     public synchronized void sendBytes(byte[] data) {
         lastActiveMs = System.currentTimeMillis();
+        maintenancePending = true;
         kcp.send(data);
-        kcp.update(System.currentTimeMillis());
+        // 下行立即 flush，避免进入-响应时延被 interval 节拍放大
+        kcp.flush((int) System.currentTimeMillis());
+        flushFec();
     }
 
     @Override
@@ -112,6 +163,11 @@ public final class KcpSession implements ClientEndpoint {
 
     public String channelId() {
         return channelId;
+    }
+
+    /** 本会话的 KCP 会话号，用于识别同一源地址上是否换成了新连接。 */
+    public int conv() {
+        return kcp.conv();
     }
 
 

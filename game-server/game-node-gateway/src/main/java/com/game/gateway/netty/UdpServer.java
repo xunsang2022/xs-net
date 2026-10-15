@@ -54,6 +54,10 @@ public class UdpServer {
         bootstrap.group(group)
                 .channel(NioDatagramChannel.class)
                 .option(ChannelOption.SO_REUSEADDR, true)
+                // 数据报套接字默认接收缓冲仅约 64KB，高并发握手突发会直接丢包（UDP 无内核重传）；
+                // 显式放大收发缓冲，避免上行握手报文在内核层被丢弃。
+                .option(ChannelOption.SO_RCVBUF, config.getSocketBufferBytes())
+                .option(ChannelOption.SO_SNDBUF, config.getSocketBufferBytes())
                 .handler(new ChannelInitializer<DatagramChannel>() {
                     @Override
                     protected void initChannel(DatagramChannel ch) {

@@ -15,13 +15,15 @@ namespace Game.Message.Networking
     /// </summary>
     public sealed class KcpConnection : NetConnection
     {
-        // KCP 会话号（两端一致即可），用一个固定会话号
-        private const uint KcpConv = 0x12345678;
+        // KCP 会话号：每条连接独立随机生成，服务端据此识别同一源地址上的新连接
+        private uint _conv;
 
         private UdpClient _client;
         private Kcp _kcp;
+        private FecCodec _fec;
         private Thread _receiveThread;
         private Timer _tickTimer;
+        private Timer _heartbeatTimer;
         private readonly object _sync = new();
         private volatile bool _running;
         private volatile bool _handshaken;
@@ -39,11 +41,17 @@ namespace Game.Message.Networking
 
             var client = new UdpClient(Config.Host, Config.KcpPort);
             _client = client;
-            _kcp = new Kcp(KcpConv)
+            // 每条连接使用独立随机会话号：服务端凭它区分同一源地址上的新旧连接
+            _conv = (uint)Random.Shared.NextInt64(1, uint.MaxValue);
+            _kcp = new Kcp(_conv)
             {
                 Output = SendDatagram,
                 Deliver = OnDeliverPayload
             };
+            // FEC：按配置启用；Output 仍指向 SendDatagram（KCP 输出入口），由其分派到编码器或直发
+            _fec = Config.FecK > 0 ? new FecCodec(Config.FecK, Config.FecM, SendRaw) : null;
+            // 低延迟：nodelay=1、节拍跟随重传间隔、fastresend=2、关闭拥塞窗口（与网关侧一致）
+            _kcp.NoDelay(1, Config.RetryIntervalMs, 2, 1);
             _running = true;
             _handshaken = false;
 
@@ -51,17 +59,23 @@ namespace Game.Message.Networking
             _receiveThread = new Thread(ReceiveLoop) { IsBackground = true };
             _receiveThread.Start();
 
-            // 握手：KCP 首帧直接把 JWT(UTF-8) 作为载荷发出；Send 后立即 Update flush 使首包真正写出
+            // 握手：KCP 首帧直接把 JWT(UTF-8) 作为载荷发出；Send 后立即 Flush 使首包真正写出
+            // （不能依赖 Update 的首次调用：Current 初值为 0 时 Update 会跳过 flush，首包将延迟一个节拍）
             byte[] token = Encoding.UTF8.GetBytes(jwt ?? string.Empty);
             lock (_sync)
             {
                 _kcp.Send(token);
                 _kcp.Update(NowMs());
+                _kcp.Flush();
+                _fec?.FlushGroup();
             }
 
             // 周期 Update：首次 flush 已发出，此后驱动 ACK / 超时重传
             _tickTimer = new Timer(_ => OnTick(), null,
                 Config.RetryIntervalMs, Config.RetryIntervalMs);
+            // 周期保活：KCP 空闲时不产生任何报文，若服务端按会话空闲超时清理会丢失后续消息
+            _heartbeatTimer = new Timer(_ => OnHeartbeat(), null,
+                Config.HeartbeatIntervalMs, Config.HeartbeatIntervalMs);
         }
 
         public override void Send(RpcRoute route, IMessage message)
@@ -76,7 +90,9 @@ namespace Game.Message.Networking
             {
                 if (_kcp == null) return;
                 _kcp.Send(envelope.ToByteArray());
-                _kcp.Update(NowMs()); // 立即 flush，让发送更及时
+                _kcp.Update(NowMs());
+                _kcp.Flush(); // 忽略 interval 门控，立即把请求写出
+                _fec?.FlushGroup();
             }
         }
 
@@ -86,6 +102,8 @@ namespace Game.Message.Networking
             _handshaken = false;
             _tickTimer?.Dispose();
             _tickTimer = null;
+            _heartbeatTimer?.Dispose();
+            _heartbeatTimer = null;
             try
             {
                 _client?.Close();
@@ -95,6 +113,7 @@ namespace Game.Message.Networking
             }
             _client = null;
             _kcp = null;
+            _fec = null;
         }
 
         private static uint NowMs() => (uint)Environment.TickCount;
@@ -105,14 +124,56 @@ namespace Game.Message.Networking
             lock (_sync)
             {
                 _kcp?.Update(NowMs());
+                _fec?.FlushGroup();
             }
         }
 
+        /// <summary>周期保活：发送 KCP 窗口探测帧（WASK），刷新服务端会话活跃时间，避免空闲会话被清理。</summary>
+        private void OnHeartbeat()
+        {
+            if (!_running) return;
+            lock (_sync)
+            {
+                if (_kcp == null) return;
+                _kcp.Probe |= Kcp.AskSend;
+                _kcp.Update(NowMs());
+                _kcp.Flush();
+                _fec?.FlushGroup();
+            }
+        }
+
+        /// <summary>KCP 输出入口：启用 FEC 时交由编码器组包，否则直接发送。</summary>
         private void SendDatagram(byte[] datagram)
         {
-            if (_client != null)
+            if (_fec == null)
             {
-                _client.Send(datagram, datagram.Length);
+                SendRaw(datagram);
+            }
+            else
+            {
+                _fec.Encode(datagram);
+            }
+        }
+
+        /// <summary>底层原始数据报发送（FEC 编码后的分片，或未启用 FEC 时的原始 KCP 报文）。</summary>
+        private void SendRaw(byte[] datagram)
+        {
+            // Disconnect 与定时器回调存在竞态：socket 可能已被关闭，忽略此时的发送
+            var client = _client;
+            if (client == null)
+            {
+                return;
+            }
+            try
+            {
+                client.Send(datagram, datagram.Length);
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+            catch (SocketException)
+            {
+                // 本机端口耗尽等发送失败：定时器路径不应因此终止进程，交由 KCP 重传
             }
         }
 
@@ -127,7 +188,15 @@ namespace Game.Message.Networking
                     lock (_sync)
                     {
                         if (!_running || _kcp == null) continue;
-                        _kcp.Input(datagram); // 内部触发 deliver 回调（可能在新线程上下文，先缓存再统一调度）
+                        if (_fec == null)
+                        {
+                            _kcp.Input(datagram); // 内部触发 deliver 回调（可能在新线程上下文，先缓存再统一调度）
+                        }
+                        else
+                        {
+                            _fec.Decode(datagram, shard => _kcp.Input(shard));
+                        }
+                        _fec?.FlushGroup();
                     }
                 }
             }
